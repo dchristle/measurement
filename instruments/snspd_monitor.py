@@ -12,6 +12,7 @@ import qt
 import gobject
 import pprint
 import time
+import hdf5_data as h5
 
 class snspd_monitor(Instrument):
 
@@ -39,7 +40,7 @@ class snspd_monitor(Instrument):
         self.add_function('show_monitors')
         # Set default values of parameters
         self.set_is_running(False)
-        self.set_update_interval(5)
+        self.set_update_interval(10)
 
     def do_get_is_running(self):
         return self._is_running
@@ -64,22 +65,53 @@ class snspd_monitor(Instrument):
             name='snspd_monitor_data')
             self._monitor_data.add_coordinate('time')
             self._monitor_data.add_value('temperature')
-            # Set up the plot object as a private subobject of the instrument
-            self._monitor_plot = qt.Plot2D(
-            self._monitor_data, name='snspd monitor', coorddim=0,
-                    valdim=1, maxpoints=100, clear=True)
-            self._monitor_data.create_file()
-            self._filename=self._monitor_data.get_filepath()[:-4]
+
+            # Create an HDF5 object for storing; we'll write to it upon stop
+            self._monitor_dat = h5.HDF5Data(name='snspd_data')
+            self._monitor_grp = h5.DataGroup('snspd_data_group', self._monitor_dat)
+
+            # register some data dimensions
+            self._monitor_grp.add_coordinate('time', unit='s')
+            self._monitor_grp.add_value('temperature', unit='K')
+
+
             # Set the is_running variable to true, since we're now running
             self._is_running = True
+            try:
+                # Get the temperature, set variable _last_temperature to the current
+                # temperature. This is a bit of a hack of the original adwin_monit0r
+                # that just keeps track of this value so that when the user calls
+                # show_monitors, we can print it.
+                self._last_temperature = self._ls211.get_temperature()
+
+            except:
+                # If some sort of error occurs, print to the screen and cease
+                # the gobject.timeout_add functionality by returning False
+                print 'Could not get temperature from ls211, will stop now.'
+                return False
+            # Get temperature was successful
+            # Add the just-measured temperature to the data object
+            t = time.time() - self._t0
+            self._monitor_data.add_data_point(t,
+                    self._last_temperature)
             # Use gobject.timeout_add to run self._update every _update_interval
             gobject.timeout_add(int(self._update_interval*1e3), self._update)
 
     def stop(self):
         self._is_running = False
-        self._monitor_data.close_file()
-        self._monitor_plot.save_png(self._filename+'.png')
-
+        data = self._monitor_data.get_data()
+        self._monitor_grp['time'] = data[:,0]
+        self._monitor_grp['snspd temperature'] = data[:,1]
+        self._monitor_dat.close()
+    def show_plot(self):
+        self._plot_on = True
+        # Set up the plot object as a private subobject of the instrument
+        self._monitor_plot = qt.Plot2D(
+        self._monitor_data, name='snspd monitor', coorddim=0,
+                    valdim=1, maxpoints=100, clear=True)
+    def stop_plot(self):
+        self._plot_on = False
+        self._monitor_plot.clear()
 
     def show_monitors(self):
         print 'Temperature:'

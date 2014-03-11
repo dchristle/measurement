@@ -356,8 +356,11 @@ class SSPDController(Instrument):
         default_bias_ch0 = 3.45
         self.set_bias0(default_bias_ch0)
         print 'SNSPD channel 0 enabled, bias set to %s V' % default_bias_ch0
+        print 'Checking for superconducting state...'
         time.sleep(2)
-        return self.check()
+        result = self.check()
+        print 'Superconducting state: %s' % result
+        return result
 
     def ch1on(self):
         # Constant for this channel,determined by D. Christle 2014/01/31
@@ -367,7 +370,11 @@ class SSPDController(Instrument):
         self.set_bias1(default_bias_ch1)
         time.sleep(2)
         print 'SNSPD channel 1 enabled, bias set to %s V' % default_bias_ch1
-        return self.check()
+        print 'Checking for superconducting state...'
+        time.sleep(2)
+        result = self.check()
+        print 'Superconducting state: %s' % result
+        return result
 
     def ch0off(self):
         aa = self.set_bias0(0.0)

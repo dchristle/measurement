@@ -46,4 +46,4 @@ def main(channel = 'Y'):
     return
 
 if __name__ == '__main__':
-    main()
+    main(channel='Y')

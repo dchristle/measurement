@@ -14,6 +14,7 @@ import pprint
 import time
 import logging
 import datetime
+import hdf5_data as h5
 
 
 
@@ -61,17 +62,22 @@ class environment_monitor(Instrument):
         if not self._is_running:
             # Set t0 to the start time.
             self._t0 = datetime.datetime.now()
-
-            # Create a normal private qtlab data object called monitor_data.
+            # Create standard qtlab data object as a temporary data structure
             self._monitor_data = qt.Data(
             name='env_monitor_data')
             self._monitor_data.add_coordinate('time')
             self._monitor_data.add_value('temperature')
             self._monitor_data.add_value('humidity')
-            # Set up the plot object as a private subobject of the instrument
 
-            self._monitor_data.create_file()
-            self._filename=self._monitor_data.get_filepath()[:-4]
+            # Create an HDF5 object for storing; we'll write to it upon stop
+            self._monitor_dat = h5.HDF5Data(name='environment_data')
+            self._monitor_grp = h5.DataGroup('environment_data_group', self._monitor_dat)
+
+            # register some data dimensions
+            self._monitor_grp.add_value('temperature', unit='C')
+            self._monitor_grp.add_value('humidity', unit='%')
+            self._monitor_grp.add_value('time', unit='s')
+
             # Set the is_running variable to true, since we're now running
             self._is_running = True
             # Use gobject.timeout_add to run self._update every _update_interval
@@ -80,14 +86,25 @@ class environment_monitor(Instrument):
 
     def stop(self):
         self._is_running = False
-        self._monitor_data.close_file()
-        #self._monitor_plot.save_png(self._filename+'.png')
+        # set data (setting requires the dimensions to be set up)
+        # with this group class we can re-set exisiting arrays; normally hdf5 requires
+        # deletion and re-creation; like this we can keep the meta data.
+        data = self._monitor_data.get_data()
+        self._monitor_grp['time'] = data[:,0]
+        self._monitor_grp['temperature'] = data[:,1]
+        self._monitor_grp['humidity'] = data[:,2]
+
+
 
     def show_plot(self):
+        self._plot_on = True
         self._monitor_plot = qt.Plot2D(
         self._monitor_data, name='environment monitor', coorddim=0,
             valdim=1, maxpoints=100, clear=True)
 
+    def stop_plot(self):
+        self._plot_on = False
+        self._monitor_plot.clear()
 
     def show_monitors(self):
         print 'Temperature:'

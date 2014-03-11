@@ -12,6 +12,7 @@ import qt
 import gobject
 import pprint
 import time
+import hdf5_data as h5
 
 class cryostat_monitor(Instrument):
 
@@ -52,6 +53,7 @@ class cryostat_monitor(Instrument):
     def do_set_update_interval(self, val):
         self._update_interval = val
 
+
     def start(self):
         # If running, do nothing. If not already running, start the monitor.
         if not self._is_running:
@@ -63,21 +65,40 @@ class cryostat_monitor(Instrument):
             name='cryostat_monitor_data')
             self._monitor_data.add_coordinate('time')
             self._monitor_data.add_value('temperature')
-            # Set up the plot object as a private subobject of the instrument
 
-            self._monitor_data.create_file()
-            self._filename = self._monitor_data.get_filepath()[:-4]
-            self._monitor_plot = qt.Plot2D(self._monitor_data, name='cryostat cooldown monitor', coorddim=0,
-            valdim=1)
+            # Create an HDF5 object for storing; we'll write to it upon stop
+            self._monitor_dat = h5.HDF5Data(name='cryostat_data')
+            self._monitor_grp = h5.DataGroup('cryostat_data_group', self._monitor_dat)
+
+            # register some data dimensions
+            self._monitor_grp.add_coordinate('time', unit='s')
+            self._monitor_grp.add_value('temperature', unit='K')
+
+
             # Set the is_running variable to true, since we're now running
             self._is_running = True
+            try:
+                # Get the temperature, set variable _last_temperature to the current
+                # temperature. This is a bit of a hack of the original adwin_monit0r
+                # that just keeps track of this value so that when the user calls
+                # show_monitors, we can print it.
+                print 'getting temp'
+                self._last_temperature = self._ls332.get_kelvinA()
+                print 'got temp'
+
+            except:
+                # If some sort of error occurs, print to the screen and cease
+                # the gobject.timeout_add functionality by returning False
+                print 'Could not get temperature from ls332, will stop now.'
+                self._is_running = False
+                return False
+            # Get temperature was successful
+            # Add the just-measured temperature to the data object
+            t = time.time() - self._t0
+            self._monitor_data.add_data_point(t,
+                    self._last_temperature)
             # Use gobject.timeout_add to run self._update every _update_interval
             gobject.timeout_add(int(self._update_interval*1e3), self._update)
-
-    def stop(self):
-        self._is_running = False
-        self._monitor_data.close_file()
-        self._monitor_plot.save_png(self._filename+'.png')
 
 
     def show_monitors(self):
@@ -85,6 +106,23 @@ class cryostat_monitor(Instrument):
         print '----'
         print ('%s' % self._last_temperature) + ' Kelvin'
         print
+    def stop(self):
+        self._is_running = False
+        data = self._monitor_data.get_data()
+        self._monitor_grp['time'] = data[:,0]
+        self._monitor_grp['temperature'] = data[:,1]
+        self._monitor_dat.close()
+        self._monitor_data.close_file()
+    def show_plot(self):
+        self._plot_on = True
+        # Set up the plot object as a private subobject of the instrument
+        self._monitor_plot = qt.Plot2D(
+        self._monitor_data, name='cryostat monitor', coorddim=0,
+                    valdim=1, maxpoints=100, clear=True)
+    def stop_plot(self):
+        self._plot_on = False
+        self._monitor_plot.clear()
+        #self._monitor_plot.remove()
 
 
 
@@ -105,15 +143,14 @@ class cryostat_monitor(Instrument):
             # that just keeps track of this value so that when the user calls
             # show_monitors, we can print it.
             self._last_temperature = self._ls332.get_kelvinA()
-            # Add the just-measured temperature to the data object
-            self._monitor_data.add_data_point(t,
-                    self._last_temperature)
-            self._monitor_plot.update()
+
+
         except:
             # If some sort of error occurs, print to the screen and cease
             # the gobject.timeout_add functionality by returning False
             print 'Could not get temperature from ls332, will stop now.'
             return False
+        self._monitor_data.add_data_point(t, self._last_temperature)
 
         # If everything goes okay, return True, so that gobject.timeout_add
         # continutes to work.
