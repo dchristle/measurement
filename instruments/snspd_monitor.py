@@ -101,7 +101,7 @@ class snspd_monitor(Instrument):
         self._is_running = False
         data = self._monitor_data.get_data()
         self._monitor_grp['time'] = data[:,0]
-        self._monitor_grp['snspd temperature'] = data[:,1]
+        self._monitor_grp['temperature'] = data[:,1]
         self._monitor_dat.close()
     def show_plot(self):
         self._plot_on = True
