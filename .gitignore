@@ -213,3 +213,21 @@ pip-log.txt
 
 #Mr Developer
 .mr.developer.cfg
+lib/dll_support/CohrFTCI2C.dll
+lib/dll_support/CohrFTCI2C.lib
+lib/dll_support/CohrFTCI2C.h
+lib/dll_support/CohrHOPS.dll
+lib/dll_support/CohrHOPS.h
+lib/dll_support/CohrHOPS.lib
+scripts/fbl_robust.py
+scripts/aosmooth.py
+lib/dll_support/CohrHOPS32/CohrHOPS.dll
+lib/dll_support/CohrHOPS32/CohrHOPS.lib
+lib/dll_support/CohrHOPS32/HOPS.llb
+lib/dll_support/CohrHOPS32/CohrHOPS.h
+lib/dll_support/CohrHOPS64/CohrHOPS.lib
+lib/dll_support/CohrHOPS64/CohrHOPS.h
+lib/dll_support/CohrHOPS64/CohrFTCI2C.lib
+lib/dll_support/CohrHOPS64/CohrFTCI2C.dll
+lib/dll_support/CohrHOPS64/CohrFTCI2C.h
+lib/dll_support/CohrHOPS64/CohrHOPS.dll
