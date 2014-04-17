@@ -80,7 +80,7 @@ class optimiz0r(Instrument):
 
 
     def optimize(self, plot=0, dims='xyz', cycles=1):
-        qt.plot(0,name='fbl_plot')
+        qt.plot(name='fbl_plot')
         qt.plots['fbl_plot'].clear()
         for c in range(cycles):
             ret = True
