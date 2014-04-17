@@ -85,6 +85,7 @@ class SSPDController(Instrument):
         self.add_function('ch1on')
         self.add_function('ch1off')
         self.add_function('zero')
+        self.add_function('isenabled')
 
     def do_set_bias(self, val, channel=0, check=False):
         if self._ni_ins is None:
@@ -107,6 +108,11 @@ class SSPDController(Instrument):
         else:
             lines = 'port0/line8:15'
         self._ni_ins.digital_out(lines, val)
+    def isenabled(self, channel):
+        ret = np.zeros(2)
+        ret[0] = (self.do_get_bias0() > 0.05)
+        ret[1] = (self.do_get_bias1() > 0.05)
+        return ret
 
     def do_get_counts0(self):
         if self._ni_ins is None:
@@ -368,7 +374,6 @@ class SSPDController(Instrument):
         # Dark counts: 20 per second
         default_bias_ch1 = 4.75
         self.set_bias1(default_bias_ch1)
-        time.sleep(2)
         print 'SNSPD channel 1 enabled, bias set to %s V' % default_bias_ch1
         print 'Checking for superconducting state...'
         time.sleep(2)

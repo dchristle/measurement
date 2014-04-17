@@ -59,7 +59,6 @@ class cryostat_monitor(Instrument):
         if not self._is_running:
             # Set t0 to the start time.
             self._t0 = time.time()
-
             # Create a normal private qtlab data object called monitor_data.
             self._monitor_data = qt.Data(
             name='cryostat_monitor_data')
@@ -74,7 +73,7 @@ class cryostat_monitor(Instrument):
             self._monitor_grp.add_coordinate('time', unit='s')
             self._monitor_grp.add_value('temperature', unit='K')
 
-
+            print 'executing...'
             # Set the is_running variable to true, since we're now running
             self._is_running = True
             try:

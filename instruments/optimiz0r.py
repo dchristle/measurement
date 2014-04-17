@@ -11,7 +11,8 @@ import qt
 import msvcrt
 import numpy as np
 from analysis.lib.fitting import fit,common
-
+reload(fit)
+reload(common)
 class optimiz0r(Instrument):
 
 
@@ -21,26 +22,26 @@ class optimiz0r(Instrument):
         self.dimension_sets = {
             'default' : {
                 'x' : {
-                    'scan_length' : 2.,
-                    'nr_of_points' : 31,
+                    'scan_length' : 3.75,
+                    'nr_of_points' : 60,
                     'qt_ins' : 'fsm',
                     'channel' : 'X',
-                    'sigma' : 1.25
+                    'sigma' : 1
 
                     },
                 'y' : {
-                    'scan_length' : 2.,
-                    'nr_of_points' : 31,
+                    'scan_length' : 3.75,
+                    'nr_of_points' : 60,
                     'qt_ins' : 'fsm',
                     'channel' : 'Y',
-                    'sigma' : 1.25
+                    'sigma' : 1
                     },
                 'z' : {
                     'scan_length' : 4.0,
-                    'nr_of_points' : 20,
+                    'nr_of_points' : 60,
                     'qt_ins' : 'xps',
                     'channel' : 'Z',
-                    'sigma' : 3.0
+                    'sigma' : 1.0/1000.0
                     },
                 'xxps' : {
                     'scan_length' : 2.,
@@ -78,8 +79,9 @@ class optimiz0r(Instrument):
         self.dimensions = self.dimension_sets[dimension_set]
 
 
-    def optimize(self, dims='xyz', cycles=1):
-
+    def optimize(self, plot=0, dims='xyz', cycles=1):
+        qt.plot(0,name='fbl_plot')
+        qt.plots['fbl_plot'].clear()
         for c in range(cycles):
             ret = True
 
@@ -109,7 +111,7 @@ class optimiz0r(Instrument):
                     # Use AO Smooth Goto code to smoothly go to the beginning point
                     self._fsm.AO_smooth(cur_pos, cur_pos-scan_length/2.0, 'X')
                     # Now write the points and get the counts
-                    fsm_rate = 30.0 # Hz
+                    fsm_rate = 20.0 # Hz
                     ##print 'x temp point array %s' % temp_point_array
                     counts = self._fsm.sweep_and_count(temp_point_array,fsm_rate, 'ctr0','PFI0','X')
                     # Find the difference between readouts to get the counts measured
@@ -118,9 +120,8 @@ class optimiz0r(Instrument):
                     cps = np.diff(counts)*fsm_rate
                     # Call the fitting routine to determine optimal position
                     # and set it as self._opt_pos['x'], in this case.
-                    ret = self._process_fit(point_array, cps, 'x')
-                    print 'Previous optimum was: %s' % self._opt_pos_prev['x']
-                    print 'New optimum is: %s' % self._opt_pos['x']
+                    ret = self.process_fit(point_array, cps, 'x')
+                    print 'Previous x optimum was: %s, new optimum is: %s' % (self._opt_pos_prev['x'], self._opt_pos['x'])
                     #
                     if np.array(point_array).min() < self._opt_pos['x'] < np.array(point_array).max():
                         self._fsm.set_abs_positionX(self._opt_pos['x'])
@@ -157,9 +158,8 @@ class optimiz0r(Instrument):
                     cps = np.diff(counts)*fsm_rate
                     # Call the fitting routine to determine optimal position
                     # and set it as self._opt_pos['y'], in this case.
-                    ret = self._process_fit(point_array, cps, 'y')
-                    ##print 'Previous optimum was: %s' % self._opt_pos_prev['y']
-                    ##print 'New optimum is: %s' % self._opt_pos['y']
+                    ret = self.process_fit(point_array, cps, 'y')
+                    print 'Previous y optimum was: %s, new optimum is: %s' % (self._opt_pos_prev['y'], self._opt_pos['y'])
 
                     if np.array(point_array).min() < self._opt_pos['y'] < np.array(point_array).max():
                         self._fsm.set_abs_positionY(self._opt_pos['y'])
@@ -206,9 +206,8 @@ class optimiz0r(Instrument):
                     ##print 'counts array is %s' % cps
                     # Call the fitting routine to determine optimal position
                     # and set it as self._opt_pos['z'], in this case.
-                    ret = self._process_fit(point_array, cps, 'z')
-                    ##print 'Previous optimum was: %s' % self._opt_pos_prev['z']
-                    ##print 'New optimum is: %s' % self._opt_pos['z']
+                    ret = self.process_fit(point_array, cps, 'z')
+                    print 'Previous z optimum was: %s, new optimum is %s' % (self._opt_pos_prev['z'], self._opt_pos['z'])
 
 
                     #
@@ -230,20 +229,30 @@ class optimiz0r(Instrument):
 
         return ret
 
-    def _process_fit(self, p, cr, dimension):
+    def process_fit(self, p, cr, dimension):
+
         # p is position array
         # cr is countrate array
         # d is a string corresponding to the dimension
 
         # Get the Gaussian width sigma guess from the dimensions dictionary
-        sigma = self.dimensions[dimension]['sigma']
+        sigma_guess = self.dimensions[dimension]['sigma']
         # Always do a Gaussian fit, for now
         self._gaussian_fit = True
 
         if self._gaussian_fit:
-            gaussian_fit = fit.fit1d(p, cr,common.fit_gauss, np.array(cr).min(),
-                    np.array(cr).max(), p[np.argmax(cr)], sigma, do_print=False,ret=True)
+            # Come up with some robust estimates, for low signal/noise conditions
+            a_guess = np.array(cr).min()
+            A_guess = np.array(cr).max()-np.array(cr).min()
+            x0_guess = p[np.argmax(np.array(cr))] #np.sum(np.array(cr) * np.array(p))/np.sum(np.array(cr)**2)
+            #sigma_guess = 1.0#np.sqrt(np.sum(((np.array(cr)-x0_guess)**2)*(np.array(p))) / np.sum((np.array(p))))
+            print 'Guesses: %r %r %r %r' % (a_guess,  x0_guess,A_guess,sigma_guess)
 
+            gaussian_fit = fit.fit1d(np.array(p,dtype=float), np.array(cr,dtype=float),common.fit_gauss, a_guess,
+                    x0_guess,A_guess, sigma_guess, do_print=False,ret=True)
+
+            ababfunc = a_guess + A_guess*np.exp(-(p-x0_guess)**2/(2.0*sigma_guess**2))
+            qt.plot(p,cr,p,ababfunc,name='fbl_plot')
             if type(gaussian_fit) != dict:
                 pamax = np.argmax(cr)
                 self._opt_pos[dimension] = p[pamax]
