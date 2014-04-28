@@ -58,6 +58,7 @@ class cryostat_monitor(Instrument):
         # If running, do nothing. If not already running, start the monitor.
         if not self._is_running:
             # Set t0 to the start time.
+            self._ls332 = qt.instruments['ls332']
             self._t0 = time.time()
             # Create a normal private qtlab data object called monitor_data.
             self._monitor_data = qt.Data(
@@ -135,6 +136,7 @@ class cryostat_monitor(Instrument):
             return False
         # Calculate the current time
         t = time.time() - self._t0
+        self._ls332 = qt.instruments['ls332']
 
         try:
             # Get the temperature, set variable _last_temperature to the current
