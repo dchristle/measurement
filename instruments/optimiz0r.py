@@ -1,9 +1,13 @@
 # Line search optimizer using FSM/XPS
+# David Christle <christle@uchicago.edu>, 2014
 #
+# Taken from original optimiz0r.py file written by Wolfgang P..
 #
-# Taken from original optimiz0r.py file written by Wolfgang P.; modified
-# to use FSM and replace the FBL_MainDC2.vi
-#
+# This routine executes a line search along X and Y using the FSM, and along Z
+# using the XPS. The X and Y are synchronized reads using the DAQ while the XPS
+# is a simple set-position/read-counts routine. The three curves are fit with
+# Gaussians. The guesses and final fits are plotted, for a diagnostic to check
+# the accuracy of the guesses.
 
 from instrument import Instrument
 import types
@@ -22,7 +26,7 @@ class optimiz0r(Instrument):
         self.dimension_sets = {
             'default' : {
                 'x' : {
-                    'scan_length' : 3.75,
+                    'scan_length' : 2.75,
                     'nr_of_points' : 60,
                     'qt_ins' : 'fsm',
                     'channel' : 'X',
@@ -30,7 +34,7 @@ class optimiz0r(Instrument):
 
                     },
                 'y' : {
-                    'scan_length' : 3.75,
+                    'scan_length' : 2.75,
                     'nr_of_points' : 60,
                     'qt_ins' : 'fsm',
                     'channel' : 'Y',
@@ -80,8 +84,10 @@ class optimiz0r(Instrument):
 
 
     def optimize(self, plot=0, dims='xyz', cycles=1):
-        qt.plot(name='fbl_plot')
-        qt.plots['fbl_plot'].clear()
+        if 'fbl_plot' in qt.plots:
+            qt.plots['fbl_plot'].clear()
+        qt.plot(name='fbl_plot',clear=True,needtempfile=False)
+        #qt.plots['fbl_plot'].clear()
         for c in range(cycles):
             ret = True
 
@@ -121,7 +127,7 @@ class optimiz0r(Instrument):
                     # Call the fitting routine to determine optimal position
                     # and set it as self._opt_pos['x'], in this case.
                     ret = self.process_fit(point_array, cps, 'x')
-                    print 'Previous x optimum was: %s, new optimum is: %s' % (self._opt_pos_prev['x'], self._opt_pos['x'])
+                    print 'Previous x: %.3f, new optimum: %.3f (delta %.3f nm)' % (self._opt_pos_prev['x'], self._opt_pos['x'], self._opt_pos['x']*1E3-self._opt_pos_prev['x']*1E3)
                     #
                     if np.array(point_array).min() < self._opt_pos['x'] < np.array(point_array).max():
                         self._fsm.set_abs_positionX(self._opt_pos['x'])
@@ -131,7 +137,7 @@ class optimiz0r(Instrument):
                         print'Optimum outside scan range: Position is set to local maximum'
                         ret = False
 
-                    print 'Position changed %d nm' % (self._opt_pos['x']*1E3-self._opt_pos_prev['x']*1E3)
+                    #print 'Position changed %d nm' % (self._opt_pos['x']*1E3-self._opt_pos_prev['x']*1E3)
 
                 if d == 'y':
                     # Get the current position from the FSM - only works if the
@@ -159,7 +165,7 @@ class optimiz0r(Instrument):
                     # Call the fitting routine to determine optimal position
                     # and set it as self._opt_pos['y'], in this case.
                     ret = self.process_fit(point_array, cps, 'y')
-                    print 'Previous y optimum was: %s, new optimum is: %s' % (self._opt_pos_prev['y'], self._opt_pos['y'])
+                    print 'Previous y: %.3f, new optimum: %.3f (delta %.3f nm)' % (self._opt_pos_prev['y'], self._opt_pos['y'], self._opt_pos['y']*1.0E3-self._opt_pos_prev['y']*1.0E3)
 
                     if np.array(point_array).min() < self._opt_pos['y'] < np.array(point_array).max():
                         self._fsm.set_abs_positionY(self._opt_pos['y'])
@@ -169,7 +175,7 @@ class optimiz0r(Instrument):
                         print 'Optimum outside scan range: Position is set to local maximum'
                         ret = False
 
-                    print 'Position changed %d nm' % (self._opt_pos['y']*1.0E3-self._opt_pos_prev['y']*1.0E3)
+                    #print 'Position changed %d nm' % (self._opt_pos['y']*1.0E3-self._opt_pos_prev['y']*1.0E3)
 
                 if d == 'z':
                     # Get the current position from the FSM - only works if the
@@ -191,14 +197,17 @@ class optimiz0r(Instrument):
                     # HARDCODED SETUP FOR COUNT READING
                     xps_rate = 10.0 # Hz
                     xps_settle_time = 10.0*0.001 # 10 ms
+                    prev_ctr0_src = self._ni63.get_ctr0_src()
                     self._ni63.set_ctr0_src('PFI0')
+                    prev_count_time = self._ni63.get_count_time()
                     self._ni63.set_count_time(1.0/xps_rate)
                     for i in range(nr_of_points):
                         # Point array is in mm, so this should work
                         self._xps.set_abs_positionZ((point_array[i]))
                         qt.msleep(xps_settle_time)
                         counts[i] = self._ni63.get_ctr0()
-
+                    self._ni63.set_count_time(prev_count_time)
+                    self._ni63.set_ctr0_src(prev_ctr0_src)
                     # Find the difference between readouts to get the counts measured
                     # at a certain point, then divide by the period to get the estimate
                     # of the counts per second
@@ -207,7 +216,7 @@ class optimiz0r(Instrument):
                     # Call the fitting routine to determine optimal position
                     # and set it as self._opt_pos['z'], in this case.
                     ret = self.process_fit(point_array, cps, 'z')
-                    print 'Previous z optimum was: %s, new optimum is %s' % (self._opt_pos_prev['z'], self._opt_pos['z'])
+                    print 'Previous z optimum was: %s, new optimum is %s (delta %.3f nm)' % (self._opt_pos_prev['z'], self._opt_pos['z'], self._opt_pos['z']*1.0E6-self._opt_pos_prev['z']*1.0E6)
 
 
                     #
@@ -219,7 +228,7 @@ class optimiz0r(Instrument):
                         self._opt_pos['z'] = point_array[cps.tolist().index(max(cps))]
                         ret = False
                     # Use 10^6 instead of 10^3 to convert from mm to nm
-                    print 'Position changed %d nm' % (self._opt_pos['z']*1.0E6-self._opt_pos_prev['z']*1.0E6)
+                    #print 'Position changed %d nm' % (self._opt_pos['z']*1.0E6-self._opt_pos_prev['z']*1.0E6)
 
                 qt.msleep(1)
             if msvcrt.kbhit():
@@ -246,13 +255,13 @@ class optimiz0r(Instrument):
             A_guess = np.array(cr).max()-np.array(cr).min()
             x0_guess = p[np.argmax(np.array(cr))] #np.sum(np.array(cr) * np.array(p))/np.sum(np.array(cr)**2)
             #sigma_guess = 1.0#np.sqrt(np.sum(((np.array(cr)-x0_guess)**2)*(np.array(p))) / np.sum((np.array(p))))
-            print 'Guesses: %r %r %r %r' % (a_guess,  x0_guess,A_guess,sigma_guess)
+            #print 'Guesses: %r %r %r %r' % (a_guess,  x0_guess,A_guess,sigma_guess)
 
             gaussian_fit = fit.fit1d(np.array(p,dtype=float), np.array(cr,dtype=float),common.fit_gauss, a_guess,
                     x0_guess,A_guess, sigma_guess, do_print=False,ret=True)
 
             ababfunc = a_guess + A_guess*np.exp(-(p-x0_guess)**2/(2.0*sigma_guess**2))
-            qt.plot(p,cr,p,ababfunc,name='fbl_plot')
+
             if type(gaussian_fit) != dict:
                 pamax = np.argmax(cr)
                 self._opt_pos[dimension] = p[pamax]
@@ -273,7 +282,9 @@ class optimiz0r(Instrument):
                             gaussian_fit['error'][0] ]
                     self._opt_pos[dimension] = self._fit_result[0]
                     ret = True
-                    print '(%s) optimize succeeded!' % self.get_name()
+                    final_fit_func = gaussian_fit['params'][0] + gaussian_fit['params'][2]*np.exp(-(p-gaussian_fit['params'][1])**2/(2.0*gaussian_fit['params'][3]**2))
+                    qt.plot(p,cr,p,ababfunc,p,final_fit_func,name='fbl_plot',needtempfile=False)
+                    #print '(%s) optimize succeeded!' % self.get_name()
 
 
                 else:
@@ -281,6 +292,7 @@ class optimiz0r(Instrument):
                     ret = False
                     print '(%s) optimize failed! Set to maximum.' % dimension
                     self._opt_pos[dimension] = p[np.argmax(cr)]
+                    qt.plot(p,cr,p,ababfunc,name='fbl_plot',clear=True,needtempfile=False)
 
 
 
