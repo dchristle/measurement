@@ -26,37 +26,37 @@ class optimiz0r(Instrument):
         self.dimension_sets = {
             'default' : {
                 'x' : {
-                    'scan_length' : 2.75,
+                    'scan_length' : 2.8,
                     'nr_of_points' : 60,
                     'qt_ins' : 'fsm',
                     'channel' : 'X',
-                    'sigma' : 1
+                    'sigma' : 0.7
 
                     },
                 'y' : {
-                    'scan_length' : 2.75,
+                    'scan_length' : 2.8,
                     'nr_of_points' : 60,
                     'qt_ins' : 'fsm',
                     'channel' : 'Y',
-                    'sigma' : 1
+                    'sigma' : 0.7
                     },
                 'z' : {
-                    'scan_length' : 4.0,
+                    'scan_length' : 5.5,
                     'nr_of_points' : 60,
                     'qt_ins' : 'xps',
                     'channel' : 'Z',
-                    'sigma' : 1.0/1000.0
+                    'sigma' : 2.0/1000.0
                     },
                 'xxps' : {
-                    'scan_length' : 2.,
-                    'nr_of_points' : 31,
+                    'scan_length' : 2.4,
+                    'nr_of_points' : 44,
                     'qt_ins' : 'xps',
                     'ins_attr_set' : 'set_abs_positionX',
                     'ins_attr_get' : 'get_abs_positionX'
                     },
                 'yxps' : {
-                    'scan_length' : 2.,
-                    'nr_of_points' : 31,
+                    'scan_length' : 2.4,
+                    'nr_of_points' : 44,
                     'qt_ins' : 'xps',
                     'ins_attr_set' : 'set_abs_positionY',
                     'ins_attr_get' : 'get_abs_positionY'
@@ -117,7 +117,7 @@ class optimiz0r(Instrument):
                     # Use AO Smooth Goto code to smoothly go to the beginning point
                     self._fsm.AO_smooth(cur_pos, cur_pos-scan_length/2.0, 'X')
                     # Now write the points and get the counts
-                    fsm_rate = 20.0 # Hz
+                    fsm_rate = 10.0 # Hz
                     ##print 'x temp point array %s' % temp_point_array
                     counts = self._fsm.sweep_and_count(temp_point_array,fsm_rate, 'ctr0','PFI0','X')
                     # Find the difference between readouts to get the counts measured
@@ -156,7 +156,7 @@ class optimiz0r(Instrument):
                     # Use AO Smooth Goto code to smoothly go to the beginning point
                     self._fsm.AO_smooth(cur_pos, cur_pos-scan_length/2.0, 'Y')
                     # Now write the points and get the counts
-                    fsm_rate = 30.0 # Hz
+                    fsm_rate = 10.0 # Hz
                     counts = self._fsm.sweep_and_count(temp_point_array,fsm_rate, 'ctr0','PFI0','Y')
                     # Find the difference between readouts to get the counts measured
                     # at a certain point, then divide by the period to get the estimate
@@ -253,7 +253,8 @@ class optimiz0r(Instrument):
             # Come up with some robust estimates, for low signal/noise conditions
             a_guess = np.array(cr).min()
             A_guess = np.array(cr).max()-np.array(cr).min()
-            x0_guess = p[np.argmax(np.array(cr))] #np.sum(np.array(cr) * np.array(p))/np.sum(np.array(cr)**2)
+            p_size = np.size(p)
+            x0_guess = p[np.round(p_size/2.0)] #np.sum(np.array(cr) * np.array(p))/np.sum(np.array(cr)**2)
             #sigma_guess = 1.0#np.sqrt(np.sum(((np.array(cr)-x0_guess)**2)*(np.array(p))) / np.sum((np.array(p))))
             #print 'Guesses: %r %r %r %r' % (a_guess,  x0_guess,A_guess,sigma_guess)
 

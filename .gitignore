@@ -231,3 +231,4 @@ lib/dll_support/CohrHOPS64/CohrFTCI2C.lib
 lib/dll_support/CohrHOPS64/CohrFTCI2C.dll
 lib/dll_support/CohrHOPS64/CohrFTCI2C.h
 lib/dll_support/CohrHOPS64/CohrHOPS.dll
+scripts/optimize1d_counts.py

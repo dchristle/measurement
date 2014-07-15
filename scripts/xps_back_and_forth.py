@@ -11,13 +11,13 @@ import qt
 import numpy
 import msvcrt
 
-def main(channel = 'Y'):
+def main(channel = 'Z'):
     ##channel = 'X' # This can be 'X' or 'Y' or 'Z' channels
-    min_position = -12.2 # mm
+    min_position = -4 # mm
     max_position = 12.2 # m
     rate = 0.5 # number of points written per second to the stage
     density = 2 # number of points across the full scale range
-    wait = 1 # Wait time before sweeping back in seconds
+    wait =  6 # Wait time before sweeping back in seconds
 
     x_mm_array_f = numpy.linspace(min_position,max_position,density)
     x_mm_array_b = numpy.linspace(max_position,min_position,density)
@@ -46,4 +46,4 @@ def main(channel = 'Y'):
     return
 
 if __name__ == '__main__':
-    main(channel='Y')
+    main(channel='Z')
