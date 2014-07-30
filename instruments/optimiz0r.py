@@ -26,22 +26,22 @@ class optimiz0r(Instrument):
         self.dimension_sets = {
             'default' : {
                 'x' : {
-                    'scan_length' : 2.8,
+                    'scan_length' : 2.0,
                     'nr_of_points' : 60,
                     'qt_ins' : 'fsm',
                     'channel' : 'X',
-                    'sigma' : 0.7
+                    'sigma' : 0.5
 
                     },
                 'y' : {
-                    'scan_length' : 2.8,
+                    'scan_length' : 2.0,
                     'nr_of_points' : 60,
                     'qt_ins' : 'fsm',
                     'channel' : 'Y',
-                    'sigma' : 0.7
+                    'sigma' : 0.5
                     },
                 'z' : {
-                    'scan_length' : 5.5,
+                    'scan_length' : 5.0,
                     'nr_of_points' : 60,
                     'qt_ins' : 'xps',
                     'channel' : 'Z',
@@ -87,7 +87,7 @@ class optimiz0r(Instrument):
         if 'fbl_plot' in qt.plots:
             qt.plots['fbl_plot'].clear()
         qt.plot(name='fbl_plot',clear=True,needtempfile=False)
-        #qt.plots['fbl_plot'].clear()
+
         for c in range(cycles):
             ret = True
 
@@ -105,8 +105,7 @@ class optimiz0r(Instrument):
 
                     self._opt_pos_prev['x'] = cur_pos
                     # Create the desired array of points to measure
-                    ##print 'x is %s' % cur_pos
-                    ##print 'scan length is %s' % scan_length
+
                     point_array = np.linspace(cur_pos-scan_length/2.0,cur_pos+scan_length/2.0,nr_of_points)
 
                     # Add the beginning point so that it's in the array twice
@@ -118,7 +117,7 @@ class optimiz0r(Instrument):
                     self._fsm.AO_smooth(cur_pos, cur_pos-scan_length/2.0, 'X')
                     # Now write the points and get the counts
                     fsm_rate = 10.0 # Hz
-                    ##print 'x temp point array %s' % temp_point_array
+
                     counts = self._fsm.sweep_and_count(temp_point_array,fsm_rate, 'ctr0','PFI0','X')
                     # Find the difference between readouts to get the counts measured
                     # at a certain point, then divide by the period to get the estimate
@@ -127,14 +126,14 @@ class optimiz0r(Instrument):
                     # Call the fitting routine to determine optimal position
                     # and set it as self._opt_pos['x'], in this case.
                     ret = self.process_fit(point_array, cps, 'x')
-                    print 'Previous x: %.3f, new optimum: %.3f (delta %.3f nm)' % (self._opt_pos_prev['x'], self._opt_pos['x'], self._opt_pos['x']*1E3-self._opt_pos_prev['x']*1E3)
+                    print 'Previous x: %.3f, new optimum: %.3f (delta %.1f nm)' % (self._opt_pos_prev['x'], self._opt_pos['x'], self._opt_pos['x']*1E3-self._opt_pos_prev['x']*1E3)
                     #
                     if np.array(point_array).min() < self._opt_pos['x'] < np.array(point_array).max():
                         self._fsm.set_abs_positionX(self._opt_pos['x'])
                     else:
-                        self._fsm.set_abs_positionX(point_array[cps.tolist().index(max(cps))])
-                        self._opt_pos['x'] = point_array[cps.tolist().index(max(cps))]
-                        print'Optimum outside scan range: Position is set to local maximum'
+                        self._fsm.set_abs_positionX(self._opt_pos_prev['x'])
+                        self._opt_pos['x'] = self._opt_pos_prev['x']
+                        print'Optimum outside scan range: Position is set to previous maximum'
                         ret = False
 
                     #print 'Position changed %d nm' % (self._opt_pos['x']*1E3-self._opt_pos_prev['x']*1E3)
@@ -165,14 +164,14 @@ class optimiz0r(Instrument):
                     # Call the fitting routine to determine optimal position
                     # and set it as self._opt_pos['y'], in this case.
                     ret = self.process_fit(point_array, cps, 'y')
-                    print 'Previous y: %.3f, new optimum: %.3f (delta %.3f nm)' % (self._opt_pos_prev['y'], self._opt_pos['y'], self._opt_pos['y']*1.0E3-self._opt_pos_prev['y']*1.0E3)
+                    print 'Previous y: %.3f, new optimum: %.3f (delta %.1f nm)' % (self._opt_pos_prev['y'], self._opt_pos['y'], self._opt_pos['y']*1.0E3-self._opt_pos_prev['y']*1.0E3)
 
                     if np.array(point_array).min() < self._opt_pos['y'] < np.array(point_array).max():
                         self._fsm.set_abs_positionY(self._opt_pos['y'])
                     else:
-                        self._fsm.set_abs_positionY(point_array[cps.tolist().index(max(cps))])
-                        self._opt_pos['y'] = point_array[cps.tolist().index(max(cps))]
-                        print 'Optimum outside scan range: Position is set to local maximum'
+                        self._fsm.set_abs_positionY(self._opt_pos_prev['y'])
+                        self._opt_pos['y'] = self._opt_pos_prev['y']
+                        print 'Optimum outside scan range: Position is set to previous maximum'
                         ret = False
 
                     #print 'Position changed %d nm' % (self._opt_pos['y']*1.0E3-self._opt_pos_prev['y']*1.0E3)
@@ -189,7 +188,7 @@ class optimiz0r(Instrument):
                     # No need to double up on initial position in the point array
                     # since the counts will be read out step-by-step and not in
                     # a synchronized DAQ read.
-                    ##print 'xps point array %s' % point_array
+
                     # Set the position on the XPS to the initial point; sort of redundant
                     self._xps.set_abs_positionZ((cur_pos-0.001*scan_length/2.0))
                     # Now write the points and get the counts
@@ -212,23 +211,23 @@ class optimiz0r(Instrument):
                     # at a certain point, then divide by the period to get the estimate
                     # of the counts per second
                     cps = counts*xps_rate
-                    ##print 'counts array is %s' % cps
+
                     # Call the fitting routine to determine optimal position
                     # and set it as self._opt_pos['z'], in this case.
                     ret = self.process_fit(point_array, cps, 'z')
-                    print 'Previous z optimum was: %s, new optimum is %s (delta %.3f nm)' % (self._opt_pos_prev['z'], self._opt_pos['z'], self._opt_pos['z']*1.0E6-self._opt_pos_prev['z']*1.0E6)
+                    print 'Previous z optimum was: %.6f, new optimum is %.6f (delta %.1f nm)' % (self._opt_pos_prev['z'], self._opt_pos['z'], self._opt_pos['z']*1.0E6-self._opt_pos_prev['z']*1.0E6)
 
 
                     #
                     if np.array(point_array).min() < self._opt_pos['z'] < np.array(point_array).max():
                         self._xps.set_abs_positionZ(self._opt_pos['z'])
                     else:
-                        self._xps.set_abs_positionZ(point_array[cps.tolist().index(max(cps))])
-                        print 'Optimum outside scan range: Position is set to local maximum'
-                        self._opt_pos['z'] = point_array[cps.tolist().index(max(cps))]
+                        self._xps.set_abs_positionZ(self._opt_pos_prev['z'])
+                        print 'Optimum outside scan range: Position is set to previous maximum'
+                        self._opt_pos['z'] = self._opt_pos_prev['z']
                         ret = False
                     # Use 10^6 instead of 10^3 to convert from mm to nm
-                    #print 'Position changed %d nm' % (self._opt_pos['z']*1.0E6-self._opt_pos_prev['z']*1.0E6)
+
 
                 qt.msleep(1)
             if msvcrt.kbhit():
