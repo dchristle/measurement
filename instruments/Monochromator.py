@@ -123,20 +123,35 @@ class Monochromator(Instrument):
         logging.debug(__name__ + 'reading wavelength')
         self.buffer_clear()
         tstr = self._visa.ask('?NM')
+        time.sleep(0.25)
+        self.buffer_clear()
         return float(tstr.split(' ')[1])
 
-    def do_set_wavelength(self, wavelength):
-        logging.debug(__name__ + 'setting wavelength')
+    def do_set_wavelength(self,wavelength):
+        # The idea here is to check for the correct length of the reply string
+        logging.debug(__name__ + ': setting wavelength')
         self.buffer_clear()
-        wl_speed = self.get_wavelength_speed()
-        cur_wl = self.get_wavelength()
-        tgt_wl = wavelength
-        est_time = np.abs(cur_wl-tgt_wl)/wl_speed*60.0
-        self._visa.write('%.3f NM' % wavelength)
-        time.sleep(est_time + 2.0)
-        self.buffer_clear()
-        final_wl = self.get_wavelength()
-        if np.abs(final_wl-tgt_wl) < 0.1:
+        send_string = ('%.3f NM' % wavelength)
+        self._visa.write(send_string)
+        final_reply_length = len(send_string) + 6
+        navail = pyvisa.vpp43.get_attribute(self._visa.vi, pyvisa.vpp43.VI_ATTR_ASRL_AVAIL_NUM)
+
+        time.sleep(0.25)
+        tidx = 0
+        while tidx < 150:
+            navail = pyvisa.vpp43.get_attribute(self._visa.vi, pyvisa.vpp43.VI_ATTR_ASRL_AVAIL_NUM)
+            if navail == final_reply_length:
+                break
+            time.sleep(0.5)
+            tidx = tidx + 1
+        if tidx >= 149:
+            logging.error(__name__ + ': timed out while changing wavelength')
+            self.buffer_clear()
             return
-        else:
-            return False
+        if navail != final_reply_length:
+            logging.error(__name__ + ': Unexpected reply length error %d vs %d!' % (navail, final_reply_length))
+        reply = pyvisa.vpp43.read(self._visa.vi, navail)
+        cur_wl = self.get_wavelength()
+        if np.abs(cur_wl - wavelength) > 1.0:
+            logging.error(__name__ + ': did not reach expected wavelength!')
+        return
