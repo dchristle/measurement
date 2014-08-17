@@ -69,6 +69,13 @@ class Sacher(Instrument):
                 'OFF': 0,
                 'ON': 1,
               })
+        self.add_parameter('laser_status',
+            flags = Instrument.FLAG_GETSET,
+            type = types.StringType,
+            format_map = {
+                'OFF': 0,
+                'ON': 1,
+              })
 
         self.add_parameter('temperature',
             flags = Instrument.FLAG_GETSET,
@@ -100,10 +107,10 @@ class Sacher(Instrument):
             flags = Instrument.FLAG_GETSET,
             type = types.FloatType,
             units = 'V')
-        self.add_parameter('TEC_current',
-            flats = Instrument.FLAG_GET,
-            type = types.FloatType,
-            units = 'mA')
+##        self.add_parameter('TEC_current',
+##            flats = Instrument.FLAG_GET,
+##            type = types.FloatType,
+##            units = 'mA')
         self.add_parameter('PID_P',
             flats = Instrument.FLAG_GETSET,
             type = types.FloatType)
@@ -195,6 +202,14 @@ class Sacher(Instrument):
 
         self._visa.write('TEC:ENA %s' % TEC_status)
 
+    def do_get_laser_status(self):
+
+        return '%s' % self._visa.ask('L:STAT?')
+
+
+    def do_set_laser_status(self, laser_status):
+
+        self._visa.write('L:STAT %s' % laser_status)
 
     def do_set_piezo_status(self, piezo_status):
 
