@@ -15,6 +15,7 @@ import qt
 import math
 import numpy as np
 import scipy.cluster
+import msvcrt
 
 
 
@@ -61,6 +62,20 @@ class FabryPerot(Instrument):
         rsamples = self.read_sweep(samples, rate, channel)
         time_axis = np.linspace(0.0,float(np.size(rsamples))/rate,np.size(rsamples))
         qt.plot(time_axis,rsamples,name='fpplot1',traceofs=0.2, maxtraces=20)
+        return
+    def focus_plot(self):
+        samples = 500
+        rate = 10000
+        channel = 'ai1'
+        while True:
+            rsamples = self.read_sweep(samples, rate, channel)
+            time_axis = np.linspace(0.0,float(np.size(rsamples))/rate,np.size(rsamples))
+            qt.plot(time_axis,rsamples,name='fp_focusplot',traceofs=0.2, clear=True)
+            time.sleep(0.5)
+            if msvcrt.kbhit():
+                kb_char=msvcrt.getch()
+                if kb_char == "q" : break
+
         return
     def read_sweep_centroids(self, samples, rate, channel):
 
