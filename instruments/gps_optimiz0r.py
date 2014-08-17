@@ -39,12 +39,13 @@ class gps_optimiz0r(Instrument):
 
         # Constants for the pattern search
         self._sleeptime = 0.25
-        self._alpha = 0.05 # significance test alpha
+        self._alpha = 0.01 # significance test alpha
         self._max_sample_size = 800
         self._mesh_expansion_factor = 2.0
         self._mesh_shrinkage_factor = 0.5
-        self._mads = False
 
+        self._method = 'dynamic_mads'
+        self._complete_poll = True
         self._debug = False
         self._cur_f = 0.0
         self._nfeval = 0
@@ -61,15 +62,16 @@ class gps_optimiz0r(Instrument):
         self._ub = []
         self._hypd = qt.Data(name='hypd')
         self._hypd.add_coordinate('iteration')
-        self._hypd.add_value('T4')
-        self._hypd.add_value('T4 crit')
-        self._hypd.add_value('sample size')
+        if self._complete_poll == True:
+            self._hypd.add_value('T4')
+            self._hypd.add_value('T4 crit')
+            self._hypd.add_value('sample size')
         self._hypd.add_value('angle 1')
         self._hypd.add_value('angle 2')
         self._hypd.add_value('cmax position')
         self._hypd.add_value('current f')
         self._hypd.add_value('N fevals')
-
+        self._hypd.add_value('min/max ratio')
         self._optimization_is_on = False
 
 
@@ -91,14 +93,16 @@ class gps_optimiz0r(Instrument):
         self._ub = []
         self._hypd = qt.Data(name='hypd')
         self._hypd.add_coordinate('iteration')
-        self._hypd.add_value('T4')
-        self._hypd.add_value('T4 crit')
-        self._hypd.add_value('sample size')
+        if self._complete_poll:
+            self._hypd.add_value('T4')
+            self._hypd.add_value('T4 crit')
+            self._hypd.add_value('sample size')
         self._hypd.add_value('angle 1')
         self._hypd.add_value('angle 2')
         self._hypd.add_value('cmax position')
         self._hypd.add_value('current f')
         self._hypd.add_value('N fevals')
+        self._hypd.add_value('min/max ratio')
         self._optimization_is_on = False
         self._nfeval = 0
 
@@ -114,19 +118,22 @@ class gps_optimiz0r(Instrument):
         self._cur_x = []
         self._hypd = qt.Data(name='hypd')
         self._hypd.add_coordinate('iteration')
-        self._hypd.add_value('T4')
-        self._hypd.add_value('T4 crit')
-        self._hypd.add_value('sample size')
+        if self._complete_poll:
+            self._hypd.add_value('T4')
+            self._hypd.add_value('T4 crit')
+            self._hypd.add_value('sample size')
         self._hypd.add_value('angle 1')
         self._hypd.add_value('angle 2')
         self._hypd.add_value('cmax position')
         self._hypd.add_value('current f')
         self._hypd.add_value('N fevals')
+        self._hypd.add_value('min/max ratio')
         self._fed = qt.Data(name='fed')
         self._fed.add_coordinate('function evals')
         self._fed.add_value('current abs delta f')
         self._optimization_is_on = False
         self._nfeval = 0
+        self._prev_r_max = 1
 
     def set_max_sample_size(self, mss):
         self._max_sample_size = int(mss)
@@ -181,6 +188,44 @@ class gps_optimiz0r(Instrument):
     def set_output_variable(self, fhandle):
         self._output_f = fhandle
         return
+
+    def optimize(self):
+        self.initialize()
+        for i in range(20):
+            print 'iteration %d, cur_f %.2f' % (i, self._cur_f)
+            self.iterate()
+            print 'Current x location is: %s, %s' % (np.array(self._cur_x), self._cur_f)
+            time.sleep(0.1)
+        print 'Done!'
+
+        self._optimization_is_on = False
+        if self._complete_poll == True:
+            hist = np.array(self._history)
+            qt.plot(np.arange(hist.size),hist,name='optimizegps',clear=True)
+            plot2d = qt.plot(self._hypd, coorddim=0, valdim=1,name='optT4',clear=True)
+            plot2d.add_data(self._hypd, coorddim=0, valdim=2, maxtraces=1)
+            plot2d.add_data(self._hypd, coorddim=0, valdim=3, maxtraces=1)
+
+            plota1 = qt.plot(self._hypd, coorddim=0, valdim=4,name='angle1',clear=True)
+            plota2 = qt.plot(self._hypd, coorddim=0, valdim=5,name='angle2',clear=True)
+            plotcmax = qt.plot(self._hypd, coorddim=0, valdim=6,name='cmax',clear=True)
+            plotfevals = qt.plot(self._hypd, coorddim=0, valdim=8, maxtraces=1, clear=True)
+            plotmmax = qt.plot(self._hypd, coorddim=0, valdim=9, name='mmax', maxtraces=1, clear=True)
+        else:
+            hist = np.array(self._history)
+            qt.plot(np.arange(hist.size),hist,name='optimizegps',clear=True)
+
+            plota1 = qt.plot(self._hypd, coorddim=0, valdim=1,name='angle1',clear=True)
+            plota2 = qt.plot(self._hypd, coorddim=0, valdim=2,name='angle2',clear=True)
+            plotcmax = qt.plot(self._hypd, coorddim=0, valdim=3,name='cmax',clear=True)
+            plotfevals = qt.plot(self._hypd, coorddim=0, valdim=5, maxtraces=1, clear=True)
+            plotmmax = qt.plot(self._hypd, coorddim=0, valdim=6, maxtraces=1, clear=True, name='mmax')
+
+
+        print 'Total function evals: %d' % self._nfeval
+        plotff = qt.plot(self._fed, coorddim=0, valdim=1, maxtraces=1, name='fevalp', clear=True)
+        return
+
     def _feasible_points(self, x_array):
         ub = np.array(self._ub)
         lb = np.array(self._lb)
@@ -195,16 +240,38 @@ class gps_optimiz0r(Instrument):
                 # point is feasible
                 logical_index[i] = True
         return x_array[logical_index,:]
+    def dmads_pollsize(self):
+        # compute poll size vector from current mesh vector
+        for j in range(self._x0.__len__()):
+            self._delta[j] = np.min(np.array((self._initial_scale[j]),self._scale[j]))**2.0 * 1.0/(np.sqrt(self._x0.__len__())*self._initial_scale[j])
+        return
+    def dmads_rescale(self):
+        # compute "r" array
+        r = np.log(self._scale/self._initial_scale)/np.log(self._beta)
+        # if any scale is less than 2x the
+        inc_idx = (r < -2*np.ones(self._x0.__len__())) & (r < 2*self._prev_r_max*np.ones(self._x0.__len__()))
+        self._scale[inc_idx] = self._beta[inc_idx]**2.0 * self._scale[inc_idx]
+        r = np.log(self._scale/self._initial_scale)/np.log(self._beta)
+        self._prev_r_max = np.max(r)
+        print 'r matrix is %s' % r
+        return
 
     def iterate(self):
         # set the overall scale for each dimension
         if not self._optimization_is_on:
             self._logscale()
+            self._initial_scale = self._scale
             self._optimization_is_on = True
             self._cur_x = self._x0
             self._cur_f = self._evaluate_point(self._cur_x,self._sample_size)[0]
             if self._debug:
                 print 'Initial f is %.2f' % self._cur_f
+            # create beta vector for dynamic mads
+            if self._method == 'dynamic_mads':
+                # just set all beta components to 2
+                self._beta = np.ones(self._x0.__len__())*2.0
+                self._delta = np.ones(self._x0.__len__())
+                self.dmads_pollsize()
             self._iteration_number = 0
         else:
             self._iteration_number = self._iteration_number + 1
@@ -228,7 +295,10 @@ class gps_optimiz0r(Instrument):
             print 'current x is: %s' % self._cur_x
             print 'new x shape is: %s' % new_x
         if new_x.shape[0] == 0:
-            self._mesh_size = self._mesh_size*self._mesh_shrinkage_factor
+            if self._method == 'dynamic_mads':
+                self._scale = self._scale / self._beta
+            else:
+                self._mesh_size = self._mesh_size*self._mesh_shrinkage_factor
             if self._debug:
                 print 'no feasible points, shrinking mesh'
                 print 'new x is %s' % new_x
@@ -240,14 +310,18 @@ class gps_optimiz0r(Instrument):
             point_output = self._evaluate_point(new_x[i,:],self._sample_size)
             new_f.append(point_output[0])
             new_sse.append(point_output[1])
+            if point_output[0] < self._cur_f and self._complete_poll == False:
+                # Found a better solution - stop polling
+                break
         if self._debug:
             print 'new f array is: %s' % np.array(new_f)
         new_f = np.array(new_f)
         min_f = np.amin(new_f)
         if self._debug:
             print 'min f is %s' % min_f
-        if np.array(self._x0).size > 1:
+        if np.array(self._x0).size > 1 and self._complete_poll == True:
             # test for statistical significance
+            # don't do this if complete polling is disabled
             sse = np.float(self._cur_sse) + np.sum(np.array(new_sse))
             n = 1.0 + np.float(new_x.shape[0])
             M = (n+1.0)*np.float(self._sample_size)
@@ -256,7 +330,7 @@ class gps_optimiz0r(Instrument):
             YN1 = np.amax(np.append(new_f,self._cur_f))
             T4 = (YN1-Y1)/np.sqrt(mse/np.float(self._sample_size))
             q_crit = qst.qsturng(1-self._alpha, n+1, M-(n+1))
-            self._hypd.add_data_point(self._iteration_number, T4, q_crit, self._sample_size, self._cur_x[0]*180.0/np.pi, self._cur_x[1]*180.0/np.pi, self._cur_x[2], self._cur_f, self._nfeval)
+            self._hypd.add_data_point(self._iteration_number, T4, q_crit, self._sample_size, self._cur_x[0]*180.0/np.pi, self._cur_x[1]*180.0/np.pi, self._cur_x[2], self._cur_f, self._nfeval, np.log(np.min(self._scale)/np.max(self._scale))/np.log(10))
             self._fed.add_data_point(self._nfeval, np.log(np.abs(self._cur_f + 600)))
             if self._debug:
                 print 'mse, M, n %.2f %.2f %.2f' % (mse, M, n)
@@ -265,52 +339,45 @@ class gps_optimiz0r(Instrument):
                 self._sample_size = np.min(np.array((2*self._sample_size, self._max_sample_size)))
                 self._history.append(self._cur_f)
                 return False
-
+        else:
+            # Add current data to arrays for testing
+            self._hypd.add_data_point(self._iteration_number, self._cur_x[0]*180.0/np.pi, self._cur_x[1]*180.0/np.pi, self._cur_x[2], self._cur_f, self._nfeval, np.log(np.min(self._scale)/np.max(self._scale))/np.log(10))
+            self._fed.add_data_point(self._nfeval, np.log(np.abs(self._cur_f + 600)))
 
 
         if min_f < self._cur_f:
             if self._debug:
                 print 'successful iteration, %.2f to %.2f' % (self._cur_f, min_f)
                 print 'new x selected %s' % new_x[np.argmin(new_f),:]
+            if self._method == 'dynamic_mads':
+                # compare the new selected poll to the old to determine which
+                # directions were successful
+                dx = new_x[np.argmin(new_f),:] - self._cur_x
+                d_norm = np.sqrt(np.sum(dx**2.0))
+                dx_li = np.abs(dx) > (1.0/float(self._x0.__len__())*d_norm)
+                self._scale[dx_li] = self._scale[dx_li]*self._beta[dx_li]
+                self.dmads_rescale() # rescale to prevent relative scales becoming too different
+            else:
+                self._mesh_size = self._mesh_size*self._mesh_expansion_factor
+
             self._cur_x = new_x[np.argmin(new_f),:]
             self._cur_f = new_f[np.argmin(new_f)]
-            self._mesh_size = self._mesh_size*self._mesh_expansion_factor
+
+
+
             self._history.append(self._cur_f)
             return True
         else:
             if self._debug:
                 print 'no successful polls, shrinking mesh'
-            self._mesh_size = self._mesh_size*self._mesh_shrinkage_factor
+            if self._method == 'dynamic_mads':
+                self._scale = self._scale/self._beta
+            else:
+                self._mesh_size = self._mesh_size*self._mesh_shrinkage_factor
             self._history.append(self._cur_f)
             return False
 
         return
-
-    def optimize(self):
-        self.initialize()
-        for i in range(40):
-            print 'iteration %d, cur_f %.2f' % (i, self._cur_f)
-            self.iterate()
-            print 'Current x location is: %s, %s' % (np.array(self._cur_x), self._cur_f)
-            time.sleep(0.1)
-        print 'Done!'
-
-        self._optimization_is_on = False
-        hist = np.array(self._history)
-        qt.plot(np.arange(hist.size),hist,name='optimizegps',clear=True)
-        plot2d = qt.plot(self._hypd, coorddim=0, valdim=1,name='optT4',clear=True)
-        plot2d.add_data(self._hypd, coorddim=0, valdim=2, maxtraces=1)
-        plot2d.add_data(self._hypd, coorddim=0, valdim=3, maxtraces=1)
-
-        plota1 = qt.plot(self._hypd, coorddim=0, valdim=4,name='angle1',clear=True)
-        plota2 = qt.plot(self._hypd, coorddim=0, valdim=5,name='angle2',clear=True)
-        plotcmax = qt.plot(self._hypd, coorddim=0, valdim=6,name='cmax',clear=True)
-        plotfevals = qt.plot(self._hypd, coorddim=0, valdim=8, maxtraces=1, clear=True)
-        print 'Total function evals: %d' % self._nfeval
-        plotff = qt.plot(self._fed, coorddim=0, valdim=1, maxtraces=1, name='fevalp', clear=True)
-        return
-
-
 
     def _evaluate_point(self, x, n=1):
         output_array = np.zeros(n)
@@ -342,7 +409,7 @@ class gps_optimiz0r(Instrument):
         log_s[lf] = np.log2(np.abs(lb[lf]))
         log_s[lu] = (np.log2(np.abs(lb[lu])) + np.log2(np.abs(ub[lu])))/2.0
         log_s[uf] = np.log2(np.abs(ub[uf]))
-        self._scale = np.power(2.0,np.floor(log_s))
+        self._scale = np.power(2.0,np.floor(log_s))*0.2
         return
 
     def _gps2nbasis(self, x):
@@ -366,7 +433,7 @@ class gps_optimiz0r(Instrument):
         I_m = np.eye(lb.size)
         self.basis = I_m[:,np.logical_not(lb_a)]
         self.tc = I_m[:,lb_a]
-        if self._mads:
+        if self._method == 'mads':
             # see Audet -- create a lower triangular of random signs, scaled by
             # the *rounded* poll size parameter. Then create the diagonal
             # scaled by just the poll parameter (not necessarily an integer).
@@ -387,7 +454,6 @@ class gps_optimiz0r(Instrument):
             # output_basis should now be "d" in Audet (2004) -- not yet a complete
             # n+1 set, but we'll do that in a moment
             self._basis = output_basis
-        if self._mads:
             n1vector = -1.0*np.sum(self.basis,1)
             self._basis = np.vstack((n1vector,self.basis.T)).T
             Nbasis = self.basis.shape[1]
@@ -395,8 +461,25 @@ class gps_optimiz0r(Instrument):
             Ntotal = Nbasis + Ntangent
             dirMat = np.hstack((self.basis, self.tc))
             indexV = np.concatenate( (np.arange(Nbasis), np.arange(Nbasis,Ntotal), np.arange(Nbasis,Ntotal)) )
-            signV = np.concatenate( (np.ones(Nbasis), np.ones(Ntangent), -1*np.ones(Ntangent) ) );
-        else:
+            signV = np.concatenate( (np.ones(Nbasis), np.ones(Ntangent), -1*np.ones(Ntangent) ) )
+        if self._method == 'dynamic_mads':
+            Nbasis = self._x0.__len__()
+            Ntangent = 0
+            Ntotal = Nbasis + Ntangent
+            # generate a random vector on the unit sphere
+            x_rn = np.random.randn(self._x0.__len__())
+            x_rn = x_rn/np.sqrt(np.sum(x_rn**2.0)) # muller transform
+
+            # compute the Householder matrix
+            Hm = np.eye(self._x0.__len__()) - np.dot(x_rn,x_rn.T)
+            dirMat = np.round(Hm*(self._scale/self._delta))*self._delta
+            print '%s' % dirMat
+            # Index it, take care of signs for 2N basis
+            indexV = np.concatenate( (np.arange(Nbasis), np.arange(Nbasis), np.arange(Nbasis,Ntotal), np.arange(Nbasis,Ntotal)) )
+            signV = np.concatenate( (np.ones(Nbasis), -1*np.ones(Nbasis), np.ones(Ntangent), -1*np.ones(Ntangent) ) )
+
+
+        if self._method == 'gps':
             # Figure out the number of basis vectors/vectors within the tangent cone
             Nbasis = np.sum(np.logical_not(lb_a))
             Ntangent = np.sum(lb_a)
@@ -405,7 +488,7 @@ class gps_optimiz0r(Instrument):
             dirMat = np.hstack((self.basis, self.tc))
             # Index them, take care of signs for 2N basis
             indexV = np.concatenate( (np.arange(Nbasis), np.arange(Nbasis), np.arange(Nbasis,Ntotal), np.arange(Nbasis,Ntotal)) )
-            signV = np.concatenate( (np.ones(Nbasis), -1*np.ones(Nbasis), np.ones(Ntangent), -1*np.ones(Ntangent) ) );
+            signV = np.concatenate( (np.ones(Nbasis), -1*np.ones(Nbasis), np.ones(Ntangent), -1*np.ones(Ntangent) ) )
             # Create a vector for ordering the polling process -- not relevent
             # yet since we will do complete polling
 
@@ -417,160 +500,18 @@ class gps_optimiz0r(Instrument):
         new_x = np.zeros((indexV.size,lb.size))
         if self._debug:
             print 'mesh scale %s' % (self._mesh_size*self._scale)
-        for i in range(indexV.size):
-            direction = signV[i]*dirMat[:,indexV[orderV[i]]]
-            new_x[i,:] = x + self._mesh_size*self._scale*direction
+        if self._method == 'dynamic_mads':
+            for i in range(indexV.size):
+                direction = np.transpose(signV[i]*dirMat[indexV[orderV[i]],:])
+                new_x[i,:] = x + self._mesh_size*direction
+        else:
+
+            for i in range(indexV.size):
+                direction = signV[i]*dirMat[:,indexV[orderV[i]]]
+                new_x[i,:] = x + self._mesh_size*self._scale*direction
         return new_x
 
 
 
 
 
-##    def __init__(self, name, mos_ins=qt.instruments['master_of_space'],
-##            adwin_ins=qt.instruments['adwin']):
-##        Instrument.__init__(self, name)
-##
-##        self.add_function('optimize')
-##        self.mos = mos_ins
-##        self.adwin= adwin_ins
-##
-##        ins_pars  = {'a'  :   {'type':types.FloatType,'val':1.5,'flags':Instrument.FLAG_GETSET},
-##                     'b'  :   {'type':types.FloatType,'val':1.3,'flags':Instrument.FLAG_GETSET},
-##                     'c'  :   {'type':types.FloatType,'val':0.5,'flags':Instrument.FLAG_GETSET},
-##                     'd'  :   {'type':types.FloatType,'val':0.9,'flags':Instrument.FLAG_GETSET},
-##                     }
-##        instrument_helper.create_get_set(self,ins_pars)
-##
-##
-##
-##    def _measure_at_position(self, pos, int_time, cnt, speed):
-##        self.mos.move_to_xyz_pos(('x','y','z'),pos,speed,blocking=True)
-##        qt.msleep(0.001)
-##        return self.adwin.measure_counts(int_time)[cnt-1]
-##
-##    def _tetra_volume(self, V):
-##        return 1/6.*np.abs(np.linalg.det(V[0:3]-V[3]))
-##
-##    def optimize(self,xyz_range=[.5,0.5,1.0], xyz_tolerance_factor=0.002, max_cycles=15,
-##                  cnt=1, int_time=50, speed=2000,
-##                  do_final_countrate_check=True):
-##
-##        #in principle, the method below works for any dimension D, and number of vertices N!
-##        #Only need to change the initial simplex shape to size N and set_functions to dim D
-##        D=3
-##        N=5
-##
-##
-##        a=self._a
-##        b=self._b
-##        c=self._c
-##        d=self._d
-##        search_range=np.array(xyz_range)
-##        tolerance=search_range*xyz_tolerance_factor
-##        pos = np.array([self.mos.get_x(), self.mos.get_y(), self.mos.get_z()])
-##        old_cnt = self.adwin.measure_counts(int_time)[cnt-1]
-##        new_pos=pos.copy()
-##
-##        tetra=np.array([[ 0, 0, 0],
-##                        [ 1, 1, 1],
-##                        [ 1,-1,-1],
-##                        [-1, 1,-1],
-##                        [-1,-1, 1],
-##                      ],dtype=np.float)
-##
-##        V=pos+tetra*search_range
-##
-##        J=np.zeros(N)
-##
-##        for i in range(1,len(J)):
-##          J[i]=self._measure_at_position(V[i],int_time,cnt,speed)
-##        print 'Simplex J countrates:',J/(int_time/1000.)
-##
-##        for j in range(max_cycles):
-##          print '\n ============== \n j: ', j
-##          J[0]=self._measure_at_position(V[0],int_time,cnt,speed)
-##          J_o=np.sort(J)
-##          V_o=V[np.argsort(J)]
-##
-##          v_c=1./(N-1.)*np.sum(V_o[1:],axis=0)
-##          v_r=(1-a)*V_o[0]+a*v_c
-##
-##          j_r=self._measure_at_position(v_r,int_time,cnt,speed)
-##          print 'New vertex j_r countrates:',j_r/(int_time/1000.)
-##
-##          if J_o[1]<=j_r<=J_o[-1]:
-##            V_o[0]=v_r
-##            print 'case 1: replace'
-##          elif j_r>J_o[-1]:
-##            v_e=b*v_r+(1-b)*v_c
-##            j_e=self._measure_at_position(v_e,int_time,cnt,speed)
-##            if j_e>J_o[-1]:
-##              V_o[0]=v_e #replace [0] or V[-1] here??
-##              print 'case 2.1: expand far'
-##            else:
-##              V_o[0]=v_r #replace [0] or V[-1] here??
-##              print 'case 2.2: expand close'
-##          elif j_r<J_o[1]:
-##            v_s=c*v_r+(1-c)*v_c
-##            j_s=self._measure_at_position(v_s,int_time,cnt,speed)
-##            if j_s>=J[0]:
-##              V_o[0]=v_s
-##              print 'case 3.1: stay close'
-##            else:
-##              print 'case 3.2: shrink'
-##              V_o=d*V_o+(1-d)*V_o[-1]
-##          else:
-##            print 'j_r comparison error. Check values.'
-##
-##          V=V_o
-##          J=J_o
-##
-##          var=np.var(V,axis=0)
-##          print 'Average xyz_var', np.sum(var)
-##          if (var<tolerance).all():
-##            new_pos = V[-1] if j_r<J_o[-1] else  V[0]
-##            print '========================='
-##            print 'Convex success'
-##            print '========================='
-##            break
-##
-##          if (msvcrt.kbhit() and (msvcrt.getch() == 'q')):
-##            do_final_countrate_check = False
-##            print 'User interrupt'
-##            break
-##
-##          #vol=self._tetra_volume(V) #N=4 simplex volume.
-##          #print 'vol', vol
-##          #if vol[j] < 0.0002:
-##          #  break
-##
-##          #----------------------------------------------------
-##
-##
-##        if do_final_countrate_check:
-##          print "Proposed position x change %d nm" % \
-##                        (1000*V[-1][0]-1000*pos[0])
-##          print "Proposed position y change %d nm" % \
-##                        (1000*V[-1][1]-1000*pos[1])
-##          print "Proposed position z change %d nm" % \
-##                        (1000*V[-1][2]-1000*pos[2])
-##          new_cnt = self._measure_at_position(V[-1], int_time, cnt, speed/2.)
-##          print 'Old countrates', old_cnt/(int_time/1000.)
-##          print 'New countrates', new_cnt/(int_time/1000.)
-##          if new_cnt>old_cnt:
-##            print 'New position accepted'
-##          else:
-##            print 'Old position kept'
-##            self.mos.move_to_xyz_pos(('x','y','z'),pos,speed,blocking=True)
-##
-##        else:
-##          print "Position x changed %d nm" % \
-##                          (1000*new_pos[0]-1000*pos[0])
-##          print "Position y changed %d nm" % \
-##                          (1000*new_pos[1]-1000*pos[1])
-##          print "Position z changed %d nm" % \
-##                          (1000*new_pos[2]-1000*pos[2])
-##          print 'Old countrates', old_cnt/(int_time/1000.)
-##          print  "Countrates at new position: %d" % \
-##                      (float(self._measure_at_position(new_pos, int_time,cnt, speed))/(int_time/1000.))
-##
