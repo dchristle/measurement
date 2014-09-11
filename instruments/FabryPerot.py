@@ -16,6 +16,7 @@ import math
 import numpy as np
 import scipy.cluster
 import msvcrt
+import lib.math.peakfind as pf
 
 
 
@@ -33,7 +34,7 @@ class FabryPerot(Instrument):
                 'sample_rate' : 10000.0, # Hz
                 'aiport' : 'ai1',
                 'trigger' : 'PFI8',
-                'thresholdV' : 1.0,
+                'thresholdV' : 0.1,
                 'thresholdsep' : 0.008
 
                 }
@@ -50,6 +51,7 @@ class FabryPerot(Instrument):
         self.add_function('read_sweep')
         self.add_function('read_sweep_plot')
         self.add_function('read_sweep_centroids')
+
         self.add_function('threshold')
 
 
@@ -70,7 +72,50 @@ class FabryPerot(Instrument):
         while True:
             rsamples = self.read_sweep(samples, rate, channel)
             time_axis = np.linspace(0.0,float(np.size(rsamples))/rate,np.size(rsamples))
-            qt.plot(time_axis,rsamples,name='fp_focusplot',traceofs=0.2, clear=True)
+            qt.plot(time_axis,rsamples,name='fp_focusplot',traceofs=0.2, clear=True,linewidth=6)
+            time.sleep(0.5)
+            if msvcrt.kbhit():
+                kb_char=msvcrt.getch()
+                if kb_char == "q" : break
+
+        return
+    def max_intensity_plot(self):
+        samples = 500
+        rate = 10000
+        channel = 'ai1'
+        data = qt.Data(name='max_int_data')
+        data.add_coordinate('time')
+        data.add_value('intensity')
+        t0 = time.time()
+        miplot = qt.plot(data,name='maxintplot',traceofs=0.2, coorddim=0, valdim=1, maxpoints=100, linewidth=6, clear=True)
+        while True:
+            rsamples = self.read_sweep(samples, rate, channel)
+            data.add_data_point((time.time()-t0),np.max(rsamples))
+            miplot.update()
+
+            time.sleep(0.5)
+            if msvcrt.kbhit():
+                kb_char=msvcrt.getch()
+                if kb_char == "q" : break
+
+        return
+    def avg_max_intensity_plot(self):
+        samples = 500
+        rate = 10000
+        channel = 'ai1'
+        data = qt.Data(name='avg_max_int_data')
+        data.add_coordinate('time')
+        data.add_value('intensity')
+        t0 = time.time()
+        miplot = qt.plot(data,name='avgmaxintplot',traceofs=0.2, coorddim=0, valdim=1, maxpoints=100,linewidth=7,clear=True)
+        while True:
+            rsamples = self.read_sweep(samples, rate, channel)
+            time_axis = np.linspace(0.0,float(np.size(rsamples))/rate,np.size(rsamples))
+            p = pf.PeakFinder(time_axis,rsamples, maxpeaks = 4,threshold = 4,fitwidth=35,fitfunc='FIT_LORENTZIAN',amp_threshold=0.2)
+            peaks = p.find(sign=1, bgorder=1)
+            peak_array = np.array(peaks)
+            data.add_data_point((time.time()-t0),np.mean(peak_array[:,1]))
+            miplot.update()
             time.sleep(0.5)
             if msvcrt.kbhit():
                 kb_char=msvcrt.getch()
@@ -92,6 +137,14 @@ class FabryPerot(Instrument):
         peaks = self.find_peaks(tsamples)
 
         return np.sort(peaks)
+    def read_sweep_peakfinder(self, samples, rate, channel):
+
+        rsamples = self.read_sweep(samples, rate, channel)
+        time_axis = np.linspace(0.0,float(np.size(rsamples))/rate,np.size(rsamples))
+        p = pf.PeakFinder(time_axis,rsamples, maxpeaks = 4,threshold = 4,fitwidth=35,fitfunc='FIT_LORENTZIAN',amp_threshold=0.2)
+        peaks = p.find(sign=1, bgorder=1)
+
+        return np.sort(np.array(peaks)[:,0])
 
     def read_sweep(self, samples, rate, channel):
         devchan = channel
@@ -133,6 +186,7 @@ class FabryPerot(Instrument):
             peak_means[i] = np.mean(split_arrays[i])
 
         return peak_means
+
     def delta_freq(self, prev, curr):
         # prev is an array of previous time values
         # current is an array of the current time values
@@ -145,9 +199,9 @@ class FabryPerot(Instrument):
             raw_diff = curr-prev
             if raw_diff.any() == False:
                 return 0.0
-        deltaF = np.linspace(-4,4,2000)
-        mses = np.zeros(2000)
-        for ij in range(2000):
+        deltaF = np.linspace(-4,4,900)
+        mses = np.zeros(900)
+        for ij in range(900):
             mses[ij] = self.peak_mse(prev,curr,deltaF[ij])
 
         # Find all mse's that are local minima
@@ -155,7 +209,7 @@ class FabryPerot(Instrument):
         # Get the absolute magnitudes of lm's
         dfm = np.abs(deltaF[lm])
         lmas = lm[dfm.argsort()]
-        simple_est = (curr[0]-prev[0])/0.00156
+        simple_est = (curr[0]-prev[0])/0.00156 # set by 10 ghz and time separation
         print 'simple estimate %.3f' % simple_est
 
         return deltaF[lmas[0]]
