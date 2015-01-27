@@ -45,7 +45,6 @@ class gps_optimiz0r(Instrument):
         self._mesh_expansion_factor = 2.0
         self._mesh_shrinkage_factor = 0.5
 
-        self._method = 'gps'
         self._complete_poll = True
         self._debug = False
         self._cur_f = 0.0
@@ -61,18 +60,7 @@ class gps_optimiz0r(Instrument):
         self._cur_x = []
         self._lb = []
         self._ub = []
-        self._hypd = qt.Data(name='hypd')
-        self._hypd.add_coordinate('iteration')
-        if self._complete_poll == True:
-            self._hypd.add_value('T4')
-            self._hypd.add_value('T4 crit')
-            self._hypd.add_value('sample size')
-        self._hypd.add_value('angle 1')
-        self._hypd.add_value('angle 2')
-        self._hypd.add_value('cmax position')
-        self._hypd.add_value('current f')
-        self._hypd.add_value('N fevals')
-        self._hypd.add_value('min/max ratio')
+
         self._optimization_is_on = False
 
 
@@ -239,6 +227,13 @@ class gps_optimiz0r(Instrument):
                 # point is feasible
                 logical_index[i] = True
         return x_array[logical_index,:]
+            
+            
+            
+            
+            
+            
+            
     def dmads_pollsize(self):
         # compute mesh size parameter (delta -- confusing!) from the poll size parameter self._scale
         for j in range(self._x0.__len__()):
@@ -266,11 +261,11 @@ class gps_optimiz0r(Instrument):
             if self._debug:
                 print 'Initial f is %.2f' % self._cur_f
             # create beta vector for dynamic mads
-            if self._method == 'dynamic_mads':
-                # just set all beta components to 2
-                self._beta = np.ones(self._x0.__len__())*2.0
-                self._delta = np.ones(self._x0.__len__())
-                self.dmads_pollsize()
+
+            # just set all beta components to 2
+            self._beta = np.ones(self._x0.__len__())*2.0
+            self._Delta = np.ones(self._x0.__len__())
+            
             self._iteration_number = 0
         else:
             self._iteration_number = self._iteration_number + 1
@@ -420,8 +415,7 @@ class gps_optimiz0r(Instrument):
         return
 
     def _gps2nbasis(self, x):
-        # Detect if bounds are active, then create the maximal 2n basis
-        # In principle, other bases could also be generated here
+
 
         # Define a tolerance -- right now, it's relative to the overall scale
         tol = 0.001*self._scale

@@ -1,14 +1,3 @@
-#-------------------------------------------------------------------------------
-# Name:        module1
-# Purpose:
-#
-# Author:      DiamondAdmin
-#
-# Created:     18/04/2014
-# Copyright:   (c) DiamondAdmin 2014
-# Licence:     <your licence>
-#-------------------------------------------------------------------------------
-
 import time
 import qt
 from qt import *

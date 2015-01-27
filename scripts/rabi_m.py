@@ -320,30 +320,30 @@ class SiC_Rabi_Master(m2.Measurement):
 
 xsettings = {
         'focus_limit_displacement' : 20, # microns inward
-        'trigger_period' : 4850.0, # ns
+        'trigger_period' : 4255.0, # ns
         'fbl_time' : 55.0, # seconds
-        'AOM_delay' : 1800.0, # ns
+        'AOM_delay' : 1200.0, # ns
         'AOM_length' : 1600.0, # ns
         'AOM_amplitude' : 2.5, # V
         'RF_delay' : 50.0, # ns
         'RF_length' : 10.0,
         'RF_amplitude' : 2.5, # V
         'readout_amplitude' : 2.5, #V
-        'readout_delay' : 2455.0,
+        'readout_delay' : 1855.0,
         'readout_length' : 210.0, # ns
         'ctr_term' : 'PFI2',
         'power' : -4.0, # dbM
         'RF_length_start' : 0.0, # ns
         'RF_length_end' : 1200.0, # ns
-        'RF_length_step' : 10, # ns
-        'freq' : 1.353, #GHz
+        'RF_length_step' : 5, # ns
+        'freq' : 1.2349, #GHz
         'dwell_time' : 500.0, # ms
         'temperature_tolerance' : 2.0, # Kelvin
         'MeasCycles' : 800,
         'random' : 1
         }
 
-p_array = np.array([-5])
+p_array = np.array([-7])
 
 for rr in range(np.size(p_array)):
     # Create a measurement object m

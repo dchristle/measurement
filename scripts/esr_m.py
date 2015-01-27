@@ -354,9 +354,9 @@ xsettings = {
         'fbl_time' : 55.0, # seconds
         'ctr_term' : 'PFI0',
         'power' : -10.0, # dbM
-        'f_low' : 1.2, #GHz
-        'f_high' : 1.5, #Ghz
-        'f_step' : 3*4*1.25e-4, #Ghz
+        'f_low' : 1.21, #GHz
+        'f_high' : 1.40, #Ghz
+        'f_step' : 4*1.25e-4, #Ghz
         'dwell_time' : 150.0, # ms
         'temperature_tolerance' : 3.0, # Kelvin
         'MeasCycles' : 1000,
@@ -368,8 +368,8 @@ xsettings = {
 
 # Generate array of powers -- in this case, just one power.
 
-p_low = -12
-p_high = -12
+p_low = -13
+p_high = -13
 p_nstep = 1
 
 p_array = np.linspace(p_low,p_high,p_nstep)
