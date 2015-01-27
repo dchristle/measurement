@@ -20,8 +20,10 @@ class SiCPH_Master(m2.Measurement):
         self._fsm = qt.instruments['fsm']
         self._ls332 = qt.instruments['ls332']
         self._xps = qt.instruments['xps']
-
+        # Start keystroke monitor
+        self.start_keystroke_monitor('abort')
         # Prepare instruments for measurement and verify FBL output
+
 
         # Configure PH for histogram mode, initialize
         self._ph.start_histogram_mode()
@@ -30,7 +32,7 @@ class SiCPH_Master(m2.Measurement):
         self._ph.set_InputCFD0(self.params['CFDLevel0'],self.params['CFDZeroCross0'])
         self._ph.set_InputCFD1(self.params['CFDLevel1'],self.params['CFDZeroCross1'])
         self._ph.set_SyncOffset(self.params['SyncOffset'])
-        print 'PicoHarp settings configured...'
+        print 'PicoHarp settings configured.'
         self._fbl.optimize()
         # Set focus axis limit
         cur_Z = self._xps.get_abs_positionZ()
@@ -48,7 +50,7 @@ class SiCPH_Master(m2.Measurement):
         if self._ph.get_CountRate1() > 0:
             print 'PH 1 channel receiving counts...'
         else:
-            print 'PH 0 not receiving counts!'
+            print 'PH 1 not receiving counts!'
         if np.abs(self._ls332.get_kelvinA() - self._ls332.get_setpoint1()) > 3.0:
             print 'Temperature away from setpoint!'
         #ret = self._snspd.isenabled()
@@ -56,7 +58,13 @@ class SiCPH_Master(m2.Measurement):
         #    print 'SNSPD channels enabled, superconducting.'
         #else:
         #    print 'Both SNSPD channels not enabled or not superconducting.'
-
+        time.sleep(3.0)
+        self._keystroke_check('abort')
+        if self.keystroke('abort') in ['q','Q']:
+            print 'Measurement aborted.'
+            self.stop_keystroke_monitor('abort')
+            self._pxi.set_status('off')
+            return
         return
     def measure(self):
         # Wall time
@@ -133,22 +141,23 @@ class SiCPH_Master(m2.Measurement):
             self._fsm.set_abs_positionX(cur_X - self.params['pos_displacement'])
             bg_cts = bg_cts + float(self._ni63.get_ctr0())
             self._fsm.set_abs_positionX(cur_X)
-            self._fsm.set_abs_positionY(cur_Y - self.params['pos_displacement'])
-            bg_cts = bg_cts + float(self._ni63.get_ctr0())
-            self._fsm.set_abs_positionY(cur_Y + self.params['pos_displacement'])
-            bg_cts = bg_cts + float(self._ni63.get_ctr0())
-            self._fsm.set_abs_positionY(cur_Y)
+##            self._fsm.set_abs_positionY(cur_Y - self.params['pos_displacement'])
+##            bg_cts = bg_cts + float(self._ni63.get_ctr0())
+##            self._fsm.set_abs_positionY(cur_Y + self.params['pos_displacement'])
+##            bg_cts = bg_cts + float(self._ni63.get_ctr0())
+##            self._fsm.set_abs_positionY(cur_Y)
             print 'Displacing to %s' % (cur_X + self.params['pos_displacement'])
             self._fsm.set_abs_positionX(cur_X + self.params['pos_displacement'])
             # Get background counts in both channels
             time.sleep(0.5)
 
-            background_0_data_daq[i] = bg_cts/4.0
+            background_0_data_daq[i] = bg_cts/2.0
+            #background_0_data_daq[i] = bg_cts/4.0
             background_0_data[i] = int(self._ph.get_CountRate0())
             background_1_data[i] = int(self._ph.get_CountRate1())
             avg_bck = float(background_0_data[i]) + float(background_1_data[i])
             avg_sig = float(signal_0_data[i]) + float(signal_1_data[i])
-            print 'avg sig %.2f, avg bck %.2f or %.2f 4 point back, S/B %.2f (new S/B is %.2f)' % (avg_sig/2.0, avg_bck/2.0, bg_cts/4.0, (avg_sig-avg_bck)/avg_bck, ((signal_0_data_daq[i]-(bg_cts/4.0))/(bg_cts/4.0)))
+            print 'avg sig %.2f, avg bck %.2f or %.2f 4 point back, S/B %.2f (new S/B is %.2f)' % (avg_sig/2.0, avg_bck/2.0, bg_cts/2.0, (avg_sig-avg_bck)/avg_bck, ((signal_0_data_daq[i]-(bg_cts/2.0))/(bg_cts/2.0)))
             # Now start the background time correlated data acquisition
             #self._ph.StartMeas(self.params['BackTime']*1000) # AcqTime in s, arg in ms
             #print 'Acquiring background for %.2f s, iteration %s of %s' % (self.params['BackTime'], i+1, self.params['MeasCycles'])
@@ -228,7 +237,7 @@ class SiCPH_Master(m2.Measurement):
 xsettings = {
         'focus_limit_displacement' : 20, # microns inward
         'temperature_tolerance' : 2,
-        'pos_displacement' : -1.25,
+        'pos_displacement' : -1.0,
         'fbl_time' : 55.0,
         'CFDLevel0' : 125,
         'CFDZeroCross0' : 10,
@@ -238,14 +247,14 @@ xsettings = {
         'Offset' : 0,
         'SyncDiv' : 1,
         'SyncOffset' : -84000,
-        'AcqTime' : 70,
+        'AcqTime' : 55,
         'BackTime' : 15,
         'MeasCycles' : 1000
         }
 
 
 # Create a measurement object m
-m = SiCPH_Master('PL4')
+m = SiCPH_Master('3C_1e13_A')
 
 # since params is not just a dictionary, it's easy to incrementally load
 # parameters from multiple dictionaries
@@ -271,6 +280,8 @@ ls332_t = qt.instruments['ls332']
 cur_temp = ls332_t.get_kelvinA()
 msg_string = 'Antibunching PL4 measurement stopped %s, temperature is %.2f K' % (time.strftime('%c'), cur_temp)
 ea_t.email_alert(msg_string)
+##xps = qt.instruments['xps']
+##xps.set_abs_positionZ(12.0) # move the objective away.
 # Now enter a holding pattern of continuous tracking.
 track_on = True
 fbl_t = qt.instruments['fbl']

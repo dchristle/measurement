@@ -251,6 +251,7 @@ class Pulsar:
 
         # prepare the awg
         self.AWG.stop()
+        time.sleep(3.0)
         self.AWG.set_runmode('SEQ')
         self.AWG.set_event_jump_timing(self.event_jump_timing)
         self.setup_channels()

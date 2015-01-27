@@ -147,7 +147,7 @@ class SSPDController(Instrument):
 
         n = 0
         val = self.get(vmeaspar)
-        while val > self._zerosignal and n < 10:
+        while abs(val) > self._zerosignal and n < 10:
             print 'detector switched normal, restoring...'
             was_super = False
             self.set(biaspar, 0)

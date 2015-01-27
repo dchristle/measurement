@@ -157,9 +157,9 @@ class Sacher(Instrument):
 
 
     def do_set_current(self, cur):
-
+        time.sleep(0.1)
         st = self.get_TEC_status()
-
+        time.sleep(0.1)
         if st == 'ON':
 
             self._visa.write('L:CURR %s' % cur)
@@ -172,6 +172,24 @@ class Sacher(Instrument):
             print 'Could not set the current because TEC is off!'
             print 'Turn on TEC with .set_TEC_status(1)'
 
+    def on(self):
+        self.set_laser_status(1)
+        time.sleep(3.2)
+        reply = self.get_laser_status()
+        if reply == 'ON':
+            return
+        else:
+            logging.error(__name__ + ': laser did not turn on!')
+        return
+    def off(self):
+        self.set_laser_status(0)
+        time.sleep(0.2)
+        reply = self.get_laser_status()
+        if reply == 'OFF':
+            return
+        else:
+            logging.error(__name__ + ': laser did not turn off!')
+        return
 
     def do_get_current(self):
 

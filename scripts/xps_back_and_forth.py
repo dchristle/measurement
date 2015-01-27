@@ -13,8 +13,8 @@ import msvcrt
 
 def main(channel = 'Z'):
     ##channel = 'X' # This can be 'X' or 'Y' or 'Z' channels
-    min_position = -4 # mm
-    max_position = 12.2 # m
+    min_position = -7.0 # mm
+    max_position = 7.4 # m
     rate = 0.5 # number of points written per second to the stage
     density = 2 # number of points across the full scale range
     wait =  6 # Wait time before sweeping back in seconds
@@ -46,4 +46,4 @@ def main(channel = 'Z'):
     return
 
 if __name__ == '__main__':
-    main(channel='Z')
+    main(channel='Y')

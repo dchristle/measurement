@@ -13,11 +13,11 @@ import msvcrt
 
 def main(channel = 'X'):
      # This can be 'X' or 'Y' channels
-    min_position = -10 # Volts
-    max_position = 10 # Volts
+    min_position = -6 # Volts
+    max_position = 6 # Volts
     rate = 100 # number of points written per second to DAQ
     density = 100 # number of points across the full scale range
-    wait = 2 # Wait time before sweeping back in seconds
+    wait = 0.2 # Wait time before sweeping back in seconds
 
     x_V_array_f = numpy.linspace(min_position,max_position,density)
     x_V_array_b = numpy.linspace(max_position,min_position,density)

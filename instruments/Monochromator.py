@@ -1,6 +1,6 @@
 # PI/Acton monochromator driver via RS-232
 #
-# David Christle <christle@uchicago.edu>, July 2014
+# David Christle <christle@uchicago.edu>, July 2014/January 2015
 
 
 from instrument import Instrument
@@ -77,10 +77,12 @@ class Monochromator(Instrument):
             reply = pyvisa.vpp43.read(self._visa.vi, navail)
 
     def reset(self):
+        self.buffer_clear()
         self._visa.write('*rst')
         time.sleep(3) # Sleep to avoid trying to talk to the device too quickly
 
     def get_all(self):
+        self.buffer_clear()
         self.get_wavelength()
         self.get_wavelength_speed()
 
