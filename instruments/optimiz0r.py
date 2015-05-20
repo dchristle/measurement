@@ -30,7 +30,7 @@ class optimiz0r(Instrument):
                     'nr_of_points' : 60,
                     'qt_ins' : 'fsm',
                     'channel' : 'X',
-                    'sigma' : 0.5
+                    'sigma' : 0.35
 
                     },
                 'y' : {
@@ -38,14 +38,14 @@ class optimiz0r(Instrument):
                     'nr_of_points' : 60,
                     'qt_ins' : 'fsm',
                     'channel' : 'Y',
-                    'sigma' : 0.5
+                    'sigma' : 0.35
                     },
                 'z' : {
                     'scan_length' : 5.0,
                     'nr_of_points' : 60,
                     'qt_ins' : 'xps',
                     'channel' : 'Z',
-                    'sigma' : 2.0/1000.0
+                    'sigma' : 1.1/1000.0
                     },
                 'xxps' : {
                     'scan_length' : 2.4,
@@ -75,6 +75,11 @@ class optimiz0r(Instrument):
                                 'x' : 0.0,
                                 'y' : 0.0,
                                 'z' : 3.0
+                                }
+        self._opt_sigma_prev = {
+                                'x' : 0.35,
+                                'y' : 0.35,
+                                'z' : 2.0/1000.0
                                 }
         self._opt_pos = {'x' : self._fsm.get_abs_positionX(),
                          'y' : self._fsm.get_abs_positionY(),
@@ -116,7 +121,7 @@ class optimiz0r(Instrument):
                     # Use AO Smooth Goto code to smoothly go to the beginning point
                     self._fsm.AO_smooth(cur_pos, cur_pos-scan_length/2.0, 'X')
                     # Now write the points and get the counts
-                    fsm_rate = 10.0 # Hz
+                    fsm_rate = 20.0 # Hz
 
                     counts = self._fsm.sweep_and_count(temp_point_array,fsm_rate, 'ctr0','PFI0','X')
                     # Find the difference between readouts to get the counts measured
@@ -155,7 +160,7 @@ class optimiz0r(Instrument):
                     # Use AO Smooth Goto code to smoothly go to the beginning point
                     self._fsm.AO_smooth(cur_pos, cur_pos-scan_length/2.0, 'Y')
                     # Now write the points and get the counts
-                    fsm_rate = 10.0 # Hz
+                    fsm_rate = 20.0 # Hz
                     counts = self._fsm.sweep_and_count(temp_point_array,fsm_rate, 'ctr0','PFI0','Y')
                     # Find the difference between readouts to get the counts measured
                     # at a certain point, then divide by the period to get the estimate
@@ -194,7 +199,7 @@ class optimiz0r(Instrument):
                     # Now write the points and get the counts
                     counts = np.zeros(nr_of_points)
                     # HARDCODED SETUP FOR COUNT READING
-                    xps_rate = 10.0 # Hz
+                    xps_rate = 20.0 # Hz
                     xps_settle_time = 10.0*0.001 # 10 ms
                     prev_ctr0_src = self._ni63.get_ctr0_src()
                     self._ni63.set_ctr0_src('PFI0')
@@ -215,7 +220,7 @@ class optimiz0r(Instrument):
                     # Call the fitting routine to determine optimal position
                     # and set it as self._opt_pos['z'], in this case.
                     ret = self.process_fit(point_array, cps, 'z')
-                    print 'Previous z optimum was: %.6f, new optimum is %.6f (delta %.1f nm)' % (self._opt_pos_prev['z'], self._opt_pos['z'], self._opt_pos['z']*1.0E6-self._opt_pos_prev['z']*1.0E6)
+                    print 'Previous z: %.6f, new optimum is %.6f (delta %.1f nm)' % (self._opt_pos_prev['z'], self._opt_pos['z'], self._opt_pos['z']*1.0E6-self._opt_pos_prev['z']*1.0E6)
 
 
                     #
@@ -256,6 +261,12 @@ class optimiz0r(Instrument):
             x0_guess = p[np.round(p_size/2.0)] #np.sum(np.array(cr) * np.array(p))/np.sum(np.array(cr)**2)
             #sigma_guess = 1.0#np.sqrt(np.sum(((np.array(cr)-x0_guess)**2)*(np.array(p))) / np.sum((np.array(p))))
             #print 'Guesses: %r %r %r %r' % (a_guess,  x0_guess,A_guess,sigma_guess)
+            # The following statement is that if the old sigma is within a factor of 2 of the initial fixed value
+            # then use the old sigma as the guess for the fit.
+            if np.abs(self._opt_sigma_prev[dimension]/self.dimensions[dimension]['sigma']) < 2.0 and np.abs(self._opt_sigma_prev[dimension]/self.dimensions[dimension]['sigma']) > 0.3:
+                sigma_guess = self._opt_sigma_prev[dimension]
+            else:
+                sigma_guess = self.dimensions[dimension]['sigma']
 
             gaussian_fit = fit.fit1d(np.array(p,dtype=float), np.array(cr,dtype=float),common.fit_gauss, a_guess,
                     x0_guess,A_guess, sigma_guess, do_print=False,ret=True)
@@ -281,6 +292,7 @@ class optimiz0r(Instrument):
                             gaussian_fit['error'][3],
                             gaussian_fit['error'][0] ]
                     self._opt_pos[dimension] = self._fit_result[0]
+                    self._opt_sigma_prev[dimension] = self._fit_result[2]
                     ret = True
                     final_fit_func = gaussian_fit['params'][0] + gaussian_fit['params'][2]*np.exp(-(p-gaussian_fit['params'][1])**2/(2.0*gaussian_fit['params'][3]**2))
                     qt.plot(p,cr,p,ababfunc,p,final_fit_func,name='fbl_plot',needtempfile=False)
