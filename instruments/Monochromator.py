@@ -24,12 +24,14 @@ class Monochromator(Instrument):
         self.add_parameter('wavelength',
             flags=Instrument.FLAG_GETSET,
             type=types.FloatType,
-            units='nm')
+            units='nm',
+            minval=0.0,
+            maxval=1700.0)
 
         self.add_parameter('wavelength_speed',
             flags=Instrument.FLAG_GETSET,
             type=types.FloatType,
-            minval=1)
+            minval=1, maxval=1000)
 
         self.add_parameter('grating',
             flags=Instrument.FLAG_GETSET,
