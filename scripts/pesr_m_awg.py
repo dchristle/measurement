@@ -31,7 +31,19 @@ class SiC_PESR_Master(m2.Measurement):
         sq_pulsePC = pulse.SquarePulse(channel='photoncount', name='A square pulse on photon counting switch')
         sq_pulseMW_Imod = pulse.SquarePulse(channel='MW_Imod', name='A square pulse on MW I modulation')
         sq_pulseMW_Qmod = pulse.SquarePulse(channel='MW_Qmod', name='A square pulse on MW I modulation')
-        awg.stop()
+        self._awg = qt.instruments['awg']
+        self._awg.stop()
+        time.sleep(5.0)
+        for i in range(10):
+            time.sleep(1.0)
+            state = ''
+            try:
+                state = self._awg.get_state()
+            except(visa.visa.VI_ERROR_TMO):
+                print 'Waiting for AWG to stop...'
+            if state == 'Idle':
+                print 'AWG stopped OK.'
+                break
         gc.collect()
         time.sleep(1.0)
         if clear:
@@ -46,13 +58,16 @@ class SiC_PESR_Master(m2.Measurement):
         trigger_period = AOM_start_time + self.params['AOM_length'] + self.params['AOM_light_delay'] + self.params['AOM_end_buffer']
 
         e = element.Element('CW_mode', pulsar=qt.pulsar)
-        e.add(pulse.cp(sq_pulseAOM, amplitude=1, length=10e-6), name='laser')
-        e.add(pulse.cp(sq_pulsePC, amplitude=1.0, length=10e-6), name='photoncountpulse')
-        e.add(pulse.cp(sq_pulseMW_Imod, amplitude=1.0, length=10e-6),
+        e.add(pulse.cp(sq_pulseAOM, amplitude=1, length=100e-6), name='lasercw')
+        e.add(pulse.cp(sq_pulsePC, amplitude=1.0, length=100e-6),
+        name='photoncountpulsecw')
+        e.add(pulse.cp(sq_pulseMW_Imod, amplitude=1.0, length=100e-6),
         name='MWimodpulsecw', start=0e-9)
-        e.add(pulse.cp(sq_pulseMW_Qmod, amplitude=0.0, length=10e-6),
+        e.add(pulse.cp(sq_pulseMW_Qmod, amplitude=0.0, length=100e-6),
         name='MWqmodpulsecw', start=0e-9)
-        e.add(pulse.cp(sq_pulseMW, length = np.ceil(self.params['pi_length']*1e-9*10e3/trigger_period), amplitude = 1.0), name='microwave pulse', start=10*1.0e-9)
+        # Add a microwave pulse to allow microwave energy to reach the sample even while tracking.
+        # This will give a much more stable measurement for higher powers.
+        e.add(pulse.cp(sq_pulseMW, length = self.params['pi_length']*1e-9, amplitude = 1.0), name='microwave pulse', start=self.params['RF_delay']*1.0e-9)
         elements.append(e)
 
         total_rf_pulses = self.params['RF_delay'] + self.params['pi_length'] + self.params['RF_buffer']
@@ -80,13 +95,13 @@ class SiC_PESR_Master(m2.Measurement):
 
 
         # create a sequence from the pulses -- only one in this case
-        seq = pulsar.Sequence('CW ESR Sequence')
+        seq = pulsar.Sequence('Pulsed ESR Sequence')
         for e in elements:
             seq.append(name=e.name, wfname=e.name, trigger_wait=False, repetitions=-1)
 
         if upload:
             qt.pulsar.upload(*elements)
-            time.sleep(2.0)
+            time.sleep(4.0)
         # program the AWG
         if program:
             qt.pulsar.program_sequence(seq)
@@ -113,7 +128,7 @@ class SiC_PESR_Master(m2.Measurement):
         self._fbl = qt.instruments['fbl']
         self._tl = qt.instruments['tl']
         self._ni63 = qt.instruments['NIDAQ6363']
-        self._snspd = qt.instruments['snspd']
+        #self._snspd = qt.instruments['snspd']
         self._fsm = qt.instruments['fsm']
         self._ls332 = qt.instruments['ls332']
         self._pxi = qt.instruments['pxi']
@@ -168,14 +183,33 @@ class SiC_PESR_Master(m2.Measurement):
             self._va.set_attenuation(desired_atten)
         print 'Variable attenuator set to %.1f dB attenuation.' % desired_atten
         # Check if the SNSPD is still superconducting
-        if self._snspd.check() == False:
-            print 'SNSPD went normal and could not restore!'
+        #if self._snspd.check() == False:
+        #    print 'SNSPD went normal and could not restore!'
         # Start the AWG
-        self._awg.start()
-        time.sleep(1)
-        # Set the AWG to the only waveform for this measurement
+        if self._awg.get_state() == 'Idle':
+            self._awg.start()
+            # set the AWG to CW mode
+            print 'Waiting 30 s for AWG to start...'
+            time.sleep(30.0)
+
+        for i in range(20):
+            time.sleep(5.0)
+            state = ''
+            print 'Waiting for AWG to start...'
+            try:
+                state = self._awg.get_state()
+            except(visa.visa.VI_ERROR_TMO):
+                print 'Still waiting for AWG after timeout...'
+            if state == 'Running':
+                    print 'AWG started OK...Clearing VISA interface.'
+                    self._awg.clear_visa()
+                    break
+            if state == 'Idle':
+                self._awg.start()
+
         self._awg.sq_forced_jump(1)
-        time.sleep(0.1)
+        time.sleep(1)
+        self.awg_confirm(1)
 
         return
     # Now define a new method of this particular ESR measurement class called
@@ -245,7 +279,7 @@ class SiC_PESR_Master(m2.Measurement):
             self._pxi.set_status('off')
             return
         # And do it again...
-        if self.params['power'] >= -9.0:
+        if self.params['desired_power'] >= -9.0:
             print 'Final power is high -- going to ramp slowly.'
             print 'Waiting 2 s for temperature stabilization, power to %.2f dBm' % (self.params['power']-5.0)
             self._pxi.set_power(self.params['power']-3.0)
@@ -289,16 +323,6 @@ class SiC_PESR_Master(m2.Measurement):
         if self._fbl.optimize() == False:
             if self._fbl.optimize() == False:
                 print 'FBL failed twice, breaking.'
-        if self._fbl.optimize() == False:
-            if self._fbl.optimize() == False:
-                print 'FBL failed twice, breaking.'
-        if self.params['power'] >= 8.0:
-            if self._fbl.optimize() == False:
-                if self._fbl.optimize() == False:
-                    print 'FBL failed twice, breaking.'
-            if self._fbl.optimize() == False:
-                if self._fbl.optimize() == False:
-                    print 'FBL failed twice, breaking.'
         print 'Stabilized.'
         time.sleep(3.0)
         self._keystroke_check('abort')
@@ -373,7 +397,7 @@ class SiC_PESR_Master(m2.Measurement):
                     # Set new track time, fbl_time into the future plus a small
                     # random time.
                     track_time = time.time() + self.params['fbl_time'] + 5.0*np.random.uniform()
-                self._awg.sq_forced_jump(2) # the +2 is because the indices start at 1, and the first sequence is CW mode
+                self._awg.sq_forced_jump(2) # the 2 is because the indices start at 1, and the first sequence is CW mode
                 self.awg_confirm(2)
                 # Set the frequency to the new desired frequency
                 self._pxi.set_frequency(freq_temp[j]*1.0e9) # Remember GHz
@@ -386,7 +410,7 @@ class SiC_PESR_Master(m2.Measurement):
                 # Read the counts on ctr0 (PFI0) that accumulate in one dwell
                 # time (set above).
                 time.sleep(0.01)
-                self._ni63.set_count_time(self.params['dwell_time']/1000.0)
+
 
                 temp_count_data[j] = self._ni63.get('ctr1')
                 qt.msleep(0.02)
@@ -394,7 +418,7 @@ class SiC_PESR_Master(m2.Measurement):
 
 
             tt = time.time() - t1
-            print 'Total time is %.3f, efficiency of %.2f percent. Heater output at %.1f.' % (tt, (n_steps*self.params['dwell_time']/1000.0)/tt*100.0, self._ls332.get_heater_output())
+            print 'Cycle %d/%d, time is %.3f, efficiency of %.2f percent. Heater output at %.1f.' % (i+1, self.params['MeasCycles'], tt, (n_steps*self.params['dwell_time']/1000.0)/tt*100.0, self._ls332.get_heater_output())
             # Sort the count data versus frequency we just took so that it's in
             # regular order, i.e. lowest to highest frequency.
             sorted_temp_data = temp_count_data[freq_temp.argsort()]
@@ -420,9 +444,9 @@ class SiC_PESR_Master(m2.Measurement):
                 print 'Temperature out of bounds, breaking.'
                 break
             # Check if the SNSPD is still superconducting
-            if self._snspd.check() == False:
-                print 'SNSPD went normal and could not restore, breaking.'
-                break
+##            if self._snspd.check() == False:
+##                print 'SNSPD went normal and could not restore, breaking.'
+##                break
             # Checks have all passed, so proceed...
 
             # Now add the sorted data array to the total array
@@ -465,28 +489,28 @@ class SiC_PESR_Master(m2.Measurement):
 
 xsettings = {
         'focus_limit_displacement' : 20, # microns inward
-        'fbl_time' : 65.0, # seconds
+        'fbl_time' : 155.0, # seconds
         'ctr_term' : 'PFI2',
         'AOM_length' : 1600.0, # ns
         'AOM_light_delay' : 655.0, # ns
-        'AOM_end_buffer' : 120.0, # ns
+        'AOM_end_buffer' : 1200.0, # ns
         'power' : 5.0, # dBm
-        'constant_attenuation' : 3.0, # dBm -- set by the fixed attenuators in setup
+        'constant_attenuation' : 28.0, # dB -- set by the fixed attenuators in setup
         'desired_power' : -7.0, # dBm
-        'f_low' : 1.27, # GHz
-        'f_high' : 1.4, # GHz
-        'f_step' : 3*4*1.25e-4, # GHz
-        'RF_delay' : 400.0, # ns
-        'RF_buffer' : 400.0, # ns
-        'pi_length' : 80.0, # ns
-        'dwell_time' : 500.0, # ms
+        'f_low' : 1.29, # GHz
+        'f_high' : 1.38, # GHz
+        'f_step' : 0.5*4*1.25e-4, # GHz
+        'RF_delay' : 50.0, # ns
+        'RF_buffer' : 300.0, # ns
+        'pi_length' : 701.0, # ns
+        'dwell_time' : 700.0, # ms
         'temperature_tolerance' : 3.0, # Kelvin
         'MeasCycles' : 1000,
         'trigger_period' : 100000.0, #ns
-        'dropout' : False,
-        'dropout_low' : 1.06, # GHz
-        'dropout_high' : 1.55, # GHz
-        'readout_length' : 210.0
+        'dropout' : True,
+        'dropout_low' : 1.323, # GHz
+        'dropout_high' : 1.348, # GHz
+        'readout_length' : 130.0
         }
 
 
@@ -494,8 +518,8 @@ xsettings = {
 
 # Generate array of powers -- in this case, just one power.
 
-p_low = -3.0
-p_high = -3.0
+p_low = -38
+p_high = -38.0
 p_nstep = 1
 
 p_array = np.linspace(p_low,p_high,p_nstep)
@@ -520,12 +544,14 @@ for rr in range(p_nstep):
     # into the measurement object 'm' that we just made, which will now have
     # the new power
     m.params.from_dict(xsettings)
-
+    do_awg_stuff = True
+    m.sequence(upload=do_awg_stuff, program=do_awg_stuff, clear=do_awg_stuff)
     # The if/then here is just leftover from previous code -- since True is
     # always True, it will always execute.
     if True:
         print 'Proceeding with measurement ...'
-        m.sequence(upload=True, program=True, clear=True)
+
+
         m.prepare()
         m.measure()
         # Save params and save stack I think just save the entire set of parameters
