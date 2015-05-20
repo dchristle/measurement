@@ -100,7 +100,7 @@ class SiC_Monochromator_Master(m2.Measurement):
                 break
             # Set the wavelength
             self._mc.set_wavelength(wl)
-            time.sleep(0.25)
+            time.sleep(0.5)
             cps = self._ni63.get('ctr0')*1.0/(self.params['dwell_time']/1000.0)
             # Add the new data point to the data structure
             self._data.add_data_point(wl,cps)
@@ -130,13 +130,13 @@ class SiC_Monochromator_Master(m2.Measurement):
 
 xsettings = {
         'ctr_term' : 'PFI0',
-        'wavelength_start' : 1000.0, # nm
-        'wavelength_end' : 1070.0, # nm
-        'wavelength_step' : 10.0, # nm
+        'wavelength_start' : 1010, # nm
+        'wavelength_end' : 1035, # nm
+        'wavelength_step' : 0.5, # nm
         'wavelength_speed' : 300.0, # nm/min grating speed
         'dwell_time' : 500.0, # ms
         'ctr_term' : 'PFI0', # counter terminal for counting
-        'MeasCycles' : 20,
+        'MeasCycles' : 1,
         }
 
 
