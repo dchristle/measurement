@@ -67,7 +67,7 @@ class SiC_ESR_Master(m2.Measurement):
         self._fbl = qt.instruments['fbl']
         self._tl = qt.instruments['tl']
         self._ni63 = qt.instruments['NIDAQ6363']
-        self._snspd = qt.instruments['snspd']
+        #self._snspd = qt.instruments['snspd']
         self._fsm = qt.instruments['fsm']
         self._ls332 = qt.instruments['ls332']
         self._pxi = qt.instruments['pxi']
@@ -82,7 +82,7 @@ class SiC_ESR_Master(m2.Measurement):
 
         # Set focus axis limit
         cur_Z = self._xps.get_abs_positionZ()
-        self._xps.set_parameter_bounds('abs_positionZ',cur_Z-(self.params['focus_limit_displacement']*0.001),12.1)
+        self._xps.set_parameter_bounds('abs_positionZ',cur_Z-(self.params['focus_limit_displacement']*0.001),12.5)
         print 'Current Z is %.4f, focus limit set to %.4f' % (cur_Z, cur_Z-(self.params['focus_limit_displacement']*0.001))
 
         # Check if the absolute value of the current temperature (kelvinA) and
@@ -120,8 +120,8 @@ class SiC_ESR_Master(m2.Measurement):
             self._va.set_attenuation(desired_atten)
         print 'Variable attenuator set to %.1f dB attenuation.' % desired_atten
         # Check if the SNSPD is still superconducting
-        if self._snspd.check() == False:
-            print 'SNSPD went normal and could not restore!'
+        #if self._snspd.check() == False:
+        #    print 'SNSPD went normal and could not restore!'
         # Start the AWG
         self._awg.start()
         time.sleep(1)
@@ -169,9 +169,6 @@ class SiC_ESR_Master(m2.Measurement):
         N_cmeas = 0
         # Optimize the FBL loop. Nominally it should return false if it fails
         # but I haven't implemented that yet.
-        if self._fbl.optimize() == False:
-            if self._fbl.optimize() == False:
-                print 'FBL failed twice, breaking.'
         self._keystroke_check('abort')
         if self.keystroke('abort') in ['q','Q']:
             print 'Measurement aborted.'
@@ -192,7 +189,7 @@ class SiC_ESR_Master(m2.Measurement):
             self._pxi.set_status('off')
             return
         # And do it again...
-        if self.params['power'] >= -12.0:
+        if self.params['desired_power'] >= -12.0:
             print 'Final power is high -- going to ramp slowly.'
             print 'Waiting 2 s for temperature stabilization, power to %.2f dBm' % (self.params['power']-5.0)
             self._pxi.set_power(self.params['power']-3.0)
@@ -236,7 +233,7 @@ class SiC_ESR_Master(m2.Measurement):
         current_setpoint = self._ls332.get_setpoint1()
         mm = 0
         kk = 0
-        while kk < 22 and mm < 3:
+        while kk < 22 and mm < 1:
             print 'Stabilization loop index is %d' % kk
             time.sleep(2.0)
             self._fbl.optimize()
@@ -335,7 +332,7 @@ class SiC_ESR_Master(m2.Measurement):
 
 
             tt = time.time() - t1
-            print 'Total time is %.3f, efficiency of %.2f percent. Heater output at %.1f.' % (tt, (n_steps*self.params['dwell_time']/1000.0)/tt*100.0, self._ls332.get_heater_output())
+            print 'Cycle %d/%d, time is %.3f, efficiency of %.2f percent. Heater output at %.1f.' % (i+1, self.params['MeasCycles'], tt, (n_steps*self.params['dwell_time']/1000.0)/tt*100.0, self._ls332.get_heater_output())
             # Sort the count data versus frequency we just took so that it's in
             # regular order, i.e. lowest to highest frequency.
             sorted_temp_data = temp_count_data[freq_temp.argsort()]
@@ -361,9 +358,9 @@ class SiC_ESR_Master(m2.Measurement):
                 print 'Temperature out of bounds, breaking.'
                 break
             # Check if the SNSPD is still superconducting
-            if self._snspd.check() == False:
-                print 'SNSPD went normal and could not restore, breaking.'
-                break
+            #if self._snspd.check() == False:
+            #    print 'SNSPD went normal and could not restore, breaking.'
+            #    break
             # Checks have all passed, so proceed...
 
             # Now add the sorted data array to the total array
@@ -406,21 +403,21 @@ class SiC_ESR_Master(m2.Measurement):
 
 xsettings = {
         'focus_limit_displacement' : 20, # microns inward
-        'fbl_time' : 65.0, # seconds
+        'fbl_time' : 155.0, # seconds
         'ctr_term' : 'PFI0',
         'power' : 5.0, # dBm
-        'constant_attenuation' : 6.0, # dBm -- set by the fixed attenuators in setup
+        'constant_attenuation' : 28.0, # dBm -- set by the fixed attenuators in setup
         'desired_power' : -7.0, # dBm
-        'f_low' : 1.31, #GHz
-        'f_high' : 1.39, #Ghz
-        'f_step' : 1*4*1.25e-4, #Ghz
-        'dwell_time' : 3000.0, # ms
+        'f_low' : 1.29, #GHz
+        'f_high' : 1.379, #Ghz
+        'f_step' : 2*4*1.25e-4, #Ghz
+        'dwell_time' : 550.0, # ms
         'temperature_tolerance' : 3.0, # Kelvin
-        'MeasCycles' : 20,
+        'MeasCycles' : 800,
         'trigger_period' : 100000.0, #ns
         'dropout' : False,
-        'dropout_low' : 1.06, # GHz
-        'dropout_high' : 1.55, # GHz
+        'dropout_low' : 1.325, # GHz
+        'dropout_high' : 1.342, # GHz
         }
 
 
@@ -428,9 +425,9 @@ xsettings = {
 
 # Generate array of powers -- in this case, just one power.
 
-p_low = -15.5
-p_high = -13.5
-p_nstep = 2
+p_low = -29
+p_high = -29
+p_nstep = 1
 
 p_array = np.linspace(p_low,p_high,p_nstep)
 
@@ -461,7 +458,8 @@ for rr in range(p_nstep):
     # always True, it will always execute.
     if True:
         print 'Proceeding with measurement ...'
-        m.sequence(upload=True, program=True, clear=True)
+        do_awg_stuff = True
+        m.sequence(upload=do_awg_stuff, program=do_awg_stuff, clear=do_awg_stuff)
         m.prepare()
         m.measure()
         # Save params and save stack I think just save the entire set of parameters
@@ -492,7 +490,14 @@ ea_t.email_alert(msg_string)
 track_on = True
 fbl_t = qt.instruments['fbl']
 track_iter = 0
-while track_on == True and track_iter < 50:
+print 'About to track...'
+do_track = True
+time.sleep(2.0)
+if msvcrt.kbhit():
+                kb_char=msvcrt.getch()
+                if kb_char == "q":
+                    do_track = False
+while track_on == True and track_iter < 50 and do_track == True:
     track_iter = track_iter + 1
     print 'Tracking for %d iteration.' % track_iter
     fbl_t.optimize()
