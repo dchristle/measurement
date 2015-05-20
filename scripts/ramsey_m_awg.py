@@ -7,6 +7,8 @@ import time
 import msvcrt
 from measurement.lib.pulsar import pulse, pulselib, element, pulsar
 from random import shuffle
+import pyvisa as visa
+
 reload(pulse)
 reload(element)
 reload(pulsar)
@@ -32,7 +34,7 @@ class SiC_Ramsey_Master(m2.Measurement):
         self.params['tau_delay'] = np.linspace(self.params['tau_length_start'], self.params['tau_length_end'], self.params['pts'])
         self._awg = qt.instruments['awg']
         self._awg.stop()
-        time.sleep(3)
+        time.sleep(5)
         if clear:
             awg.clear_waveforms()
             print 'AWG waveforms cleared.'
@@ -48,7 +50,7 @@ class SiC_Ramsey_Master(m2.Measurement):
         e.add(pulse.cp(sq_pulseMW_Qmod, amplitude=0.0, length=100e-6),
         name='MWqmodpulsecw', start=0e-9)
         elements.append(e)
-        
+
         total_rf_pulses = self.params['RF_delay'] + self.params['pi2_length'] + self.params['tau_length_end'] + self.params['pi2_length'] + self.params['RF_buffer']
         AOM_start_time = total_rf_pulses - self.params['AOM_light_delay']
         readout_start_time = AOM_start_time + self.params['AOM_light_delay']
@@ -109,9 +111,12 @@ class SiC_Ramsey_Master(m2.Measurement):
             else:
                 q = q + 1
             time.sleep(0.2)
+            if q == 4:
+                print 'AWG not jumping... clearing VISA.'
+                self._awg.clear_visa()
 
-        if q >= 20:
-            print 'AWG did not jump to proper waveform!'
+            if q >= 19:
+                print 'AWG did not jump to proper waveform!'
         return
 
 
@@ -120,7 +125,7 @@ class SiC_Ramsey_Master(m2.Measurement):
         self._fbl = qt.instruments['fbl']
         self._tl = qt.instruments['tl']
         self._ni63 = qt.instruments['NIDAQ6363']
-        self._snspd = qt.instruments['snspd']
+        #self._snspd = qt.instruments['snspd']
         self._fsm = qt.instruments['fsm']
         self._ls332 = qt.instruments['ls332']
         self._pxi = qt.instruments['pxi']
@@ -134,11 +139,24 @@ class SiC_Ramsey_Master(m2.Measurement):
 
         # set the AWG to CW mode
         self._awg.start()
-        time.sleep(2.0)
+        print 'Waiting 30 s for AWG to start...'
+        time.sleep(30.0)
+        for i in range(20):
+            time.sleep(5.0)
+            state = ''
+            print 'Waiting for AWG to start...'
+            try:
+                state = self._awg.get_state()
+            except(visa.VI_ERROR_TMO):
+                print 'Still waiting for AWG after timeout...'
+            if state == 'Running':
+                    print 'AWG started OK...Clearing VISA interface.'
+                    self._awg.clear_visa()
+                    break
+
         self._awg.sq_forced_jump(1)
+        time.sleep(1)
         self.awg_confirm(1)
-
-
 
         self._fbl.optimize()
         # Set focus axis limit
@@ -234,6 +252,7 @@ class SiC_Ramsey_Master(m2.Measurement):
 
             # Enter the loop for measurement
             t1 = time.time()
+
             for j in range(int(self.params['pts'])):
 
                 if msvcrt.kbhit():
@@ -260,13 +279,15 @@ class SiC_Ramsey_Master(m2.Measurement):
 
                     # Set new track time
                     track_time = time.time() + self.params['fbl_time'] + 5.0*np.random.uniform()
+                    self._ni63.set_count_time(self.params['dwell_time']/1000.0)
 
 
                 # Set the new RF pulse length
                 self._awg.sq_forced_jump(seq_index[j]+2) # the +2 is because the indices start at 1, and the first sequence is CW mode
-                self.awg_confirm(seq_index[j]+2)
-                time.sleep(0.01)
-                self._ni63.set_count_time(self.params['dwell_time']/1000.0)
+                time.sleep(0.1)
+                if j < 2 or (j > 2 and np.random.random() < 0.01):
+                    self.awg_confirm(seq_index[j]+2)
+
 
                 temp_count_data[j] = self._ni63.get('ctr1')
             # Check for a break, and break out of this loop as well.
@@ -288,9 +309,9 @@ class SiC_Ramsey_Master(m2.Measurement):
             if np.abs(self._ls332.get_kelvinA() - self._ls332.get_setpoint1()) > self.params['temperature_tolerance']:
                 print 'Temperature out of bounds, breaking.'
                 break
-            if self._snspd.check() == False:
-                print 'SNSPD went normal and could not restore, breaking.'
-                break
+##            if self._snspd.check() == False:
+##                print 'SNSPD went normal and could not restore, breaking.'
+##                break
             # Checks have all passed, so proceed...
 
             # Now add the sorted data array to the total array
@@ -338,29 +359,29 @@ class SiC_Ramsey_Master(m2.Measurement):
 
 xsettings = {
         'focus_limit_displacement' : 20, # microns inward
-        'fbl_time' : 75.0, # seconds
-        'AOM_length' : 1600.0, # ns
+        'fbl_time' : 180.0, # seconds
+        'AOM_length' : 1400.0, # ns
         'AOM_light_delay' : 655.0, # ns
-        'AOM_end_buffer' : 20.0, # ns
-        'RF_delay' : 400.0, # ns
-        'RF_buffer' : 400.0, # ns
-        'readout_length' : 210.0, # ns
+        'AOM_end_buffer' : 1200.0, # ns
+        'RF_delay' : 50.0, # ns
+        'RF_buffer' : 150.0, # ns
+        'readout_length' : 130.0, # ns
         'ctr_term' : 'PFI2',
         'power' : 5.0, # dBm
-        'constant_attenuation' : 6.0, # dBm -- set by the fixed attenuators in setup
+        'constant_attenuation' : 28.0, # dB -- set by the fixed attenuators in setup
         'desired_power' : -9.0, # dBm
         'tau_length_start' : 0.0, # ns
-        'tau_length_end' : 2000.0, # ns
-        'tau_length_step' : 7, # ns
-        'freq' : (1.3529+0.004), #GHz
-        'pi2_length' : 78.0, # ns
-        'dwell_time' : 2000.0, # ms
+        'tau_length_end' : 1600.0, # ns
+        'tau_length_step' : 12.5, # ns
+        'freq' : (1.30202-0.004), #GHz
+        'pi2_length' : 175.25, # ns
+        'dwell_time' : 1000.0, # ms
         'temperature_tolerance' : 2.0, # Kelvin
-        'MeasCycles' : 800,
+        'MeasCycles' : 1200,
         'random' : 1
         }
 
-p_array = np.array([-4.0])
+p_array = np.array([-32.0])
 
 for rr in range(np.size(p_array)):
     # Create a measurement object m
@@ -371,14 +392,15 @@ for rr in range(np.size(p_array)):
                 if kb_char == "q": break
     name_string = 'power %.2f dBm' % (p_array[rr])
     m = SiC_Ramsey_Master(name_string)
-    xsettings['readout_length'] = 220.0
+    xsettings['readout_length'] = 130.0
     xsettings['desired_power'] = p_array[rr]
     # since params is not just a dictionary, it's easy to incrementally load
     # parameters from multiple dictionaries
     # this could be very helpful to load various sets of settings from a global
     # configuration manager!
     m.params.from_dict(xsettings)
-    m.sequence(upload=False, program=False, clear=False)
+    do_awg_stuff = True
+    m.sequence(upload=do_awg_stuff, program=do_awg_stuff, clear=do_awg_stuff)
 
 
     if True:
@@ -407,7 +429,14 @@ ea_t.email_alert(msg_string)
 track_on = True
 fbl_t = qt.instruments['fbl']
 track_iter = 0
-while track_on == True and track_iter < 50:
+print 'About to track...'
+do_track = True
+time.sleep(2.0)
+if msvcrt.kbhit():
+                kb_char=msvcrt.getch()
+                if kb_char == "q":
+                    do_track = False
+while track_on == True and track_iter < 50 and do_track == True:
     track_iter = track_iter + 1
     print 'Tracking for %d iteration.' % track_iter
     fbl_t.optimize()
