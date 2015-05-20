@@ -7,6 +7,7 @@ import time
 import msvcrt
 from measurement.lib.pulsar import pulse, pulselib, element, pulsar
 from random import shuffle
+import pyvisa as visa
 import gc
 reload(pulse)
 reload(element)
@@ -33,7 +34,17 @@ class SiC_Rabi_Master(m2.Measurement):
         self.params['MW_pulse_durations'] = 1.0e-9*np.linspace(self.params['RF_length_start'], self.params['RF_length_end'], self.params['pts'])
         self._awg = qt.instruments['awg']
         self._awg.stop()
-        time.sleep(3.0)
+        time.sleep(5.0)
+        for i in range(10):
+            time.sleep(1.0)
+            state = ''
+            try:
+                state = self._awg.get_state()
+            except(visa.visa.VI_ERROR_TMO):
+                print 'Waiting for AWG to stop...'
+            if state == 'Idle':
+                print 'AWG stopped OK.'
+                break
         if clear:
             self._awg.clear_waveforms()
             print 'AWG waveforms cleared.'
@@ -107,9 +118,12 @@ class SiC_Rabi_Master(m2.Measurement):
             else:
                 q = q + 1
             time.sleep(0.2)
+            if q == 4:
+                print 'AWG not jumping... clearing VISA.'
+                self._awg.clear_visa()
 
-        if q >= 20:
-            print 'AWG did not jump to proper waveform!'
+            if q >= 19:
+                print 'AWG did not jump to proper waveform!'
         return
     def prepare(self):
         self.start_keystroke_monitor('abort')
@@ -118,7 +132,7 @@ class SiC_Rabi_Master(m2.Measurement):
         self._fbl = qt.instruments['fbl']
         self._tl = qt.instruments['tl']
         self._ni63 = qt.instruments['NIDAQ6363']
-        self._snspd = qt.instruments['snspd']
+        #self._snspd = qt.instruments['snspd']
         self._fsm = qt.instruments['fsm']
         self._ls332 = qt.instruments['ls332']
         self._pxi = qt.instruments['pxi']
@@ -131,10 +145,30 @@ class SiC_Rabi_Master(m2.Measurement):
         # Set the trigger source to internal
 
         # set the AWG to CW mode
-        self._awg.start()
-        time.sleep(5.0)
+        if self._awg.get_state() == 'Idle':
+            self._awg.start()
+            # set the AWG to CW mode
+            print 'Waiting 30 s for AWG to start...'
+            time.sleep(30.0)
+
+        for i in range(20):
+            time.sleep(5.0)
+            state = ''
+            print 'Waiting for AWG to start...'
+            try:
+                state = self._awg.get_state()
+            except(visa.visa.VI_ERROR_TMO):
+                print 'Still waiting for AWG after timeout...'
+            if state == 'Running':
+                    print 'AWG started OK...Clearing VISA interface.'
+                    self._awg.clear_visa()
+                    break
+            if state == 'Idle':
+                self._awg.start()
+
         self._awg.sq_forced_jump(1)
-        time.sleep(3)
+        time.sleep(1)
+        self.awg_confirm(1)
 
 
         self._fbl.optimize()
@@ -177,6 +211,9 @@ class SiC_Rabi_Master(m2.Measurement):
 
         return
     def measure(self):
+        # Start keystroke monitor
+        self.start_keystroke_monitor('abort')
+        self._stop_measurement = False
         # Wall time
         t0 = time.time()
 
@@ -196,8 +233,6 @@ class SiC_Rabi_Master(m2.Measurement):
             return
         # Set the PXI status to 'on', i.e. generate microwaves
         self._pxi.set_status('on')
-        # Start the AWG sequencing
-        self._awg.start()
         N_cmeas = 0
 
 
@@ -208,9 +243,6 @@ class SiC_Rabi_Master(m2.Measurement):
         if self._fbl.optimize() == False:
             if self._fbl.optimize() == False:
                 print 'FBL failed twice, breaking.'
-        # Set the AWG back to the previous sequence position index
-        time.sleep(3.0)
-        fbl.optimize()
         track_time = time.time() + self.params['fbl_time'] + 5.0*np.random.uniform()
         scan_on = True
         for i in range(self.params['MeasCycles']):
@@ -228,16 +260,19 @@ class SiC_Rabi_Master(m2.Measurement):
             t1 = time.time()
             for j in range(int(self.params['pts'])):
 
-                if msvcrt.kbhit():
-                    kb_char=msvcrt.getch()
-                    if kb_char == "q" :
-                        scan_on = False
-                        break
+                self._keystroke_check('abort')
+                if self.keystroke('abort') in ['q','Q']:
+                    print 'Measurement aborted.'
+                    self.stop_keystroke_monitor('abort')
+                    scan_on = False
+                    self._stop_measurement = True
+                    break
                 # Check if a track should occur. If so, track.
                 if time.time() > track_time:
 
                     # set the AWG into CW mode for tracking
                     self._awg.sq_forced_jump(1)
+                    self.awg_confirm(1)
 
                     time.sleep(0.1)
                     # Re-optimize
@@ -249,16 +284,26 @@ class SiC_Rabi_Master(m2.Measurement):
 
                 # Set the new RF pulse length
                 self._awg.sq_forced_jump(seq_index[j]+2) # the +2 is because the indices start at 1, and the first sequence is CW mode
-                self.awg_confirm(seq_index[j]+2)
-                if j == 1:
-                    time.sleep(1.0)
-                    fbl.optimize()
-
-                time.sleep(0.01)
-                self._ni63.set_count_time(self.params['dwell_time']/1000.0)
+                time.sleep(0.1)
+                if j < 5 or (j > 5 and np.random.random() < 0.01):
+                    self.awg_confirm(seq_index[j]+2)
 
                 temp_count_data[j] = self._ni63.get('ctr1')
                 qt.msleep(0.002) # keeps GUI responsive and checks if plot needs updating.
+                self._keystroke_check('abort')
+                if self.keystroke('abort') in ['q','Q'] or scan_on == False:
+                    print 'Measurement aborted.'
+                    self.stop_keystroke_monitor('abort')
+                    self._stop_measurement = True
+                    scan_on = False
+                    break
+                if msvcrt.kbhit() or scan_on == False or self._stop_measurement == True:
+                    kb_char=msvcrt.getch()
+                    self._stop_measurement = True
+                    if kb_char == "q" or scan_on == False or self._stop_measurement == True:
+                        print 'Measurement aborted.'
+                        self._stop_measurement = True
+                        break
             # Check for a break, and break out of this loop as well.
             # It's important to check here, before we add the array to the total
             # since doing it the other way risks adding incomplete data to the
@@ -272,16 +317,26 @@ class SiC_Rabi_Master(m2.Measurement):
 
             plot2d_0 = qt.Plot2D(1e9*self.params['MW_pulse_durations'],sorted_temp_data, name='rabi_single_sweep', clear=True)
             qt.msleep(0.002) # keeps GUI responsive and checks if plot needs updating.
-            if msvcrt.kbhit() or scan_on == False:
+            if msvcrt.kbhit() or scan_on == False or self._stop_measurement == True:
                 kb_char=msvcrt.getch()
-                if kb_char == "q" or scan_on == False: break
+                self._stop_measurement = True
+                if kb_char == "q" or scan_on == False or self._stop_measurement == True:
+                    print 'Measurement aborted.'
+                    self._stop_measurement = True
+                    break
+            self._keystroke_check('abort')
+            if self.keystroke('abort') in ['q','Q']:
+                print 'Measurement aborted.'
+                self.stop_keystroke_monitor('abort')
+                self._stop_measurement = True
+                break
             # Now start checking for other issues. If present, stop.
             if np.abs(self._ls332.get_kelvinA() - self._ls332.get_setpoint1()) > self.params['temperature_tolerance']:
                 print 'Temperature out of bounds, breaking.'
                 break
-            if self._snspd.check() == False:
-                print 'SNSPD went normal and could not restore, breaking.'
-                break
+##            if self._snspd.check() == False:
+##                print 'SNSPD went normal and could not restore, breaking.'
+##                break
             # Checks have all passed, so proceed...
 
             # Now add the sorted data array to the total array
@@ -328,32 +383,33 @@ class SiC_Rabi_Master(m2.Measurement):
 
 xsettings = {
         'focus_limit_displacement' : 20, # microns inward
-        'fbl_time' : 50.0, # seconds
-        'AOM_length' : 2100.0, # ns
+        'fbl_time' : 150.0, # seconds
+        'AOM_length' : 1600.0, # ns
         'AOM_light_delay' : 655.0, # ns
-        'AOM_end_buffer' : 1500.0, # ns
-        'RF_delay' : 80.0, # ns
-        'RF_buffer' : 600.0, # ns
-        'readout_length' : 210.0, # ns
+        'AOM_end_buffer' : 1155.0, # ns
+        'RF_delay' : 10.0, # ns
+        'RF_buffer' : 150.0, # ns
+        'readout_length' : 130.0, # ns
         'ctr_term' : 'PFI2',
         'power' : 5.0, # dBm
-        'constant_attenuation' : 6.0, # dBm -- set by the fixed attenuators in setup
+        'constant_attenuation' : 28.0, # dBm -- set by the fixed attenuators in setup
         'desired_power' : -9.0, # dBm
         'RF_length_start' : 0.0, # ns
-        'RF_length_end' : 2000.0, # ns
-        'RF_length_step' : 20, # ns
-        'freq' : 1.3555, #GHz
-        'dwell_time' : 200.0, # ms
+        'RF_length_end' : 1350.0, # ns
+        'RF_length_step' : 71.0, # ns
+        'freq' : 1.30122, #GHz
+        'dwell_time' : 800.0, # ms
         'temperature_tolerance' : 2.0, # Kelvin
-        'MeasCycles' : 500,
+        'MeasCycles' : 1200,
         'random' : 1
         }
 
-p_low = -9
-p_high = -9
+p_low = -38
+p_high = -38
 p_nstep = 1
 
 p_array = np.linspace(p_low,p_high,p_nstep)
+
 
 for rr in range(np.size(p_array)):
     # Create a measurement object m
@@ -364,14 +420,15 @@ for rr in range(np.size(p_array)):
                 if kb_char == "q": break
     name_string = 'power %.2f dBm' % (p_array[rr])
     m = SiC_Rabi_Master(name_string)
-    xsettings['readout_length'] = 220.0
+    xsettings['readout_length'] = 130.0
     xsettings['desired_power'] = p_array[rr]
     # since params is not just a dictionary, it's easy to incrementally load
     # parameters from multiple dictionaries
     # this could be very helpful to load various sets of settings from a global
     # configuration manager!
     m.params.from_dict(xsettings)
-    m.sequence(upload=True, program=True, clear=True)
+    do_awg_stuff = True
+    m.sequence(upload=do_awg_stuff, program=do_awg_stuff, clear=do_awg_stuff)
 
 
     if True:
@@ -400,11 +457,14 @@ ea_t.email_alert(msg_string)
 track_on = True
 fbl_t = qt.instruments['fbl']
 track_iter = 0
-while track_on == True and track_iter < 50:
-    time.sleep(1.0)
-    if msvcrt.kbhit() or track_on == False:
+print 'About to track...'
+do_track = True
+time.sleep(2.0)
+if msvcrt.kbhit():
                 kb_char=msvcrt.getch()
-                if kb_char == "q" or track_on == False: break
+                if kb_char == "q":
+                    do_track = False
+while track_on == True and track_iter < 50 and do_track == True:
     track_iter = track_iter + 1
     print 'Tracking for %d iteration.' % track_iter
     fbl_t.optimize()
