@@ -157,7 +157,7 @@ class SSPDController(Instrument):
             val = self.get(vmeaspar)
             n += 1
 
-        if val > self._zerosignal:
+        if abs(val) > self._zerosignal:
             print 'Unable to restore detector!'
             return False
         else:
