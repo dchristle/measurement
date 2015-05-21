@@ -48,9 +48,13 @@ class SiC_RamseyQ_Master(m2.Measurement):
         sq_pulseMW_Qmod = pulse.SquarePulse(channel='MW_Qmod', name='A square pulse on MW I modulation')
         sq_delay = pulse.SquarePulse(channel='MW_pulsemod', name='delay',
                     length = 200e-9, amplitude = 0.)
+        if self.params['poisson_gap'] == True:
+            self.params['tau_delay'] = self.poisson_gap_sample()
+            self.params['pts'] = 4*np.size(self.params['tau_delay'])
 
-        self.params['pts'] = 4*np.uint32(1 + np.ceil(np.abs(self.params['tau_length_end'] - self.params['tau_length_start'])/self.params['tau_length_step']))
-        self.params['tau_delay'] = np.linspace(self.params['tau_length_start'], self.params['tau_length_end'], self.params['pts'])
+        else:
+            self.params['pts'] = 4*np.uint32(1 + np.ceil(np.abs(self.params['tau_length_end'] - self.params['tau_length_start'])/self.params['tau_length_step']))
+            self.params['tau_delay'] = np.linspace(self.params['tau_length_start'], self.params['tau_length_end'], self.params['pts'])
         self._awg = qt.instruments['awg']
         self._awg.stop()
         time.sleep(5)
@@ -79,7 +83,7 @@ class SiC_RamseyQ_Master(m2.Measurement):
         for i in range(self.params['pts']):
 
             for j in range(4):
-                e = element.Element('ElectronRamseyZ_%d deg pt-%d' % (phase_array[j],i), pulsar=qt.pulsar)
+                e = element.Element('ElectronRamseyQ_%d deg pt-%d' % (phase_array[j],i), pulsar=qt.pulsar)
 
 
 
@@ -149,6 +153,38 @@ class SiC_RamseyQ_Master(m2.Measurement):
             if q >= 19:
                 print 'AWG did not jump to proper waveform!'
         return
+    def poisson_gap_sample(self):
+
+        p = self.params['numpoints_poisson']
+        z = np.ceil((self.params['tau_length_end']-self.params['tau_length_start'])/self.params['tau_length_step'])
+
+
+        v = np.zeros(z)
+        adj = 2.0*(z/p-1.0)
+        qq = 0
+        i = 0.0
+        n = 0.0
+        while n != p and qq < 300:
+            zz = 0
+            i = 0.0
+            n = 0.0
+            v = np.zeros(z)
+            while i < z and zz < 400:
+                v[n] = i
+                i = i+1
+
+                k = np.random.poisson(adj*np.sin((float(i)+0.5)/(float(z)+1.0)*np.pi/2.0))
+                i = i+k
+                n = n+1
+                zz = zz+1
+            if n > p:
+                adj = adj*1.02
+            if n < p:
+                adj = adj/1.02
+            qq = qq+1
+
+        #print 'qq reached %.2f, zz reached %.2f' %(qq,zz)
+        return self.params['tau_length_step']*v[0:int(p-1)]
 
 
     def prepare(self):
@@ -233,7 +269,7 @@ class SiC_RamseyQ_Master(m2.Measurement):
 
         # Populate some arrays
 
-        print '--Ramsey quadrature zero detuning meas. from %.4f ns to %.4f ns in %.4f ns steps (%.2f steps), %.5f GHz --' % (self.params['tau_length_start'], self.params['tau_length_end'], self.params['tau_length_step'], self.params['pts'], self.params['freq'])
+        print '--Ramsey quadrature zero detuning meas. from %.4f ns to %.4f ns in %.4f ns steps (%d steps), %.5f GHz --' % (self.params['tau_length_start'], self.params['tau_length_end'], self.params['tau_length_step'], self.params['pts'], self.params['freq'])
 
         total_count_data = np.zeros(int(self.params['pts']), dtype='uint32')
         average_count_data = np.zeros(self.params['pts'], dtype='float')
@@ -416,6 +452,8 @@ xsettings = {
         'tau_length_start' : 0.0, # ns
         'tau_length_end' : 2212.0, # ns
         'tau_length_step' : 28, # ns
+        'poisson_gap' : True,
+        'numpoints_poisson' : 40, # number of points
         'freq' : (1.30202), #GHz
         'pi2_length' : 175.25, # ns
         'dwell_time' : 1500.0, # ms
@@ -463,7 +501,7 @@ for rr in range(np.size(p_array)):
 ea_t = qt.instruments['ea']
 ls332_t = qt.instruments['ls332']
 cur_temp = ls332_t.get_kelvinA()
-msg_string = 'Ramsey measurement stopped at %s, temperature is %.2f K' % (time.strftime('%c'), cur_temp)
+msg_string = 'Ramsey quadrature measurement stopped at %s, temperature is %.2f K' % (time.strftime('%c'), cur_temp)
 ea_t.email_alert(msg_string)
 
 ##ps = qt.instruments['xps']
