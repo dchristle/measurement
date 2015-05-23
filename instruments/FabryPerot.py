@@ -167,10 +167,28 @@ class FabryPerot(Instrument):
 
         return np.sort(np.array(accurate_peaks))
     def delta_freq_tp(self, prev, curr):
+        Npoints = 200
+        df_array = np.linspace(-4.5/625.0,4.5/625,Npoints)
+        mse = np.zeros(Npoints)
+        for i in range(Npoints):
+            mse[i] = self.peak_obj_fun(prev,curr,df_array[i])
+        min_idx = np.argmin(mse)
+        pof_anon = lambda x: self.peak_obj_fun(prev,curr,x)
+        min_obj = scp.optimize.minimize(pof_anon,df_array[min_idx],method='SLSQP', bounds=((-4.5/625.0,4.5/625),))
 
+        return float(min_obj.x*625.0)
+    def peak_obj_fun(self,prev,curr,df):
+        # Find the two smallest peak displacements
+        Nprev = np.size(prev)
+        Ncurr = np.size(curr)
+        displacements = np.zeros(Nprev*Ncurr)
+        for i in range(Nprev):
+            for j in range(Ncurr):
+                displacements[i*Ncurr+j] = np.power(prev[i]+df-curr[j],2.0)
+        # Now sort the array
+        sorted_displacements = np.sort(displacements)
+        return sorted_displacements[0] + sorted_displacements[1]
 
-        return df
-    def peak_obj_fun(self,prev,curr):
 
 
         return Q
