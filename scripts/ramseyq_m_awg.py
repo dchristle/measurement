@@ -375,12 +375,14 @@ class SiC_RamseyQ_Master(m2.Measurement):
             # Now we need to compute "R" for the measurement. We can do the fits on the raw data but for plotting just computing
             # R here will be fine.
 
-            X1 = sorted_temp_data[0:4:self.params['pts']-3]
-            X2 = sorted_temp_data[1:4:self.params['pts']-2]
-            Y1 = sorted_temp_data[2:4:self.params['pts']-1]
-            Y2 = sorted_temp_data[3:4:self.params['pts']]
+            X1 = sorted_temp_data[0:self.params['pts']-3:4].astype(float)
+            X2 = sorted_temp_data[1:self.params['pts']-2:4].astype(float)
+            Y1 = sorted_temp_data[2:self.params['pts']-1:4].astype(float)
+            Y2 = sorted_temp_data[3:self.params['pts']:4].astype(float)
             R = np.sqrt(np.power(X1-X2,2) + np.power(Y1-Y2,2))
-            plot2d_0 = qt.Plot2D(self.params['tau_delay'],R, name='ramsey_single_sweep', clear=True)
+            print 'Size of R is %s' % np.size(R)
+            print 'Size of Tau Delay is %s' % np.size(self.params['tau_delay'])
+            plot2d_0 = qt.plot(self.params['tau_delay'],R, name='ramsey_single_sweep', clear=True)
             if msvcrt.kbhit() or scan_on == False:
                 kb_char=msvcrt.getch()
                 if kb_char == "q" or scan_on == False: break
@@ -410,12 +412,13 @@ class SiC_RamseyQ_Master(m2.Measurement):
                 signal[0] = self._ni63.get('ctr1')
             elif np.mod(i,10):
                 signal = np.hstack((signal,self._ni63.get('ctr1')))
-            X1 = total_count_data[0:4:self.params['pts']-3]
-            X2 = total_count_data[1:4:self.params['pts']-2]
-            Y1 = total_count_data[2:4:self.params['pts']-1]
-            Y2 = total_count_data[3:4:self.params['pts']]
-            R = np.sqrt(np.power(X1-X2,2) + np.power(Y1-Y2,2))
-            plot2d_1 = qt.Plot2D(self.params['tau_delay'],total_count_data, name='ramsey_avg', clear=True)
+            X1 = total_count_data[0:self.params['pts']-3:4].astype(float)
+            X2 = total_count_data[1:self.params['pts']-2:4].astype(float)
+            Y1 = total_count_data[2:self.params['pts']-1:4].astype(float)
+            Y2 = total_count_data[3:self.params['pts']:4].astype(float)
+            R = np.sqrt(np.power(X1-X2,2.0) + np.power(Y1-Y2,2.0))
+            print 'Mean counts in X1 is %.2f' % np.mean(X1)
+            plot2d_1 = qt.Plot2D(self.params['tau_delay'],R, name='ramsey_avg', clear=True)
             N_cmeas = N_cmeas + 1
             average_count_data = total_count_data/float(N_cmeas)
 
