@@ -395,17 +395,17 @@ xsettings = {
         'constant_attenuation' : 28.0, # dBm -- set by the fixed attenuators in setup
         'desired_power' : -9.0, # dBm
         'RF_length_start' : 0.0, # ns
-        'RF_length_end' : 1350.0, # ns
-        'RF_length_step' : 71.0, # ns
-        'freq' : 1.30122, #GHz
-        'dwell_time' : 800.0, # ms
+        'RF_length_end' : 1260.0, # ns
+        'RF_length_step' : 60.0, # ns
+        'freq' : 1.308194, #GHz
+        'dwell_time' : 1200.0, # ms
         'temperature_tolerance' : 2.0, # Kelvin
         'MeasCycles' : 1200,
         'random' : 1
         }
 
-p_low = -38
-p_high = -38
+p_low = -32
+p_high = -32
 p_nstep = 1
 
 p_array = np.linspace(p_low,p_high,p_nstep)
