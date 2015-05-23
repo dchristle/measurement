@@ -100,8 +100,8 @@ class SiC_RamseyQ_Master(m2.Measurement):
                 e.add(pulse.cp(sq_pulsePC, amplitude=1.0, length=self.params['readout_length']*1.0e-9),
                 name='photoncountpulse', start=readout_start_time*1.0e-9)
                 # Here is where we determine the readout axis.
-                I_amplitude = np.cos(np.pi/180.0*phase_array[j])
-                Q_amplitude = np.sin(np.pi/180.0*phase_array[j])
+                I_amplitude = np.cos(2*np.pi*self.params['fringe_frequency']*self.params['tau_delay'][i] + np.pi/180.0*phase_array[j])
+                Q_amplitude = np.sin(2*np.pi*self.params['fringe_frequency']*self.params['tau_delay'][i] + np.pi/180.0*phase_array[j])
                 # For the first pulse, we just write I = 1, Q = 0, which is some phase in the lab frame.
                 e.add(pulse.cp(sq_pulseMW_Imod, amplitude=1.0, length=(self.params['RF_delay'] + self.params['pi2_length'] + self.params['tau_delay'][i]/2.0)*1.0e-9),
                 name='MWimodpulse', start=0e-9)
@@ -458,6 +458,7 @@ xsettings = {
         'tau_length_start' : 0.0, # ns
         'tau_length_end' : 2225.0, # ns
         'tau_length_step' : 10, # ns
+        'fringe_frequency' : 0.003, # GHz
         'poisson_gap' : True,
         'numpoints_poisson' : 38, # number of points
         'freq' : 1.308194, #GHz

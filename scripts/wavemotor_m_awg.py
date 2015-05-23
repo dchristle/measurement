@@ -180,11 +180,11 @@ class SiC_WaveMotor_Master(m2.Measurement):
         self.awg_confirm(1)
 
 
-        #self._fbl.optimize()
+        self._fbl.optimize()
         # Set focus axis limit
-        #cur_Z = self._xps.get_abs_positionZ()
-        #self._xps.set_parameter_bounds('abs_positionZ',cur_Z-(self.params['focus_limit_displacement']*0.001),12.1)
-        #print 'Current Z is %.4f, focus limit set to %.4f' % (cur_Z, cur_Z-(self.params['focus_limit_displacement']*0.001))
+        cur_Z = self._xps.get_abs_positionZ()
+        self._xps.set_parameter_bounds('abs_positionZ',cur_Z-(self.params['focus_limit_displacement']*0.001),12.1)
+        print 'Current Z is %.4f, focus limit set to %.4f' % (cur_Z, cur_Z-(self.params['focus_limit_displacement']*0.001))
         # Use some logic here to decide what's going on
         # i.e. position, chi sq., signal amp, background amp
         print 'FBL optimized...'
@@ -292,7 +292,7 @@ class SiC_WaveMotor_Master(m2.Measurement):
 
                     time.sleep(0.1)
                     # Re-optimize
-                    #fbl.optimize()
+                    fbl.optimize()
 
                     # Set new track time
                     track_time = time.time() + self.params['fbl_time'] + 5.0*np.random.uniform()
@@ -437,7 +437,7 @@ for rr in range(np.size(p_array)):
     # this could be very helpful to load various sets of settings from a global
     # configuration manager!
     m.params.from_dict(xsettings)
-    do_awg_stuff = False
+    do_awg_stuff = True
     m.sequence(upload=do_awg_stuff, program=do_awg_stuff, clear=do_awg_stuff)
 
 
@@ -458,7 +458,7 @@ for rr in range(np.size(p_array)):
 ea_t = qt.instruments['ea']
 ls332_t = qt.instruments['ls332']
 cur_temp = ls332_t.get_kelvinA()
-msg_string = 'Rabi measurement stopped at %s, temperature is %.2f K' % (time.strftime('%c'), cur_temp)
+msg_string = 'Wavemotor measurement stopped at %s, temperature is %.2f K' % (time.strftime('%c'), cur_temp)
 ea_t.email_alert(msg_string)
 
 ##ps = qt.instruments['xps']
