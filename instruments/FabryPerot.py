@@ -17,6 +17,7 @@ import numpy as np
 import scipy.cluster
 import msvcrt
 import lib.math.peakfind as pf
+import scipy as scp
 
 
 
@@ -35,7 +36,7 @@ class FabryPerot(Instrument):
                 'aiport' : 'ai1',
                 'trigger' : 'PFI8',
                 'thresholdV' : 0.1,
-                'thresholdsep' : 0.008
+                'thresholdsep' : 0.006
 
                 }
         # Instrument parameters
@@ -137,6 +138,42 @@ class FabryPerot(Instrument):
         peaks = self.find_peaks(tsamples)
 
         return np.sort(peaks)
+    def lorentzian(self, x, A, gamma, x0, C):
+        return A*(gamma*gamma/(gamma*gamma+np.power(x-x0,2)))+C
+
+    def read_sweep_peaks_lorentzian(self, samples, rate, channel):
+
+        rsamples = self.read_sweep(samples, rate, channel)
+        time_axis = np.linspace(0.0,float(np.size(rsamples))/rate,np.size(rsamples))
+        tsamples = self.threshold(time_axis, rsamples)
+        peaks = self.find_peaks(tsamples)
+        accurate_peaks = []
+        for i in range(np.size(peaks)):
+            # Find the points around the peak
+            distance_array = np.abs(time_axis - peaks[i])
+            min_idx = np.argmin(distance_array)
+            idx_width = 0.8/625.0
+            distance_array = np.abs(time_axis - (peaks[i] + idx_width))
+            upper_idx = np.argmin(distance_array)
+            distance_array = np.abs(time_axis - (peaks[i] - idx_width))
+            lower_idx = np.argmin(distance_array)
+            fit_obj = scp.optimize.curve_fit(self.lorentzian, time_axis[lower_idx:upper_idx], rsamples[lower_idx:upper_idx], np.array((np.max(rsamples[lower_idx:upper_idx])-np.min(rsamples[lower_idx:upper_idx]), 0.08/625.0, peaks[i], np.min(rsamples[lower_idx:upper_idx]))))
+            if np.abs(fit_obj[0][2] - peaks[i])*625 > 1.0:
+                accurate_peaks.append(peaks[i])
+                print 'Lorentzian fit outside range -- returning original threshold peak.'
+            else:
+                accurate_peaks.append(fit_obj[0][2])
+
+
+        return np.sort(np.array(accurate_peaks))
+    def delta_freq_tp(self, prev, curr):
+
+
+        return df
+    def peak_obj_fun(self,prev,curr):
+
+
+        return Q
     def read_sweep_peakfinder(self, samples, rate, channel):
 
         rsamples = self.read_sweep(samples, rate, channel)
