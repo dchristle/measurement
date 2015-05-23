@@ -135,7 +135,7 @@ class SiC_WaveMotor_Master(m2.Measurement):
         self.start_keystroke_monitor('abort')
         self._stop_measurement = False
         # Set up some instruments
-        #self._fbl = qt.instruments['fbl']
+        self._fbl = qt.instruments['fbl']
         self._tl = qt.instruments['tl']
         self._ni63 = qt.instruments['NIDAQ6363']
         #self._snspd = qt.instruments['snspd']
@@ -225,6 +225,12 @@ class SiC_WaveMotor_Master(m2.Measurement):
         # Wall time
         t0 = time.time()
 
+        data = qt.Data(name='wavemotor_sweep')
+
+        data.add_coordinate('wavelength (nm)')
+        data.add_value('counts')
+        plot2d_0 = qt.Plot2D(data, name='wavemotor_single_sweep', clear=True)
+
         # Populate some arrays
         self.params['pts'] = np.uint32(1 + np.ceil(np.abs(self.params['wavelength_end']-self.params['wavelength_start'])/self.params['wavelength_step_size']))
         self.params['wavelength_array'] = np.linspace(self.params['wavelength_start'], self.params['wavelength_start'] + (self.params['pts']-1)*self.params['wavelength_step_size'], self.params['pts'])
@@ -308,6 +314,7 @@ class SiC_WaveMotor_Master(m2.Measurement):
                 self._epos.set_wavelength(self.params['wavelength_array'][j])
 
                 temp_count_data[j] = self._ni63.get('ctr1')
+                data.add_data_point(self.params['wavelength_array'][j],temp_count_data[j])
                 qt.msleep(0.002) # keeps GUI responsive and checks if plot needs updating.
                 self._keystroke_check('abort')
                 if self.keystroke('abort') in ['q','Q'] or scan_on == False:
@@ -333,7 +340,7 @@ class SiC_WaveMotor_Master(m2.Measurement):
 
 
 
-            plot2d_0 = qt.Plot2D(self.params['wavelength_array'],temp_count_data, name='wavemotor_single_sweep', clear=True)
+
             qt.msleep(0.002) # keeps GUI responsive and checks if plot needs updating.
             if msvcrt.kbhit() or scan_on == False or self._stop_measurement == True:
                 kb_char=msvcrt.getch()
@@ -400,16 +407,16 @@ xsettings = {
         'Sacher_AOM_end_buffer' : 1155.0, # ns
         'readout_length' : 3000.0, # ns
         'ctr_term' : 'PFI2',
-        'wavelength_start' : 1104.900, # nm
-        'wavelength_end' : 1107.100, # nm
-        'wavelength_step_size' : 0.025, # nm
+        'wavelength_start' : 1103.900, # nm
+        'wavelength_end' : 1110.100, # nm
+        'wavelength_step_size' : 0.020, # nm
         'microwaves' : False, # modulate with microwaves on or off
         'off_resonant_laser' : True, # cycle between resonant and off-resonant
         'power' : 5.0, # dBm
         'constant_attenuation' : 28.0, # dBm -- set by the fixed attenuators in setup
         'desired_power' : -28.0, # dBm
         'freq' : 1.30122, #GHz
-        'dwell_time' : 1200.0, # ms
+        'dwell_time' : 2200.0, # ms
         'temperature_tolerance' : 2.0, # Kelvin
         'MeasCycles' : 1200,
         }
@@ -430,7 +437,6 @@ for rr in range(np.size(p_array)):
                 if kb_char == "q": break
     name_string = 'power %.2f dBm' % (p_array[rr])
     m = SiC_WaveMotor_Master(name_string)
-    xsettings['readout_length'] = 130.0
     xsettings['desired_power'] = p_array[rr]
     # since params is not just a dictionary, it's easy to incrementally load
     # parameters from multiple dictionaries
