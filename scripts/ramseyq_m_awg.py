@@ -456,10 +456,10 @@ xsettings = {
         'constant_attenuation' : 28.0, # dB -- set by the fixed attenuators in setup
         'desired_power' : -9.0, # dBm
         'tau_length_start' : 0.0, # ns
-        'tau_length_end' : 4450.0, # ns
+        'tau_length_end' : 2225.0, # ns
         'tau_length_step' : 10, # ns
         'poisson_gap' : True,
-        'numpoints_poisson' : 50, # number of points
+        'numpoints_poisson' : 38, # number of points
         'freq' : 1.308194, #GHz
         'pi2_length' : 132.65, # ns
         'dwell_time' : 1500.0, # ms
@@ -486,7 +486,7 @@ for rr in range(np.size(p_array)):
     # this could be very helpful to load various sets of settings from a global
     # configuration manager!
     m.params.from_dict(xsettings)
-    do_awg_stuff = False
+    do_awg_stuff = True
     m.sequence(upload=do_awg_stuff, program=do_awg_stuff, clear=do_awg_stuff)
 
 
