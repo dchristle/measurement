@@ -135,7 +135,7 @@ class SiC_PLE_Master(m2.Measurement):
         self.start_keystroke_monitor('abort')
         self._stop_measurement = False
         # Set up some instruments
-        #self._fbl = qt.instruments['fbl']
+        self._fbl = qt.instruments['fbl']
         self._tl = qt.instruments['tl']
         self._ni63 = qt.instruments['NIDAQ6363']
         #self._snspd = qt.instruments['snspd']
@@ -178,13 +178,14 @@ class SiC_PLE_Master(m2.Measurement):
         self._awg.sq_forced_jump(1)
         time.sleep(1)
         self.awg_confirm(1)
+        # Set Sacher temperature to 22.2 degrees.
+        self._schr.set_temperature(22.2)
 
-
-        #self._fbl.optimize()
+        self._fbl.optimize()
         # Set focus axis limit
-        #cur_Z = self._xps.get_abs_positionZ()
-        #self._xps.set_parameter_bounds('abs_positionZ',cur_Z-(self.params['focus_limit_displacement']*0.001),12.1)
-        #print 'Current Z is %.4f, focus limit set to %.4f' % (cur_Z, cur_Z-(self.params['focus_limit_displacement']*0.001))
+        cur_Z = self._xps.get_abs_positionZ()
+        self._xps.set_parameter_bounds('abs_positionZ',cur_Z-(self.params['focus_limit_displacement']*0.001),12.1)
+        print 'Current Z is %.4f, focus limit set to %.4f' % (cur_Z, cur_Z-(self.params['focus_limit_displacement']*0.001))
         # Use some logic here to decide what's going on
         # i.e. position, chi sq., signal amp, background amp
         print 'FBL optimized...'
@@ -226,18 +227,9 @@ class SiC_PLE_Master(m2.Measurement):
         t0 = time.time()
 
         # Populate some arrays
-        self.params['pts'] = np.uint32(1 + np.ceil(np.abs(self.params['wavelength_end']-self.params['wavelength_start'])/self.params['wavelength_step_size']))
-        self.params['wavelength_array'] = np.linspace(self.params['wavelength_start'], self.params['wavelength_start'] + (self.params['pts']-1)*self.params['wavelength_step_size'], self.params['pts'])
 
-        print '--PLE scan meas. from %.3f nm to %.3f nm in %.3f nm steps (%d steps)--' % (self.params['start_wavelength'], self.params['wavelength_end'], self.params['wavelength_step_size'], self.params['pts'])
 
-        total_count_data = np.zeros(self.params['pts'] , dtype='uint32')
-        average_count_data = np.zeros(self.params['pts'] , dtype='float')
-
-        #intermediate_total_data = np.zeros( (1,self.params['pts'] ), dtype='uint32')
-        total_count_data = np.zeros(self.params['pts'] , dtype='uint32')
-        current_count_data = np.zeros(self.params['pts'] ,dtype='uint32')
-        frequency_displacement = np.zeros(self.params['pts'] ,dtype='float')
+        print '--PLE scan meas. from %.3f nm with %d motor steps in %.3f nm steps (%d steps)--' % (self.params['start_wavelength'], self.params['wavelength_steps_array'][-1], self.params['wavelength_step_size'], self.params['pts'])
 
         time.sleep(1.0)
         if self.keystroke('abort') in ['q','Q']:
@@ -280,7 +272,7 @@ class SiC_PLE_Master(m2.Measurement):
         data.add_value('counts')
 
         #data.create_file()
-
+        plot2d_0 = qt.Plot2D(data, name='finemotor_single_sweep', clear=True, coorddim=2, valdim=3)
 
         # The idea here is to do "shotgun spectroscopy" where we just scan over the entire
         # piezo range, step the motor, and repeat the scan. The hope is that we end up
@@ -300,11 +292,13 @@ class SiC_PLE_Master(m2.Measurement):
 
         self._epos.set_wavelength(wavelength_start)
         self._schr.set_piezo_offset(0.0)
-        print 'Set wavelength to %.3f nm' % wavelength_start
+        time.sleep(0.1)
+        print 'Setting wavelength to %.3f nm. Current temperature is %.2f C.' % (wavelength_start, self._schr.get_temperature())
         time.sleep(2)
-        piezo_delta = np.linspace(0,self.params['piezo_high'],self.params['piezo_steps'])
-        self._schr.set_temperature(22.2)
-        current_temperature= 22.2
+        piezo_base_delta = np.linspace(0,self.params['piezo_high'],self.params['piezo_steps'])
+        # This step controls entire up/back, down/back sweeping of the piezo in one array.
+        piezo_delta = np.hstack((piezo_base_delta,piezo_base_delta[::-1],-1.0*piezo_base_delta,-1.0*piezo_base_delta[::-1]))
+
         #temperature_alternate = [22.2, 22.2-0.5385]
 
 
@@ -338,7 +332,7 @@ class SiC_PLE_Master(m2.Measurement):
             # We need to gently step the wavelength and track the frequency while we do it.
             current_motor_position = self._epos.get_motor_position()
             motor_deltas = int(np.round(((init_motor_position+wavelength_steps_array[ij])-current_motor_position)/10.0))
-            temp_deltas = current_temperature + np.linspace(0,-0.1795*1.5,motor_deltas)
+            temp_deltas = current_temperature + np.linspace(0,self.params['temperature_shift_per_grating_step'],motor_deltas)
             #schr.set_temperature(temperature_alternate[np.mod(ij,2)])
             #current_temperature = temperature_alternate[np.mod(ij,2)]
             for kj in range(motor_deltas):
@@ -465,149 +459,7 @@ class SiC_PLE_Master(m2.Measurement):
                             break
                 #else:
                 #    print 'Multimode behavior detected -- ignoring point.'
-            # Now sweep through the array in reverse.
-            for jj in range(np.size(piezo_delta)):
-                self._schr.set_piezo_offset(piezo_delta[-(1+jj)])
-                time.sleep(0.5)
-                N_peaks = np.size(self._fp.read_sweep_peaks_lorentzian(500,10000,'ai1'))
-                new_sweep = self._fp.read_sweep_peaks_lorentzian(500,10000,'ai1')
-                if N_peaks == 3 or N_peaks == 4:
-                    df = self._fp.delta_freq_tp(prev_sweep,new_sweep)
-                    prev_sweep = np.copy(new_sweep)
-                    current_frequency = current_frequency + df
-                    if np.abs(df)>3.4:
-                        print 'df is %.3f' % df
-                    counts = self._ni63.get('ctr1')
-                    data.add_data_point(wavelength_steps_array[ij],piezo_delta[-(1+jj)],current_frequency,counts)
-                    qt.msleep(0.005)
-                    if msvcrt.kbhit() or scan_on == False:
-                        kb_char=msvcrt.getch()
-                        if kb_char == "q" or scan_on == False:
-                            scan_on = False
-                            break
-                    self._keystroke_check('abort')
-                    if self.keystroke('abort') in ['q','Q']:
-                        print 'Measurement aborted.'
-                        self.stop_keystroke_monitor('abort')
-                        scan_on = False
-                        self._stop_measurement = True
-                        break
-                    # Check if a track should occur. If so, track.
-                    if time.time() > track_time:
 
-                        # set the AWG into CW mode for tracking
-                        self._awg.sq_forced_jump(1)
-                        self.awg_confirm(1)
-
-                        time.sleep(0.1)
-                        # Re-optimize
-                        #fbl.optimize()
-
-                        # Set new track time
-                        track_time = time.time() + self.params['fbl_time'] + 5.0*np.random.uniform()
-                        self._awg.sq_forced_jump(2)
-                        self.awg_confirm(2)
-                        time.sleep(0.1)
-                #else:
-                #    print 'Multimode behavior detected -- ignoring point.'
-            self._schr.set_piezo_offset(0.0)
-            time.sleep(5)
-            if msvcrt.kbhit() or scan_on == False:
-                kb_char=msvcrt.getch()
-                if kb_char == "q" or scan_on == False:
-                    scan_on = False
-                    break
-            print 'Now scanning in the negative direction'
-
-            for jj in range(np.size(piezo_delta)):
-                self._schr.set_piezo_offset(-1.0*piezo_delta[jj])
-                time.sleep(0.5)
-                N_peaks = np.size(self._fp.read_sweep_peaks_lorentzian(500,10000,'ai1'))
-                new_sweep = self._fp.read_sweep_peaks_lorentzian(500,10000,'ai1')
-                if N_peaks == 3 or N_peaks == 4:
-                    df = self._fp.delta_freq_tp(prev_sweep,new_sweep)
-                    current_frequency = current_frequency + df
-                    prev_sweep = np.copy(new_sweep)
-                    if np.abs(df) > 3.4:
-                        print 'df is %.3f' % df
-                    counts = self._ni63.get('ctr1')
-                    data.add_data_point(wavelength_steps_array[ij],-1.0*piezo_delta[jj],current_frequency,counts)
-                    qt.msleep(0.005)
-                    if msvcrt.kbhit() or scan_on == False:
-                        kb_char=msvcrt.getch()
-                        if kb_char == "q" or scan_on == False:
-                            scan_on = False
-                            break
-
-                    self._keystroke_check('abort')
-                    if self.keystroke('abort') in ['q','Q']:
-                        print 'Measurement aborted.'
-                        self.stop_keystroke_monitor('abort')
-                        scan_on = False
-                        self._stop_measurement = True
-                        break
-                    # Check if a track should occur. If so, track.
-                    if time.time() > track_time:
-
-                        # set the AWG into CW mode for tracking
-                        self._awg.sq_forced_jump(1)
-                        self.awg_confirm(1)
-
-                        time.sleep(0.1)
-                        # Re-optimize
-                        #fbl.optimize()
-
-                        # Set new track time
-                        track_time = time.time() + self.params['fbl_time'] + 5.0*np.random.uniform()
-                        self._awg.sq_forced_jump(2)
-                        self.awg_confirm(2)
-                        time.sleep(0.1)
-                #else:
-                #    print 'Multimode behavior detected -- ignoring point.'
-            for jj in range(np.size(piezo_delta)):
-                self._schr.set_piezo_offset(-1.0*piezo_delta[-(1+jj)])
-                time.sleep(0.5)
-                N_peaks = np.size(self._fp.read_sweep_peaks_lorentzian(500,10000,'ai1'))
-                new_sweep = self._fp.read_sweep_peaks_lorentzian(500,10000,'ai1')
-                if N_peaks == 3 or N_peaks == 4:
-                    df = self._fp.delta_freq_tp(prev_sweep,new_sweep)
-                    current_frequency = current_frequency + df
-                    prev_sweep = np.copy(new_sweep)
-                    if np.abs(df) > 3.4:
-                        print 'df is %.3f' % df
-                    counts = self._ni63.get('ctr1')
-                    data.add_data_point(wavelength_steps_array[ij],-1.0*piezo_delta[-(1+jj)],current_frequency,counts)
-                    qt.msleep(0.005)
-                    if msvcrt.kbhit() or scan_on == False:
-                        kb_char=msvcrt.getch()
-                        if kb_char == "q" or scan_on == False:
-                            scan_on = False
-                            break
-                    self._keystroke_check('abort')
-                    if self.keystroke('abort') in ['q','Q']:
-                        print 'Measurement aborted.'
-                        self.stop_keystroke_monitor('abort')
-                        scan_on = False
-                        self._stop_measurement = True
-                        break
-                    # Check if a track should occur. If so, track.
-                    if time.time() > track_time:
-
-                        # set the AWG into CW mode for tracking
-                        self._awg.sq_forced_jump(1)
-                        self.awg_confirm(1)
-
-                        time.sleep(0.1)
-                        # Re-optimize
-                        #fbl.optimize()
-
-                        # Set new track time
-                        track_time = time.time() + self.params['fbl_time'] + 5.0*np.random.uniform()
-                        self._awg.sq_forced_jump(2)
-                        self.awg_confirm(2)
-                        time.sleep(0.1)
-                #else:
-                #    print 'Multimode behavior detected -- ignoring point.'
             current_wavelength_change_sweep = np.copy(prev_sweep)
             # Now let's compare the sweeps to get a delta frequency
             df = self._fp.delta_freq_tp(last_wavelength_change_sweep,current_wavelength_change_sweep)
@@ -643,7 +495,6 @@ class SiC_PLE_Master(m2.Measurement):
 
         #data.close_file()
         self._schr.set_temperature(22.2)
-        current_temperature= 22.2
 
 
 
@@ -654,15 +505,17 @@ class SiC_PLE_Master(m2.Measurement):
 
 
 
+        ab = data.get_data()
         # Stop PXI sig gen
         self._pxi.set_status('off')
         # Set AWG to CW mode
         self._awg.sq_forced_jump(1)
         # Measurement has ended, so start saving data
         grp = h5.DataGroup('SiC_PLE_data', self.h5data, base=self.h5base)
-        grp.add('wavelength', data=self.params['wavelength_array'], unit='nm', note='wavelength')
-        grp.add('counts', data=total_count_data, unit='counts', note='total counts per sweep')
-        grp.add('average_counts', data=average_count_data, unit='counts', note='total counts per sweep')
+        grp.add('wavelength', data=ab[:,0], unit='step', note='wavelength steps')
+        grp.add('piezo_voltage', data=ab[:,1], unit='V', note='piezo voltage applied')
+        grp.add('frequency', data=ab[:,2], unit='GHz', note='frequency from FP')
+        grp.add('counts', data=qb[:,3], unit='counts', note='counts at a particular frequency')
 
 
 
@@ -674,7 +527,7 @@ class SiC_PLE_Master(m2.Measurement):
 
 xsettings = {
         'focus_limit_displacement' : 20, # microns inward
-        'fbl_time' : 150.0, # seconds
+        'fbl_time' : 50.0, # seconds
         'AOM_start_buffer' : 50.0, # ns
         'AOM_length' : 1600.0, # ns
         'AOM_light_delay' : 655.0, # ns
@@ -684,10 +537,7 @@ xsettings = {
         'Sacher_AOM_end_buffer' : 1155.0, # ns
         'readout_length' : 3000.0, # ns
         'ctr_term' : 'PFI2',
-        'wavelength_start' : 1104.900, # nm
-        'wavelength_end' : 1107.100, # nm
-        'wavelength_step_size' : 0.025, # nm
-        'microwaves' : True, # modulate with microwaves on or off
+        'microwaves' : False, # modulate with microwaves on or off
         'off_resonant_laser' : True, # cycle between resonant and off-resonant
         'power' : 5.0, # dBm
         'constant_attenuation' : 28.0, # dBm -- set by the fixed attenuators in setup
@@ -696,7 +546,10 @@ xsettings = {
         'dwell_time' : 2000.0, # ms
         'temperature_tolerance' : 2.0, # Kelvin
         'wavelength_start' : 1106.100, # nm
-        'wavelength_steps_array' : np.arange(0,2800,90), # motor steps
+        'wavelength_steps_array' : np.arange(0,5800,90), # motor steps array
+        'piezo_high' : 7, # volts
+        'piezo_steps' : 35, # number of steps
+        'temperature_shift_per_grating_step' : -0.1795*1.5, # C/wavelength change
         }
 
 p_low = -58
@@ -714,8 +567,7 @@ for rr in range(np.size(p_array)):
                 kb_char=msvcrt.getch()
                 if kb_char == "q": break
     name_string = 'power %.2f dBm' % (p_array[rr])
-    m = SiC_WaveMotor_Master(name_string)
-    xsettings['readout_length'] = 130.0
+    m = SiC_PLE_Master(name_string)
     xsettings['desired_power'] = p_array[rr]
     # since params is not just a dictionary, it's easy to incrementally load
     # parameters from multiple dictionaries
@@ -743,7 +595,7 @@ for rr in range(np.size(p_array)):
 ea_t = qt.instruments['ea']
 ls332_t = qt.instruments['ls332']
 cur_temp = ls332_t.get_kelvinA()
-msg_string = 'Rabi measurement stopped at %s, temperature is %.2f K' % (time.strftime('%c'), cur_temp)
+msg_string = 'PLE measurement stopped at %s, temperature is %.2f K' % (time.strftime('%c'), cur_temp)
 ea_t.email_alert(msg_string)
 
 ##ps = qt.instruments['xps']

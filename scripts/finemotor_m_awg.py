@@ -135,7 +135,7 @@ class SiC_FineMotor_Master(m2.Measurement):
         self.start_keystroke_monitor('abort')
         self._stop_measurement = False
         # Set up some instruments
-        #self._fbl = qt.instruments['fbl']
+        self._fbl = qt.instruments['fbl']
         self._tl = qt.instruments['tl']
         self._ni63 = qt.instruments['NIDAQ6363']
         #self._snspd = qt.instruments['snspd']
@@ -180,11 +180,11 @@ class SiC_FineMotor_Master(m2.Measurement):
         self.awg_confirm(1)
 
 
-        #self._fbl.optimize()
+        self._fbl.optimize()
         # Set focus axis limit
-        #cur_Z = self._xps.get_abs_positionZ()
-        #self._xps.set_parameter_bounds('abs_positionZ',cur_Z-(self.params['focus_limit_displacement']*0.001),12.1)
-        #print 'Current Z is %.4f, focus limit set to %.4f' % (cur_Z, cur_Z-(self.params['focus_limit_displacement']*0.001))
+        cur_Z = self._xps.get_abs_positionZ()
+        self._xps.set_parameter_bounds('abs_positionZ',cur_Z-(self.params['focus_limit_displacement']*0.001),12.1)
+        print 'Current Z is %.4f, focus limit set to %.4f' % (cur_Z, cur_Z-(self.params['focus_limit_displacement']*0.001))
         # Use some logic here to decide what's going on
         # i.e. position, chi sq., signal amp, background amp
         print 'FBL optimized...'
@@ -247,6 +247,12 @@ class SiC_FineMotor_Master(m2.Measurement):
             # Set the PXI status to 'on', i.e. generate microwaves
             self._pxi.set_status('on')
         N_cmeas = 0
+
+        data = qt.Data(name='wavemotor_sweep')
+
+        data.add_coordinate('frequency offset (GHz)')
+        data.add_value('counts')
+        plot2d_0 = qt.Plot2D(data, name='finemotor_single_sweep', clear=True)
 
 
         # Now set the AWG into CW mode for tracking
@@ -337,8 +343,9 @@ class SiC_FineMotor_Master(m2.Measurement):
                         prev_fp = curr_fp
 
                 temp_frequency_displacement[j] = delta_f
-
+                tfd_cs = np.cumsum(temp_frequency_displacement)
                 temp_count_data[j] = self._ni63.get('ctr1')
+                data.add_data_point(tfd_cs[j],temp_count_data[j])
                 qt.msleep(0.002) # keeps GUI responsive and checks if plot needs updating.
                 self._keystroke_check('abort')
                 if self.keystroke('abort') in ['q','Q'] or scan_on == False:
@@ -364,7 +371,6 @@ class SiC_FineMotor_Master(m2.Measurement):
 
 
 
-            plot2d_0 = qt.Plot2D(np.cumsum(frequency_displacement),temp_count_data, name='finemotor_single_sweep', clear=True)
             qt.msleep(0.002) # keeps GUI responsive and checks if plot needs updating.
             if msvcrt.kbhit() or scan_on == False or self._stop_measurement == True:
                 kb_char=msvcrt.getch()
@@ -424,7 +430,7 @@ class SiC_FineMotor_Master(m2.Measurement):
 
 xsettings = {
         'focus_limit_displacement' : 20, # microns inward
-        'fbl_time' : 150.0, # seconds
+        'fbl_time' : 55, # seconds
         'AOM_start_buffer' : 50.0, # ns
         'AOM_length' : 1600.0, # ns
         'AOM_light_delay' : 655.0, # ns
@@ -434,16 +440,16 @@ xsettings = {
         'Sacher_AOM_end_buffer' : 1155.0, # ns
         'readout_length' : 3000.0, # ns
         'ctr_term' : 'PFI2',
-        'wavelength_start' : 1104.900, # nm
+        'wavelength_start' : 1106.47, # nm
         'total_motor_displacement' : 24255, # step
         'motor_step' : 80, # step
-        'microwaves' : True, # modulate with microwaves on or off
+        'microwaves' : False, # modulate with microwaves on or off
         'off_resonant_laser' : True, # cycle between resonant and off-resonant
         'power' : 5.0, # dBm
         'constant_attenuation' : 28.0, # dBm -- set by the fixed attenuators in setup
         'desired_power' : -58.0, # dBm
         'freq' : 1.30122, #GHz
-        'dwell_time' : 1200.0, # ms
+        'dwell_time' : 3000.0, # ms
         'temperature_tolerance' : 2.0, # Kelvin
         'MeasCycles' : 1200,
         }
@@ -464,7 +470,6 @@ for rr in range(np.size(p_array)):
                 if kb_char == "q": break
     name_string = 'power %.2f dBm' % (p_array[rr])
     m = SiC_FineMotor_Master(name_string)
-    xsettings['readout_length'] = 130.0
     xsettings['desired_power'] = p_array[rr]
     # since params is not just a dictionary, it's easy to incrementally load
     # parameters from multiple dictionaries
