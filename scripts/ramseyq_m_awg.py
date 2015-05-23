@@ -376,13 +376,11 @@ class SiC_RamseyQ_Master(m2.Measurement):
             # R here will be fine.
 
             X1 = sorted_temp_data[0:self.params['pts']-3:4].astype(float)
-            X2 = sorted_temp_data[1:self.params['pts']-2:4].astype(float)
-            Y1 = sorted_temp_data[2:self.params['pts']-1:4].astype(float)
+            Y1 = sorted_temp_data[1:self.params['pts']-2:4].astype(float)
+            X2 = sorted_temp_data[2:self.params['pts']-1:4].astype(float)
             Y2 = sorted_temp_data[3:self.params['pts']:4].astype(float)
-            R = np.sqrt(np.power(X1-X2,2) + np.power(Y1-Y2,2))
-            print 'Size of R is %s' % np.size(R)
-            print 'Size of Tau Delay is %s' % np.size(self.params['tau_delay'])
-            plot2d_0 = qt.plot(self.params['tau_delay'],R, name='ramsey_single_sweep', clear=True)
+            R = np.sqrt(np.power(X1-X2,2.0) + np.power(Y1-Y2,2.0))
+            plot2d_0 = qt.Plot2D(self.params['tau_delay'],R, name='ramsey_single_sweep', clear=True)
             if msvcrt.kbhit() or scan_on == False:
                 kb_char=msvcrt.getch()
                 if kb_char == "q" or scan_on == False: break
@@ -413,8 +411,8 @@ class SiC_RamseyQ_Master(m2.Measurement):
             elif np.mod(i,10):
                 signal = np.hstack((signal,self._ni63.get('ctr1')))
             X1 = total_count_data[0:self.params['pts']-3:4].astype(float)
-            X2 = total_count_data[1:self.params['pts']-2:4].astype(float)
-            Y1 = total_count_data[2:self.params['pts']-1:4].astype(float)
+            Y1 = total_count_data[1:self.params['pts']-2:4].astype(float)
+            X2 = total_count_data[2:self.params['pts']-1:4].astype(float)
             Y2 = total_count_data[3:self.params['pts']:4].astype(float)
             R = np.sqrt(np.power(X1-X2,2.0) + np.power(Y1-Y2,2.0))
             print 'Mean counts in X1 is %.2f' % np.mean(X1)
