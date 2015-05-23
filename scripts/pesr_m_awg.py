@@ -497,8 +497,8 @@ xsettings = {
         'power' : 5.0, # dBm
         'constant_attenuation' : 28.0, # dB -- set by the fixed attenuators in setup
         'desired_power' : -7.0, # dBm
-        'f_low' : 1.29, # GHz
-        'f_high' : 1.38, # GHz
+        'f_low' : 1.304, # GHz
+        'f_high' : 1.3707, # GHz
         'f_step' : 0.5*4*1.25e-4, # GHz
         'RF_delay' : 50.0, # ns
         'RF_buffer' : 300.0, # ns
@@ -508,8 +508,8 @@ xsettings = {
         'MeasCycles' : 1000,
         'trigger_period' : 100000.0, #ns
         'dropout' : True,
-        'dropout_low' : 1.323, # GHz
-        'dropout_high' : 1.348, # GHz
+        'dropout_low' : 1.318, # GHz
+        'dropout_high' : 1.359, # GHz
         'readout_length' : 130.0
         }
 
