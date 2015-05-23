@@ -165,13 +165,13 @@ class SiC_RamseyZ_Master(m2.Measurement):
         self._awg.start()
         print 'Waiting 30 s for AWG to start...'
         time.sleep(30.0)
-        for i in range(20):
+        for i in range(10):
             time.sleep(5.0)
             state = ''
             print 'Waiting for AWG to start...'
             try:
                 state = self._awg.get_state()
-            except(visa.VI_ERROR_TMO):
+            except(visa.visa.VI_ERROR_TMO):
                 print 'Still waiting for AWG after timeout...'
             if state == 'Running':
                     print 'AWG started OK...Clearing VISA interface.'
@@ -428,7 +428,7 @@ for rr in range(np.size(p_array)):
     m.sequence(upload=do_awg_stuff, program=do_awg_stuff, clear=do_awg_stuff)
 
 
-    if True:
+    if False:
         print 'Proceeding with measurement ...'
         m.prepare()
         m.measure()

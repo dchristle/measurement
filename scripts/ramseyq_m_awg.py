@@ -80,7 +80,7 @@ class SiC_RamseyQ_Master(m2.Measurement):
         trigger_period = AOM_start_time + self.params['AOM_length'] + self.params['AOM_light_delay'] + self.params['AOM_end_buffer']
         phase_array = np.array((0,90,180,270))
         # Now create the Ramsey pulses
-        for i in range(self.params['pts']):
+        for i in range(np.size(self.params['tau_delay'])):
 
             for j in range(4):
                 e = element.Element('ElectronRamseyQ_%d deg pt-%d' % (phase_array[j],i), pulsar=qt.pulsar)
@@ -155,7 +155,7 @@ class SiC_RamseyQ_Master(m2.Measurement):
         return
     def poisson_gap_sample(self):
 
-        p = self.params['numpoints_poisson']
+        p = self.params['numpoints_poisson']+1
         z = np.ceil((self.params['tau_length_end']-self.params['tau_length_start'])/self.params['tau_length_step'])
 
 
@@ -210,11 +210,16 @@ class SiC_RamseyQ_Master(m2.Measurement):
         time.sleep(30.0)
         for i in range(20):
             time.sleep(5.0)
+            if msvcrt.kbhit():
+                    kb_char=msvcrt.getch()
+                    if kb_char == "q" :
+                        scan_on = False
+                        break
             state = ''
             print 'Waiting for AWG to start...'
             try:
                 state = self._awg.get_state()
-            except(visa.VI_ERROR_TMO):
+            except(visa.visa.VI_ERROR_TMO):
                 print 'Still waiting for AWG after timeout...'
             if state == 'Running':
                     print 'AWG started OK...Clearing VISA interface.'
@@ -352,7 +357,7 @@ class SiC_RamseyQ_Master(m2.Measurement):
                 # Set the new RF pulse length
                 self._awg.sq_forced_jump(seq_index[j]+2) # the +2 is because the indices start at 1, and the first sequence is CW mode
                 time.sleep(0.1)
-                if j < 2 or (j > 2 and np.random.random() < 0.01):
+                if j < 5 or (j > 2 and np.random.random() < 0.01):
                     self.awg_confirm(seq_index[j]+2)
 
 
@@ -392,15 +397,15 @@ class SiC_RamseyQ_Master(m2.Measurement):
             # Use the argsort functionality to sort the count data by the frequnecy
             # it was taken at.
             total_count_data = total_count_data + temp_count_data[np.array(seq_index).argsort().tolist()]
-            if i == 0:
-                intermediate_total_data[0,:] = total_count_data
-            elif np.mod(i,10) == 0:
-                intermediate_temp_data = np.zeros( (i/10+1,self.params['pts']), dtype='uint32')
-                intermediate_temp_data[:-1,:] = intermediate_total_data
-                intermediate_temp_data[i/10,:] = total_count_data
-                intermediate_total_data = np.copy(intermediate_temp_data)
-                #print 'size is %s' % (np.size(intermediate_total_data))
-                #intermediate_total_data = np.vstack((intermediate_total_data,total_count_data))
+##            if i == 0:
+##                intermediate_total_data[0,:] = total_count_data
+##            elif np.mod(i,10) == 0:
+##                intermediate_temp_data = np.zeros( (i/10+1,self.params['pts']), dtype='uint32')
+##                intermediate_temp_data[:-1,:] = intermediate_total_data
+##                intermediate_temp_data[i/10,:] = total_count_data
+##                intermediate_total_data = np.copy(intermediate_temp_data)
+##                #print 'size is %s' % (np.size(intermediate_total_data))
+##                #intermediate_total_data = np.vstack((intermediate_total_data,total_count_data))
             if i == 0:
                 signal[0] = self._ni63.get('ctr1')
             elif np.mod(i,10):
@@ -426,7 +431,7 @@ class SiC_RamseyQ_Master(m2.Measurement):
         grp.add('length', data=self.params['tau_delay'], unit='ns', note='frequency')
         grp.add('counts', data=total_count_data, unit='counts', note='total counts')
         grp.add('N_cmeas', data=N_cmeas, unit='', note='total completed measurement cycles')
-        grp.add('intermediate', data=intermediate_total_data, unit='', note='intermediate total count data')
+        #grp.add('intermediate', data=intermediate_total_data, unit='', note='intermediate total count data')
         grp.add('signal', data=signal, unit='counts', note='signal rate per N iterations')
 
 
@@ -450,12 +455,12 @@ xsettings = {
         'constant_attenuation' : 28.0, # dB -- set by the fixed attenuators in setup
         'desired_power' : -9.0, # dBm
         'tau_length_start' : 0.0, # ns
-        'tau_length_end' : 2212.0, # ns
-        'tau_length_step' : 28, # ns
+        'tau_length_end' : 4450.0, # ns
+        'tau_length_step' : 10, # ns
         'poisson_gap' : True,
-        'numpoints_poisson' : 40, # number of points
-        'freq' : (1.30202), #GHz
-        'pi2_length' : 175.25, # ns
+        'numpoints_poisson' : 50, # number of points
+        'freq' : 1.308194, #GHz
+        'pi2_length' : 132.65, # ns
         'dwell_time' : 1500.0, # ms
         'temperature_tolerance' : 2.0, # Kelvin
         'MeasCycles' : 1400,
@@ -480,7 +485,7 @@ for rr in range(np.size(p_array)):
     # this could be very helpful to load various sets of settings from a global
     # configuration manager!
     m.params.from_dict(xsettings)
-    do_awg_stuff = True
+    do_awg_stuff = False
     m.sequence(upload=do_awg_stuff, program=do_awg_stuff, clear=do_awg_stuff)
 
 
