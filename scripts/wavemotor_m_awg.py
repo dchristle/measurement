@@ -390,7 +390,7 @@ class SiC_WaveMotor_Master(m2.Measurement):
 
 xsettings = {
         'focus_limit_displacement' : 20, # microns inward
-        'fbl_time' : 150.0, # seconds
+        'fbl_time' : 30.0, # seconds
         'AOM_start_buffer' : 50.0, # ns
         'AOM_length' : 1600.0, # ns
         'AOM_light_delay' : 655.0, # ns
@@ -403,19 +403,19 @@ xsettings = {
         'wavelength_start' : 1104.900, # nm
         'wavelength_end' : 1107.100, # nm
         'wavelength_step_size' : 0.025, # nm
-        'microwaves' : True, # modulate with microwaves on or off
+        'microwaves' : False, # modulate with microwaves on or off
         'off_resonant_laser' : True, # cycle between resonant and off-resonant
         'power' : 5.0, # dBm
         'constant_attenuation' : 28.0, # dBm -- set by the fixed attenuators in setup
-        'desired_power' : -58.0, # dBm
+        'desired_power' : -28.0, # dBm
         'freq' : 1.30122, #GHz
         'dwell_time' : 1200.0, # ms
         'temperature_tolerance' : 2.0, # Kelvin
         'MeasCycles' : 1200,
         }
 
-p_low = -58
-p_high = -58
+p_low = -28
+p_high = -28
 p_nstep = 1
 
 p_array = np.linspace(p_low,p_high,p_nstep)
