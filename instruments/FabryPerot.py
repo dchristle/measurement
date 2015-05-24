@@ -35,7 +35,7 @@ class FabryPerot(Instrument):
                 'sample_rate' : 10000.0, # Hz
                 'aiport' : 'ai1',
                 'trigger' : 'PFI8',
-                'thresholdV' : 0.15,
+                'thresholdV' : 0.25,
                 'thresholdsep' : 0.006
 
                 }
@@ -152,7 +152,7 @@ class FabryPerot(Instrument):
             # Find the points around the peak
             distance_array = np.abs(time_axis - peaks[i])
             min_idx = np.argmin(distance_array)
-            idx_width = 0.6/625.0
+            idx_width = 0.9/625.0
             distance_array = np.abs(time_axis - (peaks[i] + idx_width))
             upper_idx = np.argmin(distance_array)
             distance_array = np.abs(time_axis - (peaks[i] - idx_width))
@@ -174,7 +174,9 @@ class FabryPerot(Instrument):
             mse[i] = self.peak_obj_fun(prev,curr,df_array[i])
         min_idx = np.argmin(mse)
         pof_anon = lambda x: self.peak_obj_fun(prev,curr,x)
-        min_obj = scp.optimize.minimize(pof_anon,df_array[min_idx],method='L-BFGS-B', bounds=((df_array[min_idx]-3*9.0/625.0*1.0/Npoints,df_array[min_idx]+3*9.0/625.0*1.0/Npoints),))
+        fit_width = np.abs(df_array[1] - df_array[0])
+        #min_obj = scp.optimize.minimize(pof_anon,df_array[min_idx],method='L-BFGS-B', bounds=((df_array[min_idx]-2*fit_width,df_array[min_idx]+2*fit_width)))
+        min_obj = scp.optimize.minimize_scalar(pof_anon,df_array[min_idx],method='bounded', bounds=(df_array[min_idx]-2*fit_width,df_array[min_idx]+2*fit_width))
         return float(min_obj.x*625.0)
     def peak_obj_fun(self,prev,curr,df):
         # Find the two smallest peak displacements
