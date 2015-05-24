@@ -145,11 +145,17 @@ class SiC_Rabi_Master(m2.Measurement):
         # Set the trigger source to internal
 
         # set the AWG to CW mode
-        if self._awg.get_state() == 'Idle':
-            self._awg.start()
-            # set the AWG to CW mode
-            print 'Waiting 30 s for AWG to start...'
-            time.sleep(30.0)
+        for i in range(20):
+            try:
+                if self._awg.get_state() == 'Idle':
+                    self._awg.start()
+                break
+            except(visa.visa.VI_ERROR_TMO):
+                print 'AWG still busy -- trying again...'
+
+        # set the AWG to CW mode
+        print 'Waiting 15 s for AWG to start...'
+        time.sleep(10.0)
 
         for i in range(20):
             time.sleep(5.0)
