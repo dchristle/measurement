@@ -196,26 +196,26 @@ class SiC_PLE_Master(m2.Measurement):
         else:
             print 'Temperature in reference (%.2f from setpoint), proceeding.' % (np.abs(self._ls332.get_kelvinA() - self._ls332.get_setpoint1()))
 
-        if self.params['wavelength_start'] > self.params['wavelength_end']:
-            logging.warning('Start wavelength is greater than end wavelength!!!!')
+
         # Set the DAQ counter dwell time, units milliseconds
         self._ni63.set_count_time(self.params['dwell_time']/1000.0)
         # Set the DAQ counter PFI channel (default is 'PFI0')
         self._ni63.set_ctr1_src(self.params['ctr_term'])
         print 'Counter prepared.'
+        if self.params['microwaves'] == True:
         # Reset the RFSG
-        self._pxi.close()
-        self._pxi.init_device()
-        self._pxi.reset_device()
+            self._pxi.close()
+            self._pxi.init_device()
+            self._pxi.reset_device()
 
-        # Now set the power and initial frequency
-        self._pxi.set_power(self.params['power'])
-        self._pxi.set_frequency(self.params['freq']*1.0e9) # GHz units
-        print 'PXI prepared, power and frequency set.'
-        # Now set the proper attenuation
-        desired_atten = self.params['power'] - self.params['constant_attenuation'] - self.params['desired_power']
-        self._va.set_attenuation(desired_atten)
-        print 'Variable attenuator set to %.1f dB attenuation.' % desired_atten
+            # Now set the power and initial frequency
+            self._pxi.set_power(self.params['power'])
+            self._pxi.set_frequency(self.params['freq']*1.0e9) # GHz units
+            print 'PXI prepared, power and frequency set.'
+            # Now set the proper attenuation
+            desired_atten = self.params['power'] - self.params['constant_attenuation'] - self.params['desired_power']
+            self._va.set_attenuation(desired_atten)
+            print 'Variable attenuator set to %.1f dB attenuation.' % desired_atten
 
 
         return
@@ -229,7 +229,7 @@ class SiC_PLE_Master(m2.Measurement):
         # Populate some arrays
 
 
-        print '--PLE scan meas. from %.3f nm with %d motor steps in %.3f nm steps (%d steps)--' % (self.params['start_wavelength'], self.params['wavelength_steps_array'][-1], self.params['wavelength_step_size'], self.params['pts'])
+        print '--PLE scan meas. from %.3f nm with %d motor steps  (%d steps)--' % (self.params['wavelength_start'], self.params['wavelength_steps_array'][-1], np.size(self.params['wavelength_steps_array']))
 
         time.sleep(1.0)
         if self.keystroke('abort') in ['q','Q']:
@@ -260,6 +260,8 @@ class SiC_PLE_Master(m2.Measurement):
         self._schr.set_current_coupling_direction(0)
         self._schr.set_piezo_offset(0)
         self._schr.set_piezo_status(1)
+        self._schr.set_temperature(22.2)
+        current_temperature= 22.2
 
 
 
@@ -326,6 +328,7 @@ class SiC_PLE_Master(m2.Measurement):
         init_motor_position = self._epos.get_motor_position()
         current_frequency = 0.0
         t1 = time.time()
+        track_time = time.time() + self.params['fbl_time'] + 5.0*np.random.uniform()
         for ij in range(np.size(wavelength_steps_array)):
             self._schr.set_piezo_offset(0.0)
             print 'On iteration %d of wavelengths' % ij
@@ -515,7 +518,7 @@ class SiC_PLE_Master(m2.Measurement):
         grp.add('wavelength', data=ab[:,0], unit='step', note='wavelength steps')
         grp.add('piezo_voltage', data=ab[:,1], unit='V', note='piezo voltage applied')
         grp.add('frequency', data=ab[:,2], unit='GHz', note='frequency from FP')
-        grp.add('counts', data=qb[:,3], unit='counts', note='counts at a particular frequency')
+        grp.add('counts', data=ab[:,3], unit='counts', note='counts at a particular frequency')
 
 
 
@@ -546,10 +549,12 @@ xsettings = {
         'dwell_time' : 2000.0, # ms
         'temperature_tolerance' : 2.0, # Kelvin
         'wavelength_start' : 1106.100, # nm
-        'wavelength_steps_array' : np.arange(0,5800,90), # motor steps array
+        'wavelength_steps_array' : np.arange(0,5800,180), # motor steps array
         'piezo_high' : 7, # volts
         'piezo_steps' : 35, # number of steps
         'temperature_shift_per_grating_step' : -0.1795*1.5, # C/wavelength change
+        'current_coupling' : 0.000, # A/V
+        'current_coupling_enabled' : 0
         }
 
 p_low = -58
