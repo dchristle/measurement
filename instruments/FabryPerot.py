@@ -35,7 +35,7 @@ class FabryPerot(Instrument):
                 'sample_rate' : 10000.0, # Hz
                 'aiport' : 'ai1',
                 'trigger' : 'PFI8',
-                'thresholdV' : 0.1,
+                'thresholdV' : 0.15,
                 'thresholdsep' : 0.006
 
                 }
@@ -183,10 +183,19 @@ class FabryPerot(Instrument):
         displacements = np.zeros(Nprev*Ncurr)
         for i in range(Nprev):
             for j in range(Ncurr):
-                displacements[i*Ncurr+j] = np.power(prev[i]+df-curr[j],2.0)
+                new_freq = prev[i]+df
+                # This "if" statement is adjusting for the edges of the
+                # active-scanned FP readout -- it adjusts for the wrapover
+                # of the peaks.
+                if new_freq > 0.0495:
+                    new_freq = new_freq - 0.0495 + 0.001
+                if new_freq < 0.001:
+                    new_freq = new_freq + 0.0495 - 0.001
+                displacements[i*Ncurr+j] = np.power(new_freq-curr[j],2.0)
         # Now sort the array
         sorted_displacements = np.sort(displacements)
-        return sorted_displacements[0] + sorted_displacements[1]
+        # And return the two or three shortest displacement distances, squared and summed.
+        return sorted_displacements[0] + sorted_displacements[1] + sorted_displacements[2]
 
 
 
