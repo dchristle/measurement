@@ -152,30 +152,29 @@ class FabryPerot(Instrument):
             # Find the points around the peak
             distance_array = np.abs(time_axis - peaks[i])
             min_idx = np.argmin(distance_array)
-            idx_width = 0.8/625.0
+            idx_width = 0.6/625.0
             distance_array = np.abs(time_axis - (peaks[i] + idx_width))
             upper_idx = np.argmin(distance_array)
             distance_array = np.abs(time_axis - (peaks[i] - idx_width))
             lower_idx = np.argmin(distance_array)
-            fit_obj = scp.optimize.curve_fit(self.lorentzian, time_axis[lower_idx:upper_idx], rsamples[lower_idx:upper_idx], np.array((np.max(rsamples[lower_idx:upper_idx])-np.min(rsamples[lower_idx:upper_idx]), 0.08/625.0, peaks[i], np.min(rsamples[lower_idx:upper_idx]))))
+            fit_obj = scp.optimize.curve_fit(self.lorentzian, time_axis[lower_idx:upper_idx], rsamples[lower_idx:upper_idx], np.array((np.max(rsamples[lower_idx:upper_idx])-np.min(rsamples[lower_idx:upper_idx]), 0.00025, peaks[i], 0)),maxfev=20000)
             if np.abs(fit_obj[0][2] - peaks[i])*625 > 1.0:
                 accurate_peaks.append(peaks[i])
-                print 'Lorentzian fit outside range -- returning original threshold peak.'
+                print 'Lorentzian fit outside range -- returning original threshold peak. %.4f' % (fit_obj[0][2])
             else:
                 accurate_peaks.append(fit_obj[0][2])
 
 
         return np.sort(np.array(accurate_peaks))
     def delta_freq_tp(self, prev, curr):
-        Npoints = 200
+        Npoints = 500
         df_array = np.linspace(-4.5/625.0,4.5/625,Npoints)
         mse = np.zeros(Npoints)
         for i in range(Npoints):
             mse[i] = self.peak_obj_fun(prev,curr,df_array[i])
         min_idx = np.argmin(mse)
         pof_anon = lambda x: self.peak_obj_fun(prev,curr,x)
-        min_obj = scp.optimize.minimize(pof_anon,df_array[min_idx],method='SLSQP', bounds=((-4.5/625.0,4.5/625),))
-
+        min_obj = scp.optimize.minimize(pof_anon,df_array[min_idx],method='L-BFGS-B', bounds=((-4.5/625.0,4.5/625),))
         return float(min_obj.x*625.0)
     def peak_obj_fun(self,prev,curr,df):
         # Find the two smallest peak displacements
