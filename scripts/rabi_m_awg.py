@@ -226,6 +226,7 @@ class SiC_Rabi_Master(m2.Measurement):
         intermediate_total_data = np.zeros( (1,self.params['pts'] ), dtype='uint32')
         signal = np.zeros(1)
         time.sleep(1.0)
+        self._keystroke_check('abort')
         if self.keystroke('abort') in ['q','Q']:
             print 'Measurement aborted.'
             self.stop_keystroke_monitor('abort')
@@ -395,10 +396,10 @@ xsettings = {
         'constant_attenuation' : 28.0, # dBm -- set by the fixed attenuators in setup
         'desired_power' : -9.0, # dBm
         'RF_length_start' : 0.0, # ns
-        'RF_length_end' : 1260.0, # ns
-        'RF_length_step' : 60.0, # ns
-        'freq' : 1.308194, #GHz
-        'dwell_time' : 1200.0, # ms
+        'RF_length_end' : 2040, # ns
+        'RF_length_step' : 30.0, # ns
+        'freq' : 1.36319, #GHz
+        'dwell_time' : 1600.0, # ms
         'temperature_tolerance' : 2.0, # Kelvin
         'MeasCycles' : 1200,
         'random' : 1
