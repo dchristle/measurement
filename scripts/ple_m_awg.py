@@ -263,6 +263,10 @@ class SiC_PLE_Master(m2.Measurement):
         self._schr.set_temperature(22.2)
         current_temperature= 22.2
 
+        # Frequency array. Purpose of this is to keep track of what frequencies
+        # we've seen, to prevent too much oversampling.
+        freq_array = np.arange(0.0,self.params['frequency_sweep_range'],self.params['frequency_sweep_step_size'])
+
 
 
 
@@ -452,8 +456,16 @@ class SiC_PLE_Master(m2.Measurement):
                     current_frequency = current_frequency + df
                     if np.abs(df) > 3.4:
                         print 'df is %.3f' % df
-                    counts = self._ni63.get('ctr1')
-                    data.add_data_point(wavelength_steps_array[ij],piezo_delta[jj],current_frequency,counts)
+                    # Check if we haven't seen this frequency before
+                    dist_array = np.abs(freq_array-current_frequency)
+                    if any(dist_array < self.params['frequency_sweep_step_size']):
+                        counts = self._ni63.get('ctr1')
+                        data.add_data_point(wavelength_steps_array[ij],piezo_delta[jj],current_frequency,counts)
+                        idx = np.argmin(dist_array)
+                        freq_array = np.delete(freq_array,idx)
+                    else:
+                        time.sleep(0.1)
+
                     qt.msleep(0.005)
                     if time.time() > track_time:
 
@@ -570,7 +582,9 @@ xsettings = {
         'piezo_steps' : 35, # number of steps
         'temperature_shift_per_grating_step' : 0.1795*1.2, # C/wavelength change
         'current_coupling' : 0.000, # A/V
-        'current_coupling_enabled' : 0
+        'current_coupling_enabled' : 0,
+        'frequency_sweep_range' : 90.0, # GHz
+        'frequency_sweep_step_size' : 0.2, # GHz
         }
 
 p_low = -58
