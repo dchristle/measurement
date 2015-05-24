@@ -468,6 +468,7 @@ class SiC_PESR_Master(m2.Measurement):
 
         # Once all sweeps are complete, turn off the microwaves.
         self._pxi.set_status('off')
+        self._awg.sq_forced_jump(1)
         # Measurement has ended, so start saving data in an HDF5 object.
 
         grp = h5.DataGroup('SiC_PESR_data', self.h5data, base=self.h5base)
@@ -497,19 +498,19 @@ xsettings = {
         'power' : 5.0, # dBm
         'constant_attenuation' : 28.0, # dB -- set by the fixed attenuators in setup
         'desired_power' : -7.0, # dBm
-        'f_low' : 1.304, # GHz
-        'f_high' : 1.3707, # GHz
+        'f_low' : 1.30332, # GHz
+        'f_high' : 1.36768, # GHz
         'f_step' : 0.5*4*1.25e-4, # GHz
         'RF_delay' : 50.0, # ns
         'RF_buffer' : 300.0, # ns
-        'pi_length' : 701.0, # ns
-        'dwell_time' : 700.0, # ms
+        'pi_length' : 265.3, # ns
+        'dwell_time' : 1500.0, # ms
         'temperature_tolerance' : 3.0, # Kelvin
         'MeasCycles' : 1000,
         'trigger_period' : 100000.0, #ns
         'dropout' : True,
-        'dropout_low' : 1.318, # GHz
-        'dropout_high' : 1.359, # GHz
+        'dropout_low' : 1.31268, # GHz
+        'dropout_high' : 1.35832, # GHz
         'readout_length' : 130.0
         }
 
@@ -518,8 +519,8 @@ xsettings = {
 
 # Generate array of powers -- in this case, just one power.
 
-p_low = -38
-p_high = -38.0
+p_low = -32
+p_high = -32
 p_nstep = 1
 
 p_array = np.linspace(p_low,p_high,p_nstep)
