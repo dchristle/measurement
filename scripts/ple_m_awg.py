@@ -369,21 +369,21 @@ class SiC_PLE_Master(m2.Measurement):
                         self._stop_measurement = True
                         break
                     # Check if a track should occur. If so, track.
-                    if time.time() > track_time:
+                if time.time() > track_time:
 
-                        # set the AWG into CW mode for tracking
-                        self._awg.sq_forced_jump(1)
-                        self.awg_confirm(1)
+                    # set the AWG into CW mode for tracking
+                    self._awg.sq_forced_jump(1)
+                    self.awg_confirm(1)
 
-                        time.sleep(0.1)
-                        # Re-optimize
-                        fbl.optimize()
+                    time.sleep(0.1)
+                    # Re-optimize
+                    fbl.optimize()
 
-                        # Set new track time
-                        track_time = time.time() + self.params['fbl_time'] + 5.0*np.random.uniform()
-                        self._awg.sq_forced_jump(2)
-                        self.awg_confirm(2)
-                        time.sleep(0.1)
+                    # Set new track time
+                    track_time = time.time() + self.params['fbl_time'] + 5.0*np.random.uniform()
+                    self._awg.sq_forced_jump(2)
+                    self.awg_confirm(2)
+                    time.sleep(0.1)
                 #else:
                     #print 'Multimode behavior detected -- ignoring point.'
             # Now, we need to bump the motor up a bit if we're still multimode
@@ -546,7 +546,7 @@ class SiC_PLE_Master(m2.Measurement):
 
 xsettings = {
         'focus_limit_displacement' : 20, # microns inward
-        'fbl_time' : 120.0, # seconds
+        'fbl_time' : 90.0, # seconds
         'AOM_start_buffer' : 50.0, # ns
         'AOM_length' : 1600.0, # ns
         'AOM_light_delay' : 655.0, # ns
@@ -564,11 +564,11 @@ xsettings = {
         'freq' : 1.30122, #GHz
         'dwell_time' : 2000.0, # ms
         'temperature_tolerance' : 2.0, # Kelvin
-        'wavelength_start' : 1106.49, # nm
+        'wavelength_start' : 1106.53, # nm
         'wavelength_steps_array' : np.arange(0,5800,180), # motor steps array
         'piezo_high' : 7, # volts
         'piezo_steps' : 35, # number of steps
-        'temperature_shift_per_grating_step' : -0.1795*1.5, # C/wavelength change
+        'temperature_shift_per_grating_step' : 0.1795*1.2, # C/wavelength change
         'current_coupling' : 0.000, # A/V
         'current_coupling_enabled' : 0
         }
