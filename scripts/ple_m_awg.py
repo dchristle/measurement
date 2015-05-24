@@ -342,6 +342,11 @@ class SiC_PLE_Master(m2.Measurement):
             temp_deltas = current_temperature + np.linspace(0,self.params['temperature_shift_per_grating_step'],motor_deltas)
             #schr.set_temperature(temperature_alternate[np.mod(ij,2)])
             #current_temperature = temperature_alternate[np.mod(ij,2)]
+            if msvcrt.kbhit() or scan_on == False:
+                        kb_char=msvcrt.getch()
+                        if kb_char == "q" or scan_on == False:
+                            scan_on = False
+                            break
             for kj in range(motor_deltas):
                 self._schr.set_temperature(temp_deltas[kj])
 
@@ -458,13 +463,13 @@ class SiC_PLE_Master(m2.Measurement):
                         print 'df is %.3f' % df
                     # Check if we haven't seen this frequency before
                     dist_array = np.abs(freq_array-current_frequency)
-                    if any(dist_array < self.params['frequency_sweep_step_size']):
+                    if any(dist_array < 0.5*self.params['frequency_sweep_step_size']):
                         counts = self._ni63.get('ctr1')
                         data.add_data_point(wavelength_steps_array[ij],piezo_delta[jj],current_frequency,counts)
                         idx = np.argmin(dist_array)
                         freq_array = np.delete(freq_array,idx)
                     else:
-                        time.sleep(0.1)
+                        time.sleep(0.005)
 
                     qt.msleep(0.005)
                     if time.time() > track_time:
