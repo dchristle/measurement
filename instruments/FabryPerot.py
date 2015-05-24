@@ -174,7 +174,7 @@ class FabryPerot(Instrument):
             mse[i] = self.peak_obj_fun(prev,curr,df_array[i])
         min_idx = np.argmin(mse)
         pof_anon = lambda x: self.peak_obj_fun(prev,curr,x)
-        min_obj = scp.optimize.minimize(pof_anon,df_array[min_idx],method='L-BFGS-B', bounds=((-4.5/625.0,4.5/625),))
+        min_obj = scp.optimize.minimize(pof_anon,df_array[min_idx],method='L-BFGS-B', bounds=((df_array[min_idx]-3*9.0/625.0*1.0/Npoints,df_array[min_idx]+3*9.0/625.0*1.0/Npoints),))
         return float(min_obj.x*625.0)
     def peak_obj_fun(self,prev,curr,df):
         # Find the two smallest peak displacements

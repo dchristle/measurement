@@ -377,7 +377,7 @@ class SiC_PLE_Master(m2.Measurement):
 
                         time.sleep(0.1)
                         # Re-optimize
-                        #fbl.optimize()
+                        fbl.optimize()
 
                         # Set new track time
                         track_time = time.time() + self.params['fbl_time'] + 5.0*np.random.uniform()
@@ -421,7 +421,7 @@ class SiC_PLE_Master(m2.Measurement):
 
                         time.sleep(0.1)
                         # Re-optimize
-                        #fbl.optimize()
+                        fbl.optimize()
 
                         # Set new track time
                         track_time = time.time() + self.params['fbl_time'] + 5.0*np.random.uniform()
@@ -455,6 +455,21 @@ class SiC_PLE_Master(m2.Measurement):
                     counts = self._ni63.get('ctr1')
                     data.add_data_point(wavelength_steps_array[ij],piezo_delta[jj],current_frequency,counts)
                     qt.msleep(0.005)
+                    if time.time() > track_time:
+
+                        # set the AWG into CW mode for tracking
+                        self._awg.sq_forced_jump(1)
+                        self.awg_confirm(1)
+
+                        time.sleep(0.1)
+                        # Re-optimize
+                        fbl.optimize()
+
+                        # Set new track time
+                        track_time = time.time() + self.params['fbl_time'] + 5.0*np.random.uniform()
+                        self._awg.sq_forced_jump(2)
+                        self.awg_confirm(2)
+                        time.sleep(0.1)
                     if msvcrt.kbhit() or scan_on == False:
                         kb_char=msvcrt.getch()
                         if kb_char == "q" or scan_on == False:
@@ -485,7 +500,8 @@ class SiC_PLE_Master(m2.Measurement):
                 break
 
             tt = time.time() - t1
-            print 'Total sweep time was %.2f seconds.'
+            print 'Total sweep time was %.2f seconds.' % tt
+            t1 = time.time()
             ab = data.get_data()
             frequency_axis = np.sort(ab[:,2])
             counts_axis = ab[np.argsort(ab[:,2]),3]
@@ -530,7 +546,7 @@ class SiC_PLE_Master(m2.Measurement):
 
 xsettings = {
         'focus_limit_displacement' : 20, # microns inward
-        'fbl_time' : 50.0, # seconds
+        'fbl_time' : 120.0, # seconds
         'AOM_start_buffer' : 50.0, # ns
         'AOM_length' : 1600.0, # ns
         'AOM_light_delay' : 655.0, # ns
@@ -548,7 +564,7 @@ xsettings = {
         'freq' : 1.30122, #GHz
         'dwell_time' : 2000.0, # ms
         'temperature_tolerance' : 2.0, # Kelvin
-        'wavelength_start' : 1106.100, # nm
+        'wavelength_start' : 1106.49, # nm
         'wavelength_steps_array' : np.arange(0,5800,180), # motor steps array
         'piezo_high' : 7, # volts
         'piezo_steps' : 35, # number of steps
