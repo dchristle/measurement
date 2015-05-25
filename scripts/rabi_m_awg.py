@@ -296,9 +296,10 @@ class SiC_Rabi_Master(m2.Measurement):
                     self.awg_confirm(seq_index[j]+2)
 
                 temp_count_data[j] = self._ni63.get('ctr1')
-                qt.msleep(0.002) # keeps GUI responsive and checks if plot needs updating.
+                qt.msleep(0.004) # keeps GUI responsive and checks if plot needs updating.
                 self._keystroke_check('abort')
-                if self.keystroke('abort') in ['q','Q'] or scan_on == False:
+
+                if self.keystroke('abort') in ['q','Q']:
                     print 'Measurement aborted.'
                     self.stop_keystroke_monitor('abort')
                     self._stop_measurement = True
@@ -306,7 +307,6 @@ class SiC_Rabi_Master(m2.Measurement):
                     break
                 if msvcrt.kbhit() or scan_on == False or self._stop_measurement == True:
                     kb_char=msvcrt.getch()
-                    self._stop_measurement = True
                     if kb_char == "q" or scan_on == False or self._stop_measurement == True:
                         print 'Measurement aborted.'
                         self._stop_measurement = True

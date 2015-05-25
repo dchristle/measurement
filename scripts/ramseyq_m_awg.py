@@ -203,29 +203,42 @@ class SiC_RamseyQ_Master(m2.Measurement):
 
         # Prepare instruments for measurement and verify FBL output
         # Set the trigger source to internal
-
-        # set the AWG to CW mode
-        self._awg.start()
-        print 'Waiting 30 s for AWG to start...'
-        time.sleep(30.0)
         for i in range(20):
-            time.sleep(5.0)
-            if msvcrt.kbhit():
-                    kb_char=msvcrt.getch()
-                    if kb_char == "q" :
-                        scan_on = False
-                        break
-            state = ''
-            print 'Waiting for AWG to start...'
             try:
+                time.sleep(5)
                 state = self._awg.get_state()
+                self._awg.clear_visa()
+                state = self._awg.get_state()
+                break
             except(visa.visa.VI_ERROR_TMO):
-                print 'Still waiting for AWG after timeout...'
-            if state == 'Running':
-                    print 'AWG started OK...Clearing VISA interface.'
-                    self._awg.clear_visa()
+                print 'Could not get state from AWG, probably still busy.'
+        if state != 'Running':
+            # set the AWG to CW mode
+            self._awg.start()
+            print 'Waiting 20 s for AWG to start...'
+            time.sleep(15.0)
+            for i in range(20):
+                time.sleep(5.0)
+                if msvcrt.kbhit():
+                        kb_char=msvcrt.getch()
+                        if kb_char == "q" :
+                            scan_on = False
+                            break
+                state = ''
+                print 'Waiting for AWG to start...'
+                try:
+                    state = self._awg.get_state()
                     break
+                except(visa.visa.VI_ERROR_TMO):
+                    print 'Still waiting for AWG after timeout...'
 
+        if state == 'Running':
+            print 'AWG started OK...Clearing VISA interface.'
+            self._awg.clear_visa()
+
+        else:
+            print 'AWG did not end up starting properly!'
+            return
         self._awg.sq_forced_jump(1)
         time.sleep(1)
         self.awg_confirm(1)
@@ -416,7 +429,8 @@ class SiC_RamseyQ_Master(m2.Measurement):
             Y2 = total_count_data[3:self.params['pts']:4].astype(float)
             R = np.sqrt(np.power(X1-X2,2.0) + np.power(Y1-Y2,2.0))
             print 'Mean counts in X1 is %.2f' % np.mean(X1)
-            plot2d_1 = qt.Plot2D(self.params['tau_delay'],R, name='ramsey_avg', clear=True)
+            plot2d_1 = qt.Plot2D(self.params['tau_delay'],(X2-X1), name='ramsey_avg_X', clear=True)
+            plot2d_2 = qt.Plot2D(self.params['tau_delay'],(Y2-Y1), name='ramsey_avg_Y', clear=True)
             N_cmeas = N_cmeas + 1
             average_count_data = total_count_data/float(N_cmeas)
 
@@ -456,13 +470,13 @@ xsettings = {
         'constant_attenuation' : 28.0, # dB -- set by the fixed attenuators in setup
         'desired_power' : -9.0, # dBm
         'tau_length_start' : 0.0, # ns
-        'tau_length_end' : 2225.0, # ns
-        'tau_length_step' : 10, # ns
-        'fringe_frequency' : 0.003, # GHz
+        'tau_length_end' : 3280.0, # ns
+        'tau_length_step' : 40, # ns
+        'fringe_frequency' : 0.002, # GHz
         'poisson_gap' : True,
-        'numpoints_poisson' : 38, # number of points
-        'freq' : 1.308194, #GHz
-        'pi2_length' : 132.65, # ns
+        'numpoints_poisson' : 54, # number of points
+        'freq' : 1.36319, #GHz
+        'pi2_length' : 136.3, # ns
         'dwell_time' : 1500.0, # ms
         'temperature_tolerance' : 2.0, # Kelvin
         'MeasCycles' : 1400,
@@ -487,7 +501,7 @@ for rr in range(np.size(p_array)):
     # this could be very helpful to load various sets of settings from a global
     # configuration manager!
     m.params.from_dict(xsettings)
-    do_awg_stuff = True
+    do_awg_stuff = False
     m.sequence(upload=do_awg_stuff, program=do_awg_stuff, clear=do_awg_stuff)
 
 
