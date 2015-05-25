@@ -32,11 +32,11 @@ class SiC_Hahn_Master(m2.Measurement):
         #self.params['tau_delay'] = np.array((3500, 5000, 10000, 32000, 72500, 80500, 90000, 160000, 205000, 287000, 345000, 356000, 365500, 380000, 395000),dtype=np.float64)
         #self.params['tau_delay'] = np.array((3500, 5000, 8000, 347500, 351400, 355360, 359290, 363210, 367100, 371070, 375000),dtype=np.float64)
         #self.params['tau_delay'] = np.array((3500, 5000, 8000, 694000, 710000, 726000, 734000),dtype=np.float64)
-        
-        
+
+
         n_steps = np.uint32(1 + np.ceil(np.abs(self.params['tau_length_end'] - self.params['tau_length_start'])/self.params['tau_length_step']))
         self.params['tau_delay'] = np.linspace(self.params['tau_length_start'], self.params['tau_length_end'], n_steps)
-        
+
         self.params['pts'] = np.uint32(self.params['tau_delay'].size)
         self.params['trigger_periods'] = np.zeros(int(self.params['pts']*2))
         self._awg = qt.instruments['awg']
@@ -77,8 +77,8 @@ class SiC_Hahn_Master(m2.Measurement):
                     # negative phase final pulse IQ sequence
                     IQ_pImod_length = self.params['RF_delay'] + self.params['tau_delay'][i]/2.0 + self.params['pi2_length'] + self.params['pi_length'] + 0.5*self.params['tau_delay'][i]/2.0
                     IQ_nImod_length = 0.5*self.params['tau_delay'][i]/2.0 + self.params['pi2_length'] + self.params['RF_buffer'] + self.params['AOM_length'] + self.params['AOM_light_delay']
-                    
-   
+
+
                 e.add(pulse.cp(sq_pulseAOM, amplitude=1, length=self.params['AOM_length']*1.0e-9), name='laser init', start=AOM_start_time*1.0e-9)
                 # compute the explicit start times of the first pi/2 pulse, the pi pulse, and the second pi/2 pulse
                 fpi2_start_time = self.params['RF_delay']
@@ -86,28 +86,28 @@ class SiC_Hahn_Master(m2.Measurement):
                 spi2_start_time = pi_start_time + self.params['pi_length']  + self.params['tau_delay'][i]/2.0
                 #print '%s %s %s' % (fpi2_start_time, pi_start_time, spi2_start_time)
                 e.add(pulse.cp(sq_pulseMW, length = self.params['pi2_length']*1.0e-9, amplitude = 1.0), name='first pi2 microwave pulse', start=fpi2_start_time*1.0e-9)
-                
+
                 e.add(pulse.cp(sq_pulseMW, length = self.params['pi_length']*1.0e-9, amplitude = 1.0), name='pi pulse', start=pi_start_time*1.0e-9)
-    
+
                 e.add(pulse.cp(sq_pulseMW, length = self.params['pi2_length']*1.0e-9, amplitude = 1.0), name='second pi2 microwave pulse', start=spi2_start_time*1.0e-9)
-    
+
                 e.add(pulse.cp(sq_pulsePC, amplitude=1.0, length=self.params['readout_length']*1.0e-9),
                 name='photoncountpulse', start=readout_start_time*1.0e-9)
-    
+
                 e.add(pulse.cp(sq_pulseMW_Imod, amplitude=1.0, length=IQ_pImod_length*1.0e-9),
                 name='MWimodpulse_plus', start=0e-9)
                 e.add(pulse.cp(sq_pulseMW_Imod, amplitude=-1.0, length=IQ_nImod_length*1.0e-9),
                 name='MWimodpulse_negative', start=IQ_pImod_length*1.0e-9)
-    
+
                 e.add(pulse.cp(sq_pulseMW_Qmod, amplitude=0.0, length=(IQ_pImod_length + IQ_nImod_length)*1.0e-9),
                 name='MWqmodpulse', start=0e-9)
-    
+
                 elements.append(e)
                 # Now set the total pulse lengths into the array so we can adjust the dwell times so that each point gets the same number of cycles per dwell time
-                
+
                 self.params['trigger_periods'][2*i+j] = (IQ_pImod_length + IQ_nImod_length)
-                 
-                    
+
+
 
 
 
@@ -138,18 +138,20 @@ class SiC_Hahn_Master(m2.Measurement):
             else:
                 q = q + 1
             time.sleep(0.2)
+            if q == 4:
+                print 'AWG not jumping... clearing VISA.'
+                self._awg.clear_visa()
 
-        if q >= 20:
-            print 'AWG did not jump to proper waveform!'
+            if q >= 19:
+                print 'AWG did not jump to proper waveform!'
         return
-
 
     def prepare(self):
         # Set up some instruments
         self._fbl = qt.instruments['fbl']
         self._tl = qt.instruments['tl']
         self._ni63 = qt.instruments['NIDAQ6363']
-        self._snspd = qt.instruments['snspd']
+        #self._snspd = qt.instruments['snspd']
         self._fsm = qt.instruments['fsm']
         self._ls332 = qt.instruments['ls332']
         self._pxi = qt.instruments['pxi']
@@ -162,10 +164,35 @@ class SiC_Hahn_Master(m2.Measurement):
         # Set the trigger source to internal
 
         # set the AWG to CW mode
-        self._awg.start()
-        time.sleep(3.0)
+        for i in range(20):
+            try:
+                if self._awg.get_state() == 'Idle':
+                    self._awg.start()
+                break
+            except(visa.visa.VI_ERROR_TMO):
+                print 'AWG still busy -- trying again...'
+
+        # set the AWG to CW mode
+        print 'Waiting 15 s for AWG to start...'
+        time.sleep(10.0)
+
+        for i in range(20):
+            time.sleep(5.0)
+            state = ''
+            print 'Waiting for AWG to start...'
+            try:
+                state = self._awg.get_state()
+            except(visa.visa.VI_ERROR_TMO):
+                print 'Still waiting for AWG after timeout...'
+            if state == 'Running':
+                    print 'AWG started OK...Clearing VISA interface.'
+                    self._awg.clear_visa()
+                    break
+            if state == 'Idle':
+                self._awg.start()
+
         self._awg.sq_forced_jump(1)
-        time.sleep(2.0)
+        time.sleep(1)
         self.awg_confirm(1)
 
         self._fbl.optimize()
@@ -240,9 +267,6 @@ class SiC_Hahn_Master(m2.Measurement):
         if self._fbl.optimize() == False:
             if self._fbl.optimize() == False:
                 print 'FBL failed twice, breaking.'
-        # Set the AWG back to the previous sequence position index
-        self._awg.sq_forced_jump(prev_awg_sq_position)
-        self.awg_confirm(prev_awg_sq_position)
         track_time = time.time() + self.params['fbl_time'] + 5.0*np.random.uniform()
         scan_on = True
         for i in range(self.params['MeasCycles']):
@@ -272,9 +296,9 @@ class SiC_Hahn_Master(m2.Measurement):
                     # Now set the AWG into CW mode for tracking
                     self._awg.sq_forced_jump(1)
                     self.awg_confirm(1)
-                    if self._snspd.check() == False:
-                        print 'SNSPD went normal and could not restore, breaking.'
-                        break
+##                    if self._snspd.check() == False:
+##                        print 'SNSPD went normal and could not restore, breaking.'
+##                        break
                     time.sleep(0.1)
                     # Re-optimize
                     fbl.optimize()
@@ -293,9 +317,9 @@ class SiC_Hahn_Master(m2.Measurement):
                     self.awg_confirm(seq_index[j]+2)
                 # adjust the dwell time to compensate for longer or shorter duty cycles, relative to the shortest
                 self._ni63.set_count_time(float(self.params['dwell_time'])/1000.0*float(self.params['trigger_periods'][seq_index[j]])/float(self.params['trigger_periods'][0]))
-                if self._snspd.check() == False:
-                    print 'SNSPD went normal and could not restore, breaking.'
-                    break
+##                if self._snspd.check() == False:
+##                    print 'SNSPD went normal and could not restore, breaking.'
+##                    break
 
                 temp_count_data[j] = self._ni63.get('ctr1')
             # Check for a break, and break out of this loop as well.
@@ -317,9 +341,9 @@ class SiC_Hahn_Master(m2.Measurement):
             if np.abs(self._ls332.get_kelvinA() - self._ls332.get_setpoint1()) > self.params['temperature_tolerance']:
                 print 'Temperature out of bounds, breaking.'
                 break
-            if self._snspd.check() == False:
-                print 'SNSPD went normal and could not restore, breaking.'
-                break
+##            if self._snspd.check() == False:
+##                print 'SNSPD went normal and could not restore, breaking.'
+##                break
             # Checks have all passed, so proceed...
 
             # Now add the sorted data array to the total array
