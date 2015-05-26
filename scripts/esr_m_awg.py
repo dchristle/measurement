@@ -123,12 +123,59 @@ class SiC_ESR_Master(m2.Measurement):
         #if self._snspd.check() == False:
         #    print 'SNSPD went normal and could not restore!'
         # Start the AWG
-        self._awg.start()
+        for i in range(20):
+            try:
+                if self._awg.get_state() == 'Idle':
+                    self._awg.start()
+                break
+            except(visa.visa.VI_ERROR_TMO):
+                print 'AWG still busy -- trying again...'
+
+        # set the AWG to CW mode
+        print 'Waiting 15 s for AWG to start...'
+        time.sleep(10.0)
+
+        for i in range(20):
+            time.sleep(5.0)
+            state = ''
+            print 'Waiting for AWG to start...'
+            try:
+                state = self._awg.get_state()
+            except(visa.visa.VI_ERROR_TMO):
+                print 'Still waiting for AWG after timeout...'
+            if state == 'Running':
+                    print 'AWG started OK...Clearing VISA interface.'
+                    self._awg.clear_visa()
+                    break
+            if state == 'Idle':
+                self._awg.start()
+
+        self._awg.sq_forced_jump(1)
+        time.sleep(1)
+        self.awg_confirm(1)
         time.sleep(1)
         # Set the AWG to the only waveform for this measurement
         self._awg.sq_forced_jump(1)
         time.sleep(0.1)
 
+        return
+    def awg_confirm(self, seq_el):
+        q = 0
+        time.sleep(0.1)
+        while q < 20:
+
+            cur_pos = int(self._awg.get_sq_position())
+            if cur_pos == seq_el:
+                break
+            else:
+                q = q + 1
+            time.sleep(0.2)
+            if q == 4:
+                print 'AWG not jumping... clearing VISA.'
+                self._awg.clear_visa()
+
+            if q >= 19:
+                print 'AWG did not jump to proper waveform!'
         return
     # Now define a new method of this particular ESR measurement class called
     # "measure" that does the actual measuring.
@@ -376,6 +423,8 @@ class SiC_ESR_Master(m2.Measurement):
 
             # Plot the total counts (even though it's mislabeled as esr_avg here)
             plot2d_1 = qt.Plot2D(freq,total_count_data, name='esr_avg', clear=True)
+            # Just doing this to keep the AWG's TCP/IP connection fresh.
+            self._awg.get_state()
             qt.msleep(0.002) # keeps GUI responsive and checks if plot needs updating.
 
 
@@ -408,10 +457,10 @@ xsettings = {
         'power' : 5.0, # dBm
         'constant_attenuation' : 28.0, # dBm -- set by the fixed attenuators in setup
         'desired_power' : -7.0, # dBm
-        'f_low' : 1.29, #GHz
-        'f_high' : 1.379, #Ghz
+        'f_low' : 1.2775, #GHz
+        'f_high' : 1.3925, #Ghz
         'f_step' : 2*4*1.25e-4, #Ghz
-        'dwell_time' : 550.0, # ms
+        'dwell_time' : 1550.0, # ms
         'temperature_tolerance' : 3.0, # Kelvin
         'MeasCycles' : 800,
         'trigger_period' : 100000.0, #ns
@@ -425,8 +474,8 @@ xsettings = {
 
 # Generate array of powers -- in this case, just one power.
 
-p_low = -29
-p_high = -29
+p_low = -26
+p_high = -26
 p_nstep = 1
 
 p_array = np.linspace(p_low,p_high,p_nstep)
