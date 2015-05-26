@@ -67,7 +67,7 @@ class SiC_Photostability_Master(m2.Measurement):
         self._fbl = qt.instruments['fbl']
         self._tl = qt.instruments['tl']
         self._ni63 = qt.instruments['NIDAQ6363']
-        self._snspd = qt.instruments['snspd']
+        #self._snspd = qt.instruments['snspd']
         self._fsm = qt.instruments['fsm']
         self._ls332 = qt.instruments['ls332']
         self._pxi = qt.instruments['pxi']
@@ -79,7 +79,7 @@ class SiC_Photostability_Master(m2.Measurement):
         # Set the trigger source to internal
 
         # set the AWG to CW mode
-        self._awg.start()
+        #self._awg.start()
         time.sleep(3.0)
         self._awg.sq_forced_jump(1)
         time.sleep(3.0)
@@ -115,6 +115,7 @@ class SiC_Photostability_Master(m2.Measurement):
     def measure(self):
         print 'Measuring counts versus time...'
         time.sleep(0.2)
+        self._fbl.optimize()
         self._fbl.optimize()
         # Get the current counter time
         prev_count_time = self._ni63.get_count_time()
@@ -159,9 +160,9 @@ xsettings = {
 # Create a measurement object m
 print 'About to proceed -- waiting 5 s for quit (press q to quit)'
 time.sleep(5.0)
-name_string = 'power %.2f dBm' % (p_array[rr])
+name_string = 'ky5 paper defect'
 m = SiC_Photostability_Master(name_string)
-xsettings['readout_time'] = 200.0 # seconds
+xsettings['readout_time'] = 220.0 # seconds
 xsettings['readout_rate'] = 30.0 # Hz
 # since params is not just a dictionary, it's easy to incrementally load
 # parameters from multiple dictionaries
