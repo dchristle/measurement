@@ -812,30 +812,54 @@ class SiC_DoublePulse_Master(m2.Measurement):
         # Now create the Double Pulse pulses
         for i in range(self.params['pts']):
 
-            e = element.Element('DoublePulse_pos_pt-%d' % i, pulsar=qt.pulsar)
+            for j in range(2):
+                if j == 0:
+                    e = element.Element('DoublePulse_pos_pt-%d' % i, pulsar=qt.pulsar)
+
+                    e.add(pulse.cp(sq_pulsePH, amplitude=-0.7, length=self.params['PH_trigger_length']*1.0e-9), name='picoharp trigger', start=self.params['PH_trigger_time']*1.0e-9)
+                    e.add(pulse.cp(sq_pulseAOM, amplitude=1, length=self.params['AOM_init_length']*1.0e-9), name='laser init', start=self.params['AOM_start_buffer']*1.0e-9)
+                    readout_start_time = self.params['AOM_start_buffer'] + self.params['AOM_init_length'] + self.params['tau_delay'][i]
+                    e.add(pulse.cp(sq_pulseAOM, amplitude=1, length=self.params['AOM_readout_length']*1.0e-9), name='laser readout', start=readout_start_time*1.0e-9)
+
+                    trigger_period = self.params['AOM_start_buffer'] + self.params['AOM_init_length'] + self.params['tau_delay'][self.params['pts']-1] + self.params['AOM_readout_length'] + self.params['AOM_light_delay'] + self.params['AOM_end_buffer']
+                    e.add(pulse.cp(sq_pulseMW_Imod, amplitude=1.0, length=trigger_period*1.0e-9),
+                    name='MWimodpulse', start=0e-9)
+
+                    e.add(pulse.cp(sq_pulseMW_Qmod, amplitude=0.0, length=trigger_period*1.0e-9),
+                    name='MWqmodpulse', start=0e-9)
+                    elements.append(e)
+
+                if j == 1 and self.params['microwaves']:
+                    e = element.Element('DoublePulse_pos_mwave_pt_-%d' % i, pulsar=qt.pulsar)
+
+                    e.add(pulse.cp(sq_pulsePH, amplitude=-0.7, length=self.params['PH_trigger_length']*1.0e-9), name='picoharp trigger', start=self.params['PH_trigger_time']*1.0e-9)
+                    e.add(pulse.cp(sq_pulseAOM, amplitude=1, length=self.params['AOM_init_length']*1.0e-9), name='laser init', start=self.params['AOM_start_buffer']*1.0e-9)
+                    readout_start_time = self.params['AOM_start_buffer'] + self.params['AOM_init_length'] + self.params['tau_delay'][i]
+                    e.add(pulse.cp(sq_pulseAOM, amplitude=1, length=self.params['AOM_readout_length']*1.0e-9), name='laser readout', start=readout_start_time*1.0e-9)
+
+                    # Calculate the center between the two AOM pulses, i.e. where to insert the pi-pulse. Split the pi pulse by 2 so its center is exactly at the center.
+                    center_time = (self.params['AOM_readout_length'] - self.params['AOM_init_length'])/2.0 + self.params['AOM_start_buffer'] + self.params['AOM_init_length'] + self.params['AOM_light_delay'] - self.params['pi_length']/2.0
+                    e.add(pulse.cp(sq_pulseMW, length = self.params['pi_length']*1.0e-9, amplitude = 1.0), name='microwave pi pulse', start=center_time*1.0e-9)
+
+                    trigger_period = self.params['AOM_start_buffer'] + self.params['AOM_init_length'] + self.params['tau_delay'][self.params['pts']-1] + self.params['AOM_readout_length'] + self.params['AOM_light_delay'] + self.params['AOM_end_buffer']
+                    e.add(pulse.cp(sq_pulseMW_Imod, amplitude=1.0, length=trigger_period*1.0e-9),
+                    name='MWimodpulse', start=0e-9)
+
+                    e.add(pulse.cp(sq_pulseMW_Qmod, amplitude=0.0, length=trigger_period*1.0e-9),
+                    name='MWqmodpulse', start=0e-9)
+                    elements.append(e)
 
 
+        if self.params['microwaves']:
+            # Double the points if we're using microwaves.
+            self.params['pts'] = 2*self.params['pts']
+            ntd = []
+            for tau in self.params['tau_delay']:
+                for j in range(2):
+                    ntd.append(tau)
+            self.params['tau_delay'] = np.copy(np.array(ntd))
 
-            e.add(pulse.cp(sq_pulsePH, amplitude=-0.7, length=self.params['PH_trigger_length']*1.0e-9), name='picoharp trigger', start=self.params['PH_trigger_time']*1.0e-9)
-            e.add(pulse.cp(sq_pulseAOM, amplitude=1, length=self.params['AOM_init_length']*1.0e-9), name='laser init', start=self.params['AOM_start_buffer']*1.0e-9)
-            readout_start_time = self.params['AOM_start_buffer'] + self.params['AOM_init_length'] + self.params['tau_delay'][i]
-            e.add(pulse.cp(sq_pulseAOM, amplitude=1, length=self.params['AOM_readout_length']*1.0e-9), name='laser readout', start=readout_start_time*1.0e-9)
-            if self.params['microwaves']:
-                # Calculate the center between the two AOM pulses, i.e. where to insert the pi-pulse. Split the pi pulse by 2 so its center is exactly at the center.
-                center_time = (self.params['AOM_readout_length'] - self.params['AOM_init_length'])/2.0 + self.params['AOM_start_buffer'] + self.params['AOM_init_length'] + self.params['AOM_light_delay'] - self.params['pi_length']/2.0
-                e.add(pulse.cp(sq_pulseMW, length = self.params['pi_length']*1.0e-9, amplitude = 1.0), name='microwave pi pulse', start=center_time*1.0e-9)
-
-            trigger_period = self.params['AOM_start_buffer'] + self.params['AOM_init_length'] + self.params['tau_delay'][self.params['pts']-1] + self.params['AOM_readout_length'] + self.params['AOM_light_delay'] + self.params['AOM_end_buffer']
-            e.add(pulse.cp(sq_pulseMW_Imod, amplitude=1.0, length=trigger_period*1.0e-9),
-            name='MWimodpulse', start=0e-9)
-
-            e.add(pulse.cp(sq_pulseMW_Qmod, amplitude=0.0, length=trigger_period*1.0e-9),
-            name='MWqmodpulse', start=0e-9)
-            elements.append(e)
-
-
-
-        seq = pulsar.Sequence('DoublePulse sequence %.0f' % (time.time()))
+        seq = pulsar.Sequence('DoublePulse sequence')
         for e in elements:
             seq.append(name=e.name, wfname=e.name, trigger_wait=False, repetitions=-1)
 
@@ -868,7 +892,7 @@ class SiC_DoublePulse_Master(m2.Measurement):
         self._fbl = qt.instruments['fbl']
         self._tl = qt.instruments['tl']
         self._ni63 = qt.instruments['NIDAQ6363']
-        self._snspd = qt.instruments['snspd']
+        #self._snspd = qt.instruments['snspd']
         self._fsm = qt.instruments['fsm']
         self._ls332 = qt.instruments['ls332']
         self._pxi = qt.instruments['pxi']
@@ -948,12 +972,12 @@ class SiC_DoublePulse_Master(m2.Measurement):
         else:
             print 'Temperature in reference (%.2f from setpoint), proceeding.' % (np.abs(self._ls332.get_kelvinA() - self._ls332.get_setpoint1()))
 
-        if self._snspd.check():
-            print 'SNSPD is superconducting.'
-        else:
-            print 'SNSPD is not superconducting!'
-            self._stop_measurement = False
-            return
+##        if self._snspd.check():
+##            print 'SNSPD is superconducting.'
+##        else:
+##            print 'SNSPD is not superconducting!'
+##            self._stop_measurement = False
+##            return
 
 
         print 'Press q now to abort.'
@@ -1065,7 +1089,7 @@ class SiC_DoublePulse_Master(m2.Measurement):
 
                 self._ph.ClearHistMem()
                 self._ph.StartMeas(int(self.params['acquisition_time']*1000))
-                print 'Acquiring signal for %s seconds, tau %.3f -- index %d of %d' % (self.params['acquisition_time'], self.params['tau_delay'][seq_index[j]], j, self.params['pts'])
+                print 'Acquiring signal for %s seconds, tau %.3f -- index %d of %d' % (self.params['acquisition_time'], self.params['tau_delay'][seq_index[j]], j+1, self.params['pts'])
                 time.sleep(self.params['acquisition_time']+0.25)
 
                 n = 0
@@ -1110,9 +1134,9 @@ class SiC_DoublePulse_Master(m2.Measurement):
             if np.abs(self._ls332.get_kelvinA() - self._ls332.get_setpoint1()) > self.params['temperature_tolerance']:
                 print 'Temperature out of bounds, breaking.'
                 break
-            if self._snspd.check() == False:
-                print 'SNSPD went normal and could not restore, breaking.'
-                break
+##            if self._snspd.check() == False:
+##                print 'SNSPD went normal and could not restore, breaking.'
+##                break
             # Checks have all passed, so proceed...
             qt.msleep(0.02)
 
