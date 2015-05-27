@@ -414,6 +414,13 @@ class SiC_PESR_Master(m2.Measurement):
 
                 temp_count_data[j] = self._ni63.get('ctr1')
                 qt.msleep(0.02)
+                self._keystroke_check('abort')
+                if self.keystroke('abort') in ['q','Q']:
+                    print 'Measurement aborted.'
+                    self.stop_keystroke_monitor('abort')
+                    scan_on = False
+                    self._pxi.set_status('off')
+                    break
                 #data.add_data_point(freq_temp[j],temp_count_data[j])
 
 
@@ -498,19 +505,19 @@ xsettings = {
         'power' : 5.0, # dBm
         'constant_attenuation' : 28.0, # dB -- set by the fixed attenuators in setup
         'desired_power' : -7.0, # dBm
-        'f_low' : 1.30332, # GHz
-        'f_high' : 1.36768, # GHz
-        'f_step' : 0.5*4*1.25e-4, # GHz
+        'f_low' : 1.2775, # GHz
+        'f_high' : 1.3925, # GHz
+        'f_step' : 0.8*4*1.25e-4, # GHz
         'RF_delay' : 50.0, # ns
         'RF_buffer' : 300.0, # ns
-        'pi_length' : 265.3, # ns
+        'pi_length' : 273, # ns
         'dwell_time' : 1500.0, # ms
         'temperature_tolerance' : 3.0, # Kelvin
         'MeasCycles' : 1000,
         'trigger_period' : 100000.0, #ns
-        'dropout' : True,
+        'dropout' : False,
         'dropout_low' : 1.31268, # GHz
-        'dropout_high' : 1.35832, # GHz
+        'dropout_high' : 1.355, # GHz
         'readout_length' : 130.0
         }
 
