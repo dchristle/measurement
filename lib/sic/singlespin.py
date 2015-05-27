@@ -1085,6 +1085,11 @@ class SiC_DoublePulse_Master(m2.Measurement):
                 # Check signal count
                 time.sleep(0.25)
                 self._ni63.set_count_time(1.0)
+                if msvcrt.kbhit():
+                    kb_char=msvcrt.getch()
+                    if kb_char == "q" :
+                        scan_on = False
+                        break
                 signal_begin = self._ni63.get_ctr0()
 
                 self._ph.ClearHistMem()
