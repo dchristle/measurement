@@ -1,0 +1,16 @@
+K 11
+svn::ignore
+V 18
+.*.pydata
+.*.pyc
+
+
+K 10
+svn:ignore
+V 21
+*.so
+*.pyc
+*.pydata
+
+
+END

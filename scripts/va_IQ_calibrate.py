@@ -7,7 +7,6 @@ import time
 import msvcrt
 from measurement.lib.pulsar import pulse, pulselib, element, pulsar
 from random import shuffle
-import gc
 reload(pulse)
 reload(element)
 reload(pulsar)
@@ -17,25 +16,21 @@ reload(pulselib)
 # derive itself from Measurement class defined in the file measurement.lib
 # .measurement2.measurement, which I relabeled as "m2".
 
-class SiC_ESR_Master(m2.Measurement):
+class SiC_VA_IQ_Calbrate_Master(m2.Measurement):
     # This prefix is used later for filenames; just indicates that it's an esr
     # measurement
-    mprefix = 'esr'
+    mprefix = 'vaiqcalibrate'
     # Define a 'prepare' function, which prepares the setup to proceed with
     # a measurement by doing things like defining references to the instruments
     # it will use, checking
-    def sequence(self, upload=True, program=True, clear=False):
+    def sequence(self, upload=True):
         # define the pulses we'll use
         sq_pulseAOM = pulse.SquarePulse(channel='AOM975', name='A square pulse on ThorLabsAOM')
         sq_pulseMW = pulse.SquarePulse(channel='MW_pulsemod', name='A square pulse on MW modulation')
         sq_pulsePC = pulse.SquarePulse(channel='photoncount', name='A square pulse on photon counting switch')
         sq_pulseMW_Imod = pulse.SquarePulse(channel='MW_Imod', name='A square pulse on MW I modulation')
         sq_pulseMW_Qmod = pulse.SquarePulse(channel='MW_Qmod', name='A square pulse on MW I modulation')
-        awg.stop()
-        gc.collect()
-        time.sleep(1.0)
-        if clear:
-            awg.clear_waveforms()
+
         elements = []
         # Create waveform that has laser, microwaves, photon counting, and 1/0 I/Q modulation on
         # all the time for a long period of time (~100 us).
@@ -58,8 +53,7 @@ class SiC_ESR_Master(m2.Measurement):
             qt.pulsar.upload(*elements)
             time.sleep(2.0)
         # program the AWG
-        if program:
-            qt.pulsar.program_sequence(seq)
+        qt.pulsar.program_sequence(seq)
 
     def prepare(self):
         track_on = True
@@ -67,7 +61,7 @@ class SiC_ESR_Master(m2.Measurement):
         self._fbl = qt.instruments['fbl']
         self._tl = qt.instruments['tl']
         self._ni63 = qt.instruments['NIDAQ6363']
-        #self._snspd = qt.instruments['snspd']
+        self._snspd = qt.instruments['snspd']
         self._fsm = qt.instruments['fsm']
         self._ls332 = qt.instruments['ls332']
         self._pxi = qt.instruments['pxi']
@@ -76,29 +70,6 @@ class SiC_ESR_Master(m2.Measurement):
         self._awg = qt.instruments['awg']
         self._va = qt.instruments['va']
 
-
-        # Prepare instruments for measurement and verify FBL output
-
-
-        # Set focus axis limit
-        cur_Z = self._xps.get_abs_positionZ()
-        self._xps.set_parameter_bounds('abs_positionZ',cur_Z-(self.params['focus_limit_displacement']*0.001),12.5)
-        print 'Current Z is %.4f, focus limit set to %.4f' % (cur_Z, cur_Z-(self.params['focus_limit_displacement']*0.001))
-
-        # Check if the absolute value of the current temperature (kelvinA) and
-        # its setpoint is greater than 3.0 K. If it is, print a message saying
-        # the temperature is out of range.
-        if np.abs(self._ls332.get_kelvinA() - self._ls332.get_setpoint1()) > 3.0:
-            print 'Temperature away from setpoint!'
-        if self.params['f_high'] < self.params['f_low']:
-            print 'f_high is lower than f_low!'
-
-        # Set the DAQ counter dwell time, units milliseconds
-        # This is how long the counter will count for when we give it a command
-        # to tell us the counts.
-        self._ni63.set_count_time(self.params['dwell_time']/1000.0)
-        # Set the DAQ counter PFI channel (default is 'PFI0')
-        self._ni63.set_ctr0_src(self.params['ctr_term'])
         # Reset the RFSG - close it, initialize it, then perform a reset.
         # This is just done to clean things up in case it wasn't closed out
         # gracefully before.
@@ -107,75 +78,21 @@ class SiC_ESR_Master(m2.Measurement):
         self._pxi.reset_device()
 
         # Now set the power and initial frequency, but don't turn it on yet.
-        self._pxi.set_power(self.params['power']-10.0)
-        self._pxi.set_frequency((self.params['f_low']+self.params['f_high'])/2.0*1.0e9) # GHz units
+        self._pxi.set_power(self.params['power'])
+        self._pxi.set_frequency(self.params['f_low']*1.0e9) # GHz units
 
         # Now set the proper attenuation
         desired_atten = self.params['power'] - self.params['constant_attenuation'] - self.params['desired_power']
-        if desired_atten > 15.5:
-            print 'Cannot attenuate that high -- setting to 15.5 dB attenuation!'
-            self._va.set_attenuation(15.5)
-            # Should figure out a way to stop the measurement here.
-        else:
-            self._va.set_attenuation(desired_atten)
+        self._va.set_attenuation(desired_atten)
         print 'Variable attenuator set to %.1f dB attenuation.' % desired_atten
-        # Check if the SNSPD is still superconducting
-        #if self._snspd.check() == False:
-        #    print 'SNSPD went normal and could not restore!'
+
         # Start the AWG
-        for i in range(20):
-            try:
-                if self._awg.get_state() == 'Idle':
-                    self._awg.start()
-                break
-            except(visa.visa.VI_ERROR_TMO):
-                print 'AWG still busy -- trying again...'
-
-        # set the AWG to CW mode
-        print 'Waiting 15 s for AWG to start...'
-        time.sleep(10.0)
-
-        for i in range(20):
-            time.sleep(5.0)
-            state = ''
-            print 'Waiting for AWG to start...'
-            try:
-                state = self._awg.get_state()
-            except(visa.visa.VI_ERROR_TMO):
-                print 'Still waiting for AWG after timeout...'
-            if state == 'Running':
-                    print 'AWG started OK...Clearing VISA interface.'
-                    self._awg.clear_visa()
-                    break
-            if state == 'Idle':
-                self._awg.start()
-
-        self._awg.sq_forced_jump(1)
-        time.sleep(1)
-        self.awg_confirm(1)
+        self._awg.start()
         time.sleep(1)
         # Set the AWG to the only waveform for this measurement
         self._awg.sq_forced_jump(1)
         time.sleep(0.1)
-
-        return
-    def awg_confirm(self, seq_el):
-        q = 0
-        time.sleep(0.1)
-        while q < 20:
-
-            cur_pos = int(self._awg.get_sq_position())
-            if cur_pos == seq_el:
-                break
-            else:
-                q = q + 1
-            time.sleep(0.2)
-            if q == 4:
-                print 'AWG not jumping... clearing VISA.'
-                self._awg.clear_visa()
-
-            if q >= 19:
-                print 'AWG did not jump to proper waveform!'
+        
         return
     # Now define a new method of this particular ESR measurement class called
     # "measure" that does the actual measuring.
@@ -205,8 +122,8 @@ class SiC_ESR_Master(m2.Measurement):
         average_count_data = np.zeros(n_steps, dtype='float')
 
         # Set the PXI status to 'on', i.e. generate microwaves
-        print 'Power set to %.2f.' % (self.params['power']-5.0)
-        self._pxi.set_power(self.params['power']-5.0)
+        print 'Power set to %.2f.' % (self.params['power']-6.0)
+        self._pxi.set_power(self.params['power']-6.0)
         self._pxi.set_status('on')
         # Wait 1 second
         time.sleep(1.0)
@@ -216,6 +133,9 @@ class SiC_ESR_Master(m2.Measurement):
         N_cmeas = 0
         # Optimize the FBL loop. Nominally it should return false if it fails
         # but I haven't implemented that yet.
+        if self._fbl.optimize() == False:
+            if self._fbl.optimize() == False:
+                print 'FBL failed twice, breaking.'
         self._keystroke_check('abort')
         if self.keystroke('abort') in ['q','Q']:
             print 'Measurement aborted.'
@@ -236,10 +156,10 @@ class SiC_ESR_Master(m2.Measurement):
             self._pxi.set_status('off')
             return
         # And do it again...
-        if self.params['desired_power'] >= -12.0:
+        if self.params['power'] >= 9.0:
             print 'Final power is high -- going to ramp slowly.'
             print 'Waiting 2 s for temperature stabilization, power to %.2f dBm' % (self.params['power']-5.0)
-            self._pxi.set_power(self.params['power']-3.0)
+            self._pxi.set_power(self.params['power']-4.0)
             time.sleep(2.0)
             self._keystroke_check('abort')
             if self.keystroke('abort') in ['q','Q']:
@@ -261,7 +181,7 @@ class SiC_ESR_Master(m2.Measurement):
                 self.stop_keystroke_monitor('abort')
                 self._pxi.set_status('off')
                 return
-            self._pxi.set_power(self.params['power']-1.5)
+            self._pxi.set_power(self.params['power']-2.0)
             if self._fbl.optimize() == False:
                 if self._fbl.optimize() == False:
                     print 'FBL failed twice, breaking.'
@@ -276,28 +196,20 @@ class SiC_ESR_Master(m2.Measurement):
                 return
         # Set to final power
         print 'Setting final power to %.2f' % (self.params['power'])
-
-        current_setpoint = self._ls332.get_setpoint1()
-        mm = 0
-        kk = 0
-        while kk < 22 and mm < 1:
-            print 'Stabilization loop index is %d' % kk
-            time.sleep(2.0)
-            self._fbl.optimize()
-            current_temp = self._ls332.get_kelvinA()
-            if np.abs(current_temp-current_setpoint) < 0.15:
-                mm = mm + 1
-            else:
-                mm = 0
-            kk = kk+1
-
-            if kk == 21:
-                print 'Temperature did not stabilize!!'
-                print 'Measurement aborted.'
-                self.stop_keystroke_monitor('abort')
-                self._pxi.set_status('off')
-                return
-
+        self._pxi.set_power(self.params['power']-0.0)
+        if self._fbl.optimize() == False:
+            if self._fbl.optimize() == False:
+                print 'FBL failed twice, breaking.'
+        if self._fbl.optimize() == False:
+            if self._fbl.optimize() == False:
+                print 'FBL failed twice, breaking.'
+        if self.params['power'] >= 8.0:
+            if self._fbl.optimize() == False:
+                if self._fbl.optimize() == False:
+                    print 'FBL failed twice, breaking.'
+            if self._fbl.optimize() == False:
+                if self._fbl.optimize() == False:
+                    print 'FBL failed twice, breaking.'
         print 'Stabilized.'
         time.sleep(3.0)
         self._keystroke_check('abort')
@@ -309,7 +221,7 @@ class SiC_ESR_Master(m2.Measurement):
 
         # OK now just print the measurement we're doing with power, freq. range,
         # and step size for the user to see.
-        print '--ESR meas. at %.3f dBm from %.4f to %.4f in %.4f MHz steps (%.2f steps)--' % (self.params['desired_power'],self.params['f_low'], self.params['f_high'], self.params['f_step']*1000.0, n_steps)
+        print '--ESR meas. at %.3f dBm from %.4f to %.4f in %.4f MHz steps (%.2f steps)--' % (self.params['power'],self.params['f_low'], self.params['f_high'], self.params['f_step']*1000.0, n_steps)
         # Set a time that controls when the next feedback occurs
         # Add a bit of randomness to this process, too (5 seconds) so the track
         # time is uncorrelated with the measurement.
@@ -379,7 +291,7 @@ class SiC_ESR_Master(m2.Measurement):
 
 
             tt = time.time() - t1
-            print 'Cycle %d/%d, time is %.3f, efficiency of %.2f percent. Heater output at %.1f.' % (i+1, self.params['MeasCycles'], tt, (n_steps*self.params['dwell_time']/1000.0)/tt*100.0, self._ls332.get_heater_output())
+            print 'Total time is %.3f, efficiency of %.2f percent.' % (tt, (n_steps*self.params['dwell_time']/1000.0)/tt*100.0)
             # Sort the count data versus frequency we just took so that it's in
             # regular order, i.e. lowest to highest frequency.
             sorted_temp_data = temp_count_data[freq_temp.argsort()]
@@ -405,9 +317,9 @@ class SiC_ESR_Master(m2.Measurement):
                 print 'Temperature out of bounds, breaking.'
                 break
             # Check if the SNSPD is still superconducting
-            #if self._snspd.check() == False:
-            #    print 'SNSPD went normal and could not restore, breaking.'
-            #    break
+            if self._snspd.check() == False:
+                print 'SNSPD went normal and could not restore, breaking.'
+                break
             # Checks have all passed, so proceed...
 
             # Now add the sorted data array to the total array
@@ -423,9 +335,6 @@ class SiC_ESR_Master(m2.Measurement):
 
             # Plot the total counts (even though it's mislabeled as esr_avg here)
             plot2d_1 = qt.Plot2D(freq,total_count_data, name='esr_avg', clear=True)
-            # Just doing this to keep the AWG's TCP/IP connection fresh.
-            self._awg.get_state()
-            qt.msleep(0.002) # keeps GUI responsive and checks if plot needs updating.
 
 
 
@@ -452,21 +361,21 @@ class SiC_ESR_Master(m2.Measurement):
 
 xsettings = {
         'focus_limit_displacement' : 20, # microns inward
-        'fbl_time' : 155.0, # seconds
+        'fbl_time' : 55.0, # seconds
         'ctr_term' : 'PFI0',
         'power' : 5.0, # dBm
-        'constant_attenuation' : 28.0, # dBm -- set by the fixed attenuators in setup
-        'desired_power' : -7.0, # dBm
-        'f_low' : 0.5, #GHz
-        'f_high' : 0.85, #Ghz
-        'f_step' : 5*4*1.25e-4, #Ghz
-        'dwell_time' : 1550.0, # ms
+        'constant_attenuation' : 6.0, # dBm -- set by the fixed attenuators in setup
+        'desired_power' : -9.0, # dBm
+        'f_low' : 1.219, #GHz
+        'f_high' : 1.398, #Ghz
+        'f_step' : 4*4*1.25e-4, #Ghz
+        'dwell_time' : 200.0, # ms
         'temperature_tolerance' : 3.0, # Kelvin
-        'MeasCycles' : 800,
+        'MeasCycles' : 1000,
         'trigger_period' : 100000.0, #ns
-        'dropout' : False,
-        'dropout_low' : 1.325, # GHz
-        'dropout_high' : 1.342, # GHz
+        'dropout' : True,
+        'dropout_low' : 1.26, # GHz
+        'dropout_high' : 1.36, # GHz
         }
 
 
@@ -474,21 +383,41 @@ xsettings = {
 
 # Generate array of powers -- in this case, just one power.
 
-p_low = -23
-p_high = -23
+p_low = -16.0
+p_high = -16.0
 p_nstep = 1
 
 p_array = np.linspace(p_low,p_high,p_nstep)
 
 
+#name_string = 'esr power %.3f dBm' % (p_array[0])
+#m = SiC_ESR_Master(name_string)
+#xsettings['power'] = p_array[0]
+## since params is not just a dictionary, it's easy to incrementally load
+## parameters from multiple dictionaries
+## this could be very helpful to load various sets of settings from a global
+## configuration manager!
+#m.params.from_dict(xsettings)
+#
+#
+#if m.review_params():
+#    print 'Proceeding with measurement ...'
+#    m.prepare()
+#    m.measure()
+#    m.save_params()
+#    m.save_stack()
+#else:
+#    print 'Measurement aborted!'
+#m.finish()
+
+# This for loop is for measuring at an array of powers, but there's only one,
+# so it will only execute once.
 
 for rr in range(p_nstep):
 
     print 'About to proceed -- waiting 5 s for quit (press q to quit)'
     time.sleep(5.0)
-    if msvcrt.kbhit():
-                kb_char=msvcrt.getch()
-                if kb_char == "q": break
+
     name_string = 'power %.2f dBm' % (p_array[rr])
     # Create a measurement object m with a name we just made indicating the
     # power it's taken at.
@@ -507,8 +436,7 @@ for rr in range(p_nstep):
     # always True, it will always execute.
     if True:
         print 'Proceeding with measurement ...'
-        do_awg_stuff = True
-        m.sequence(upload=do_awg_stuff, program=do_awg_stuff, clear=do_awg_stuff)
+        m.sequence(upload=True)
         m.prepare()
         m.measure()
         # Save params and save stack I think just save the entire set of parameters
@@ -539,18 +467,11 @@ ea_t.email_alert(msg_string)
 track_on = True
 fbl_t = qt.instruments['fbl']
 track_iter = 0
-print 'About to track...'
-do_track = True
-time.sleep(2.0)
-if msvcrt.kbhit():
-                kb_char=msvcrt.getch()
-                if kb_char == "q":
-                    do_track = False
-while track_on == True and track_iter < 50 and do_track == True:
+while track_on == True:
     track_iter = track_iter + 1
     print 'Tracking for %d iteration.' % track_iter
     fbl_t.optimize()
-    time.sleep(5.0)
+    time.sleep(1.0)
     if msvcrt.kbhit() or track_on == False:
                 kb_char=msvcrt.getch()
                 if kb_char == "q" or track_on == False: break
