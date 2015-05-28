@@ -2,9 +2,9 @@ import time
 import msvcrt
 
 ls332 = qt.instruments['ls332']
-
+schr2 = qt.instruments['schr2']
 qt.mstart()
-data = qt.Data(name='pid')
+data = qt.Data(name='pid_1')
 
 
 # Now you provide the information of what data will be saved in the
@@ -29,33 +29,30 @@ data.add_value('temperature')
 plot2d = qt.Plot2D(data, name='measure2D', coorddim=0, valdim=1)
 cont = True
 
-ls332.set_cmode1(3)
-ls332.set_mout1(20)
-time.sleep(220)
+
+
+raw_input("Press Enter to continue...")
+schr2.set_temperature(21.0)
+time.sleep(20)
 t0 = time.time()
-ls332.set_mout1(80)
 while cont:
+    if time.time()-t0 < 250:
+        schr2.set_temperature(21.8)
+    elif time.time()-t0 < 500:
+        schr2.set_temperature(22.2)
+
     if msvcrt.kbhit():
                 kb_char=msvcrt.getch()
                 if kb_char == "q" : break
-    data.add_data_point(time.time()-t0, ls332.get_kelvinA())
+    data.add_data_point(time.time()-t0, schr2.get_temperature())
     plot2d.update()
     time.sleep(1.0)
-    if (time.time()-t0) > 180.0:
+    if (time.time()-t0) > 660.0:
         t1 = time.time()-t0
         cont = False
-ls332.set_mout1(20)
-t0 = time.time()
-print 'Entering second step.'
-cont = True
-while cont:
-    if msvcrt.kbhit():
-                kb_char=msvcrt.getch()
-                if kb_char == "q" : break
-    data.add_data_point(time.time()-t0 + t1, ls332.get_kelvinA())
-    plot2d.update()
-    time.sleep(1.0)
-    if (time.time()-t0) > 180.0:
-        cont = False
+
+
+data.close_file()
+schr2.set_temperature(21.0)
 
 qt.mend()

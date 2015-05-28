@@ -2,9 +2,9 @@ import time
 import msvcrt
 
 ls332 = qt.instruments['ls332']
-
+schr2 = qt.instruments['schr2']
 qt.mstart()
-data = qt.Data(name='pid')
+data = qt.Data(name='pid_1')
 
 
 # Now you provide the information of what data will be saved in the
@@ -29,22 +29,41 @@ data.add_value('temperature')
 plot2d = qt.Plot2D(data, name='measure2D', coorddim=0, valdim=1)
 cont = True
 
-ls332.set_cmode1(3)
-ls332.set_mout1(20)
-time.sleep(220)
+
+time.sleep(20)
+raw_input("Press Enter to continue...")
+schr2.set_temperature(25.0)
 t0 = time.time()
-ls332.set_mout1(80)
 while cont:
     if msvcrt.kbhit():
                 kb_char=msvcrt.getch()
                 if kb_char == "q" : break
-    data.add_data_point(time.time()-t0, ls332.get_kelvinA())
+    data.add_data_point(time.time()-t0, schr2.get_temperature())
     plot2d.update()
     time.sleep(1.0)
-    if (time.time()-t0) > 180.0:
+    if (time.time()-t0) > 300.0:
         t1 = time.time()-t0
         cont = False
-ls332.set_mout1(20)
+
+
+data.close_file()
+
+data = qt.Data(name='pid_2')
+
+
+# Now you provide the information of what data will be saved in the
+# datafile. A distinction is made between 'coordinates', and 'values'.
+# Coordinates are the parameters that you sweep, values are the
+# parameters that you readout (the result of an experiment). This
+# information is used later for plotting purposes.
+# Adding coordinate and value info is optional, but recommended.
+# If you don't supply it, the data class will guess your data format.
+data.add_coordinate('time')
+data.add_value('temperature')
+
+raw_input("Press Enter to continue...")
+plot2d = qt.Plot2D(data, name='measure2D', coorddim=0, valdim=1)
+schr2.set_temperature(19)
 t0 = time.time()
 print 'Entering second step.'
 cont = True
@@ -52,10 +71,12 @@ while cont:
     if msvcrt.kbhit():
                 kb_char=msvcrt.getch()
                 if kb_char == "q" : break
-    data.add_data_point(time.time()-t0 + t1, ls332.get_kelvinA())
+    data.add_data_point(time.time()-t0, schr2.get_temperature())
     plot2d.update()
     time.sleep(1.0)
-    if (time.time()-t0) > 180.0:
+    if (time.time()-t0) > 300.0:
         cont = False
 
+
+data.close_file()
 qt.mend()

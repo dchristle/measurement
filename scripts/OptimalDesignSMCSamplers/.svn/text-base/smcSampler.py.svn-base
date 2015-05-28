@@ -1,0 +1,220 @@
+from __future__ import division
+import muellerSampler
+import sineExample
+from scipy import *
+from particles import *
+from stupidParticleFilter import printStats
+import cPickle
+
+# global variables, bad, but I dont care.
+ex = sineExample.SineExamplePosterior()
+
+class OutcomeLocalProposal:
+	def __init__( self ):
+		self.dist = stats.norm(loc = 0.0, scale = 5.0)
+	def propose(self,d):
+		return d + self.dist.rvs()
+	def evaluate(self, d1, d2):
+		return self.dist.pdf(d2-d1)
+
+class OutcomeGlobalProposal:
+	def __init__( self ):
+		self.dist = stats.norm(loc = 0.0, scale = 15.0)
+	def propose(self,d):
+		return self.dist.rvs()
+	def evaluate(self, d1, d2):
+		return self.dist.pdf(d2)
+
+class OutcomeMixtureProposal:
+	"""Mixture of local and global proposal moves for experiment outcomes"""
+	def __init__( self ):
+		self.localProp = OutcomeLocalProposal()
+		self.globalProp = OutcomeGlobalProposal()
+		self.mixtureWeight = 0.10
+	def propose(self,d):
+		if random.random() > self.mixtureWeight:
+			return self.localProp.propose(d)
+		else:
+			return self.globalProp.propose(d)
+	def evaluate(self, d1, d2):
+		return self.mixtureWeight * self.globalProp.evaluate(d1,d2) + \
+			   (1.0 - self.mixtureWeight) * self.localProp.evaluate(d1,d2)
+
+class AcceptanceStats:
+	"""Utility class to keep track of acceptance ratios"""
+	def __init__(self):
+		self.accepts = 0
+		self.rejects = 0
+
+	def addAccept(self):
+		self.accepts += 1
+
+	def addReject(self):
+		self.rejects += 1
+	
+	def getAcceptanceRatio(self):
+		return float(self.accepts) / float(self.accepts + self.rejects)
+
+	def reset(self):
+		self.accepts = 0
+		self.rejects = 0
+
+class ParticleState:
+	# class variables
+	designProposal =  muellerSampler.LocalProposal()
+	outcomeProposal = OutcomeMixtureProposal()
+	designMHStats = AcceptanceStats()
+	outcomeMHStats = AcceptanceStats()
+	
+	def __init__(self, design):
+		self.design = design
+		self.outcomes = []
+		self.postFctsEvaluations = array([ f(self.design) for f in ex.postSampleFunctions])
+		self.marginalLikelihoods = []
+		self.utilityFactors = []
+		self.utility = 1.0
+		
+	def designMHStep(self):
+		# propose new design
+		proposedDesignPoint = self.designProposal.propose(self.design)
+		if proposedDesignPoint < -2.0 or proposedDesignPoint > 2.0:
+			ParticleState.designMHStats.addReject()
+			return
+		
+		# evaluate all the sine functions corresponding to the parameter samples from the prior
+		# at the design point
+		proposedPostFctsEvaluations = array([ f(proposedDesignPoint) for f in ex.postSampleFunctions])
+		
+		# compute the vector p(Y|d) by using the sampled thetas to approximately integrate over theta
+		proposedMarginalLikelihoods = array([ average( ex.noiseDistribution.pdf( proposedPostFctsEvaluations - y )) for y in self.outcomes])
+		
+		# compute a vector of p(y_j|d) log p(y_j|d)	 for j = 1 ... numExperiments
+		proposedUtilityFactors = proposedMarginalLikelihoods * (ex.maxLogLikelihood - log(proposedMarginalLikelihoods))
+		proposalUtility = prod( proposedUtilityFactors )
+		# compute acceptance probability, assuming we have a symmetric proposal !!!
+		# Got to be careful here.  This is true with the mixture in which the global
+		# component is uniform
+		#	acceptanceRatio = min( 1.0, (proposalUtility / self.utility))
+		
+		# maybe better make this fully general
+		acceptanceRatio = min( 1.0, (proposalUtility * self.designProposal.evaluate(self.design, proposedDesignPoint))
+		/ (self.utility * self.designProposal.evaluate( proposedDesignPoint, self.design) ) )
+		if random.random() < acceptanceRatio:
+			#accept proposal
+			self.design = proposedDesignPoint
+			self.postFctsEvaluations = proposedPostFctsEvaluations
+			self.marginalLikelihoods = list(proposedMarginalLikelihoods)
+			self.utilityFactors = list(proposedUtilityFactors)
+			self.utility = proposalUtility
+			ParticleState.designMHStats.addAccept()
+		else:
+			# stay at previous design
+			ParticleState.designMHStats.addReject()
+	
+	def outcomesMHStep(self):
+		# do independent MH moves for all outcomes
+		for k in xrange(len(self.outcomes)):
+			# propose a new outcome
+			proposedOutcome = self.outcomeProposal.propose(self.outcomes[k])
+			# evaluate
+			proposalMarginalLikelihood = average( ex.noiseDistribution.pdf( self.postFctsEvaluations - proposedOutcome ))
+			proposalUtilityFactor = proposalMarginalLikelihood * (ex.maxLogLikelihood - log(proposalMarginalLikelihood))
+			# compute acceptance ratio
+			acceptanceRatio = min( 1.0, (proposalUtilityFactor * self.outcomeProposal.evaluate(self.outcomes[k], proposedOutcome))\
+									/ (self.utilityFactors[k] * self.outcomeProposal.evaluate( proposedOutcome, self.outcomes[k])) )
+			if random.random() < acceptanceRatio:
+				#accept proposal
+				self.outcomes[k] = proposedOutcome
+				self.marginalLikelihoods[k] = proposalMarginalLikelihood
+				self.utility *= proposalUtilityFactor / self.utilityFactors[k]
+				self.utilityFactors[k] = proposalUtilityFactor
+				ParticleState.outcomeMHStats.addAccept()
+			else:
+				ParticleState.outcomeMHStats.addReject()
+				pass
+	
+	def addOutcome(self):
+		"""This function increases J by one, adding one additional experiment (auxiliary variable in Arnaud's paper)
+		Increasing the number of experiments this way results in an annealing effect for the marginal of d (the design)
+		As a proposal I use here the distribution p(y|d) defined by the samples theta from the parameter posterior."""
+		
+		sampleIndex = random.randint(len(ex.postSampleFunctions))
+		newSampledSineFunction = ex.postSampleFunctions[sampleIndex]
+		newOutcome = newSampledSineFunction( self.design ) + ex.noiseDistribution.rvs()
+		
+		# evaluate p(y_new|d)
+		newMarginalLikelihood = float(average( ex.noiseDistribution.pdf( self.postFctsEvaluations - newOutcome )))
+		newUtilityFactor = float(newMarginalLikelihood * (ex.maxLogLikelihood - log(newMarginalLikelihood)))
+		importanceWeight = newUtilityFactor / newMarginalLikelihood
+		self.outcomes.append(newOutcome)
+		self.marginalLikelihoods.append(newMarginalLikelihood)
+		self.utilityFactors.append(newUtilityFactor)
+		self.utility *= newUtilityFactor
+		
+		return importanceWeight
+
+def main(numParticles, numSampleIterations, stepsize, samplesFileName):
+	random.seed()
+	
+	essThreshold = numParticles * 0.7
+	
+	schedule = muellerSampler.LinearSchedule(stepsize)
+	
+	sampleStore = []
+	# initialize particles at random positions in [-2,2)
+	particles = []
+	weights = []
+	positions = list(stats.uniform(-2,4).rvs(size = numParticles))
+	for p in positions:
+		newParticle = ParticleState(p)
+		weight = newParticle.addOutcome()
+		particles.append(newParticle)
+		weights.append(weight)
+
+	ess = computeESS(weights)
+	print "ESS = ", ess
+	if ess < essThreshold:
+		print "resampling"
+		# do a first resampling based on the weights
+		particles, weights = resample(particles, weights)
+
+	# now starts the SMC sampling algorithm itself
+	for i in xrange(1,numSampleIterations+1): 
+		print "iteration ", i
+
+		for p in particles:
+			# do a MH step for each particle (for all pre-existing experiments)
+			p.designMHStep()
+			p.outcomesMHStep()
+			
+		print "design   MH acceptance ratio = ", ParticleState.designMHStats.getAcceptanceRatio()
+		print "outcomes MH acceptance ratio = ", ParticleState.outcomeMHStats.getAcceptanceRatio()
+		ParticleState.designMHStats.reset()
+		ParticleState.outcomeMHStats.reset()
+			
+		# check if we add a new experiment to each particle
+		if schedule(i) > schedule(i-1):
+			for d in xrange(schedule(i) - schedule(i-1)):
+				for pIdx in xrange(len(particles)):
+					weights[pIdx] *= particles[pIdx].addOutcome()
+					
+			ess = computeESS(weights)
+			print "ESS = ", ess
+			if ess < essThreshold:
+				print "resampling"
+				# do a first resampling based on the weights
+				particles, weights = resample(particles, weights)
+		
+		sampleStore.append( array([float(p.design) for p in particles]) )
+				
+	
+	samplesFile = open(samplesFileName,'w')
+	cPickle.dump((sampleStore, numSampleIterations, numParticles), samplesFile)
+	samplesFile.close()
+			
+
+if __name__ == '__main__':
+	main(100,100,2, "smcSamples.pydata" )
+
+
+

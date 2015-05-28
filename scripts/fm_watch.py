@@ -1,11 +1,10 @@
 import time
 import msvcrt
 
-ls332 = qt.instruments['ls332']
-
+ph=qt.instruments['ph']
+fm = qt.instruments['fm']
 qt.mstart()
-data = qt.Data(name='pid')
-
+data = qt.Data(name='testmeasurement')
 
 # Now you provide the information of what data will be saved in the
 # datafile. A distinction is made between 'coordinates', and 'values'.
@@ -15,7 +14,7 @@ data = qt.Data(name='pid')
 # Adding coordinate and value info is optional, but recommended.
 # If you don't supply it, the data class will guess your data format.
 data.add_coordinate('time')
-data.add_value('temperature')
+data.add_value('power (uW)')
 
 # The next command will actually create the dirs and files, based
 # on the information provided above. Additionally a settingsfile
@@ -26,36 +25,17 @@ data.add_value('temperature')
 # measurement a 'name' can be provided so that window can be reused.
 # If the 'name' doesn't already exists, a new window with that name
 # will be created. For 3d plots, a plotting style is set.
-plot2d = qt.Plot2D(data, name='measure2D', coorddim=0, valdim=1)
+plot2d = qt.Plot2D(data, name='measure2D', coorddim=0, valdim=1, maxpoints = 40)
 cont = True
-
-ls332.set_cmode1(3)
-ls332.set_mout1(20)
-time.sleep(220)
 t0 = time.time()
-ls332.set_mout1(80)
 while cont:
     if msvcrt.kbhit():
                 kb_char=msvcrt.getch()
                 if kb_char == "q" : break
-    data.add_data_point(time.time()-t0, ls332.get_kelvinA())
+    fmp = fm.get_power()
+    print 'fm power: %.3e' % (fmp)
+    data.add_data_point(time.time()-t0, 10**6*fmp)
     plot2d.update()
-    time.sleep(1.0)
-    if (time.time()-t0) > 180.0:
-        t1 = time.time()-t0
-        cont = False
-ls332.set_mout1(20)
-t0 = time.time()
-print 'Entering second step.'
-cont = True
-while cont:
-    if msvcrt.kbhit():
-                kb_char=msvcrt.getch()
-                if kb_char == "q" : break
-    data.add_data_point(time.time()-t0 + t1, ls332.get_kelvinA())
-    plot2d.update()
-    time.sleep(1.0)
-    if (time.time()-t0) > 180.0:
-        cont = False
+    time.sleep(0.25)
 
 qt.mend()

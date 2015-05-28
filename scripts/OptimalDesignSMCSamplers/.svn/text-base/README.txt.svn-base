@@ -1,0 +1,175 @@
+As a first step rejPostSampling.py needs to be run to generate samples from the posterior parameter distribution after observing 2 initial data points. The experiment design problem in this simple example then is to find the optimal x location for the 3rd measurement. A very inefficient rejection sampler is used for this as this was not the focus of our paper.
+
+plotPriors.py shows the priors on the parameters. plotPostSamples.py plots the sampled posterior distribution (both in parameter space as well as the corresponding sine functions)
+
+
+
+
+SMC algorithm base and helper classes
+=====================================
+
+GenericSMCSampler.py
+GenericSMCSamplerParticleState.py
+---------------------------------
+These are the base classes for the SMC samplers with an MCMC kernel as one of their components
+Currently the proposal for importance sampling is a crude heuristic based on fitting 
+the width of a student-t adaptively to the sine function evaluations at d and the exponent. 
+
+OutcomeProposal.py
+---------------------------------
+proposal used in the MCMC component of all SMC samplers for proposing new outcomes based on the current outcome value
+
+Schedules.py
+---------------------------------
+different schedules providing n_t and nu_t given the iteration number
+
+
+SMC algorithm implementations
+=============================
+
+AdamAndArnaudsAlgorithm3.py
+---------------------------------
+Implementation of the SMC sampler described in algorithm 3 in 
+[1]	A. M. Johansen, A. Doucet, and M. Davy. 
+Maximum likelihood parameter estimation for maximum likelihood models using sequential Monte Carlo.
+In Proceedings of ICASSP, 2006.
+This is basically Arnaud's version of the SMC sampler for annealing. But applied to max entropy sampling of course.
+
+improvedAlgorithm3.py
+---------------------------------
+My own improved SMC sampler algorithm as described in the abstract. 
+This is an improvement upon algorithm 3, implemented in AdamAndArnaudsAlgorithm3.py and described in 
+[1]	A. M. Johansen, A. Doucet, and M. Davy. 
+Maximum likelihood parameter estimation for maximum likelihood models using sequential Monte Carlo.
+In Proceedings of ICASSP, 2006.
+
+The difference is that my algorithm uses a MCMC kernel with static distribution defined on 
+all outcomes sampled at the previous iteration, while Adam & Arnauds sampler only defines the 
+MCMC sampler on all fully faded in outcomes at the previous timestep (that is, it includes 
+outcomes that were sampled using importance sampling with previous_nu_t != 1.0 )
+
+As a result, only when an integer boundary is crossed will my sampler use importance sampling to 
+sample the new outcome. A&A's sampler on the other hand will always use importance sampling for 
+the last outcome. Which results in way higher variance of the importance weights.
+
+
+
+PtoPlogPAnnealingSMCSampler.py
+---------------------------------
+My own annealing scheme. The last outcome is sampled according to  
+p(y_last|d) (C - log p(y|d))^nu_t
+That is, the newly introduced outcome is first sampled from p(y_last|d). Since it is possible to sample
+from this directly, no importance sampling is necessary. 
+Then the distribution is slowly changed from p(y_last|d) to p(y_last|d) (C - log p(y|d)).
+Those distributions are fairly close to begin with and the variance of the importance weights is nice and small
+as a result.
+
+
+Other sampling implementations
+================================
+
+muellerSampler.py
+---------------------------------
+Implementation of 
+[1]	P. Müller, B. Sansó, and M. de Iorio. 
+Optimal Bayesian design by inhomogeneous Markov chain simulation. Journal of the American Statistical Association, 99:788–798, 2004.
+
+Adapted to Maximum entropy sampling. See my Lyx notes ( I think maxEntropy.lyx )
+The local proposal (for the design) defined in this file is used by the SMC samplers as well to ensure a fair comparison
+
+When run, the script performs a single Mueller run (parameters at the bottom of the script) and plots the result 
+(samples before and after burnin as histograms)
+
+multiMuellerRuns.py
+---------------------------------
+performs multiple mueller Sampler runs and stores the result in multiMuellerData.pydata
+
+stupidParticleFilter.py
+---------------------------------
+This is the implementation of
+
+[1]	B. Amzal, F. Bois, E. Parent, and C. Robert. 
+Bayesian optimal design via interacting MCMC. 
+Technical Report 2003-48, Ceremade, Université de Paris, 2003.
+
+saves its result in stupidPFSamples.pydata
+Huge variation of the weights from step to step. 
+The problem here seems to be not even so much the sampling from the prior
+(although thats just lucky in this case) But the main problem is the fact that
+U(d) tends to be rather flat. Therefore any proposal distribution q(d), which
+does not explore the whole range will have huge variance of the importance
+weights. That is because a sample generated from the tails of q(d) will
+receive a huge importance weight.
+
+
+gridUtilityEvaluate.py
+---------------------------------
+loads the sampled posterior (rejectionSamples.pydata) and evaluated U(d) for discrete values d in [-2,2] 
+using MCMC (samples are generated from p(y|d))
+
+Sine example & posterior sampling
+================================
+
+sineExample.py
+---------------------------------
+This has the main part of the sine function example. So it has the SineFunction, the prior distribution
+as well as the SineExamplePosterior, which is what is used in the sampling algorithms.
+For some reason it also has code for plotting the prior. 
+
+rejPostSampling.py
+---------------------------------
+rejection sampler for sampling from p(theta) for the sine example 
+after having 2 data points observed. Very inefficient, but who cares. 
+The samples are stored in rejectionSamples.pydata. 
+SineExamplePosterior in sineExample.py loads in this file and thats how the samples are used everywhere.
+
+
+Plotting
+================================
+
+genPriorPlots.py
+---------------------------------
+script to generate plots of the prior distributions for amplitude, phase and frequency
+used in the sine example.
+
+plotPostSamples.py
+---------------------------------
+plotting the posterior (based on the samples generated by rejPostSampling.py)
+two functions, for display on screen and for saving the figures to disk
+
+plotSMCsamples.py
+---------------------------------
+Plots the results of a SMC sampler run. Data file can be specified as argument.
+It plots a bunch of histograms along the way. As well as traces for a few particles
+
+plotTargetAndProposal.py
+---------------------------------
+visualizes the Target p(y) (C - log(p(y)))^p and a hacked adaptive proposal distribution
+The functions are somewhat documented
+
+
+Helper classes and functions
+================================
+
+
+mySamplers.py
+---------------------------------
+contains 
+	generic RejectionSampler
+	StaticDiscreteDistribution = Alias method for sampling from a discrete distribution
+	MixtureModel 
+
+particles.py
+---------------------------------
+helper functions for dealing with particles
+resample - takes separate vectors of particles and weights (obviously of the same dimension)
+computeESS - does exactly that
+countDifferentParticles - I used that to kind of validate the ESS measure: How many non identical particles after resampling
+
+
+smcSampler.py
+---------------------------------
+SMC sampler for integer steps. The schedule takes adds one outcome every x steps. 
+Thats what I used for the abstract. 
+
+

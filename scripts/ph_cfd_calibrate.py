@@ -1,11 +1,12 @@
 import time
 import msvcrt
+import numpy as np
 
-ls332 = qt.instruments['ls332']
+
+ph=qt.instruments['ph']
 
 qt.mstart()
-data = qt.Data(name='pid')
-
+data0 = qt.Data(name='phcal')
 
 # Now you provide the information of what data will be saved in the
 # datafile. A distinction is made between 'coordinates', and 'values'.
@@ -14,8 +15,9 @@ data = qt.Data(name='pid')
 # information is used later for plotting purposes.
 # Adding coordinate and value info is optional, but recommended.
 # If you don't supply it, the data class will guess your data format.
-data.add_coordinate('time')
-data.add_value('temperature')
+data0.add_coordinate('CFD')
+data0.add_value('counts0')
+data0.add_value('counts1')
 
 # The next command will actually create the dirs and files, based
 # on the information provided above. Additionally a settingsfile
@@ -26,36 +28,31 @@ data.add_value('temperature')
 # measurement a 'name' can be provided so that window can be reused.
 # If the 'name' doesn't already exists, a new window with that name
 # will be created. For 3d plots, a plotting style is set.
-plot2d = qt.Plot2D(data, name='measure2D', coorddim=0, valdim=1)
+plot2d = qt.Plot2D(data0, name='phcal', coorddim=0, valdims=1)
+plot2d.add_data(data0, coorddim=0, valdim=2)
 cont = True
+t0 = time.time()
+cfd_array = np.linspace(50,800,40)
+for i in range(40):
+    if msvcrt.kbhit():
+                kb_char=msvcrt.getch()
+                if kb_char == "q" : break
+    ph.set_InputCFD0(int(cfd_array[i]),10)
+    ph.set_InputCFD1(int(cfd_array[i]),10)
+    navgs = 20
+    c0 = 0
+    c1 = 0
+    for j in range(navgs):
+        time.sleep(0.1)
+        c0 = c0 + ph.get_CountRate0()
+        c1 = c1 + ph.get_CountRate1()
+    c0 = float(c0)/float(navgs)
+    c1 = float(c1)/float(navgs)
+    time.sleep(0.5)
+    data0.add_data_point(cfd_array[i],c0,c1)
+    print 'CFD is %.2f, Ch0 counts: %.2f, Ch1 counts: %.2f' % (cfd_array[i], c0,c1)
 
-ls332.set_cmode1(3)
-ls332.set_mout1(20)
-time.sleep(220)
-t0 = time.time()
-ls332.set_mout1(80)
-while cont:
-    if msvcrt.kbhit():
-                kb_char=msvcrt.getch()
-                if kb_char == "q" : break
-    data.add_data_point(time.time()-t0, ls332.get_kelvinA())
     plot2d.update()
-    time.sleep(1.0)
-    if (time.time()-t0) > 180.0:
-        t1 = time.time()-t0
-        cont = False
-ls332.set_mout1(20)
-t0 = time.time()
-print 'Entering second step.'
-cont = True
-while cont:
-    if msvcrt.kbhit():
-                kb_char=msvcrt.getch()
-                if kb_char == "q" : break
-    data.add_data_point(time.time()-t0 + t1, ls332.get_kelvinA())
-    plot2d.update()
-    time.sleep(1.0)
-    if (time.time()-t0) > 180.0:
-        cont = False
+
 
 qt.mend()
