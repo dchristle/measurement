@@ -230,20 +230,12 @@ class SiC_FineMotor_Master(m2.Measurement):
 
         print '--Fine motor scan meas. starting at %.4f nm, displacing %d steps in %d step steps (%d steps)--' % (self.params['wavelength_start'], self.params['motor_positions'][-1], self.params['motor_step'], self.params['pts'] )
 
-
-        data = qt.Data(name='wavemotor_sweep')
-
-        data.add_coordinate('motor position')
-        data.add_value('counts')
-        plot2d_0 = qt.Plot2D(data, name='finemotor_single_sweep', clear=True)
-
-        total_count_data = np.zeros(self.params['pts'] , dtype='uint32')
-        average_count_data = np.zeros(self.params['pts'] , dtype='float')
+        #total_count_data = np.zeros(self.params['pts'] , dtype='uint32')
+        #average_count_data = np.zeros(self.params['pts'] , dtype='float')
 
         #intermediate_total_data = np.zeros( (1,self.params['pts'] ), dtype='uint32')
-        total_count_data = np.zeros(self.params['pts'] , dtype='uint32')
-        current_count_data = np.zeros(self.params['pts'] ,dtype='uint32')
-        frequency_displacement = np.zeros(self.params['pts'] ,dtype='float')
+        total_count_data = np.array([], dtype='uint32')
+        frequency_displacement = np.array([],dtype='float')
 
         time.sleep(1.0)
         if self.keystroke('abort') in ['q','Q']:
@@ -255,6 +247,12 @@ class SiC_FineMotor_Master(m2.Measurement):
             # Set the PXI status to 'on', i.e. generate microwaves
             self._pxi.set_status('on')
         N_cmeas = 0
+
+        data = qt.Data(name='wavemotor_sweep')
+
+        data.add_coordinate('frequency offset (GHz)')
+        data.add_value('counts')
+        plot2d_0 = qt.Plot2D(data, name='finemotor_single_sweep', clear=True)
 
 
         # Now set the AWG into CW mode for tracking
@@ -271,10 +269,11 @@ class SiC_FineMotor_Master(m2.Measurement):
         self.awg_confirm(2)
         for i in range(self.params['MeasCycles']):
 
-            # Create array for the single-sweep data
+            # Create arrays for the single-sweep data
+            temp_frequency_displacement = np.zeros(self.params['pts'] , dtype='float')
             temp_count_data = np.zeros(self.params['pts'] , dtype='uint32')
             # Set Sacher wavelength
-            self._epos.set_wavelength(self.params['wavelength_array'][0])
+            self._epos.set_wavelength(self.params['wavelength_start'])
             time.sleep(1.0)
 
 
@@ -298,7 +297,7 @@ class SiC_FineMotor_Master(m2.Measurement):
 
                     time.sleep(0.1)
                     # Re-optimize
-                    fbl.optimize()
+                    #fbl.optimize()
 
                     # Set new track time
                     track_time = time.time() + self.params['fbl_time'] + 5.0*np.random.uniform()
@@ -307,14 +306,46 @@ class SiC_FineMotor_Master(m2.Measurement):
                     time.sleep(0.1)
 
 
+                if j == 0:
+                    Npeaks = 5
+                    for i in range(15):
+                        cur_peaks = self._fp.read_sweep_peaks_lorentzian(500,10000,'ai1')
+                        Npeaks = cur_peaks.size
+                        if (Npeaks > 4) or (Npeaks < 2):
+                            print 'Did not find 2 or 3 peaks,  Laser likely multimode for first step, stepping back.'
+                            self._epos.fine_tuning_steps(-10)
 
+                        else:
+                            print 'Found %d peaks, proceeding.' % Npeaks
+                            prev_peaks = cur_peaks
+                            prev_fp = self._fp.read_sweep(500,10000,'ai1')
+                            break
+                    delta_f = 0.0
+                else:
 
-                # Set the new motor position
+                    # Set the new motor position
+                    print 'Setting new motor position'
+                    self._epos.fine_tuning_steps(int(self.params['motor_step']))
+                    # Get the new Fabry-Perot peaks after the motor has stepped
+                    cur_peaks = self._fp.read_sweep_peaks_lorentzian(500,10000,'ai1')
+                    N_peaks = cur_peaks.size
+                    if N_peaks > 4 or N_peaks < 2:
+                        #laser is multimode, so ignore this data point
+                        delta_f = 0.0
+                        print 'Laser is multimode, we should ignore this point.'
+                    else:
+                        # Calculate the most likely displacement in frequency
+                        # Sample the raw sweep from the FP
+                        curr_fp = self._fp.read_sweep(500,10000,'ai1')
+                        delta_f = self._fp.delta_cross_correlation(np.linspace(0,500.0/10000.0,500),prev_fp,curr_fp)
+                        print 'Delta f is %.2f GHz' % delta_f
+                        prev_peaks = cur_peaks
+                        prev_fp = curr_fp
 
-                self._epos.set_wavelength(self.params['wavelength_array'][j])
-
+                temp_frequency_displacement[j] = delta_f
+                tfd_cs = np.cumsum(temp_frequency_displacement)
                 temp_count_data[j] = self._ni63.get('ctr1')
-                data.add_data_point(self.params['wavelength_array'][j],temp_count_data[j])
+                data.add_data_point(tfd_cs[j],temp_count_data[j])
                 qt.msleep(0.002) # keeps GUI responsive and checks if plot needs updating.
                 self._keystroke_check('abort')
                 if self.keystroke('abort') in ['q','Q'] or scan_on == False:
@@ -337,7 +368,6 @@ class SiC_FineMotor_Master(m2.Measurement):
             tt = time.time() - t1
 
             print 'Cycle %d/%d total time is %.3f, efficiency of %.2f percent. Heater output is at %.1f. ' % (i+1, int(self.params['MeasCycles']), tt, (self.params['pts'] *self.params['dwell_time']/1000.0)/tt*100.0, self._ls332.get_heater_output())
-
 
 
 
@@ -367,16 +397,17 @@ class SiC_FineMotor_Master(m2.Measurement):
             # Now add the sorted data array to the total array
             # Use the argsort functionality to sort the count data by the frequnecy
             # it was taken at.
-            total_count_data = total_count_data + temp_count_data
+            total_count_data = np.append(total_count_data, temp_count_data)
+            frequency_displacement = np.append(frequency_displacement, temp_frequency_displacement)
 
+            resized_total_count_data = np.reshape(total_count_data, newshape=(total_count_data.shape[0]/self.params['pts'], self.params['pts']))
+            resized_frequency_displacement = np.reshape(frequency_displacement, newshape=(frequency_displacement.shape[0]/self.params['pts'], self.params['pts']))
             # Sum along all sweeps so far for the y values, and just use the last frequency displacement measurement
             # for the x-axis. This is an approximation assuming the repeatability is good.
-            plot2d_1 = qt.Plot2D(self.params['wavelength_array'],total_count_data, name='wavemotor_avg', clear=True)
+            summed_total_count_data = np.sum(resized_total_count_data,axis=0)
+            plot2d_1 = qt.Plot2D(np.cumsum(temp_frequency_displacement),summed_total_count_data, name='finemotor_avg', clear=True)
             N_cmeas = N_cmeas + 1
-            average_count_data = total_count_data/float(N_cmeas)
-
-
-
+            #average_count_data = total_count_data/float(N_cmeas)
 
 
 

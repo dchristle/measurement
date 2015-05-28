@@ -1,4 +1,4 @@
-# Doublepulse PL measurement script
+# Photoluminescence measurement script
 # David J. Christle <christle@uchicago.edu>
 # 2015/01/19
 #
@@ -19,8 +19,8 @@ reload(singlespin)
 
 xsettings = {
         'focus_limit_displacement' : 20, # microns inward
-        'fbl_time' : 130.0, # seconds
-        'constant_attenuation' : 28.0, # dBm -- set by the fixed attenuators in setup
+        'fbl_time' : 60.0, # seconds
+        'constant_attenuation' : 6.0, # dBm -- set by the fixed attenuators in setup
         'AOM_light_delay' : 655.0, # ns
         'AOM_start_buffer' : 155.0, # ns
         'AOM_end_buffer' : 20.0, # ns
@@ -29,61 +29,55 @@ xsettings = {
         'PH_trigger_time' : 0.0, #ns
         'PH_trigger_length' : 50.0, #ns
         'power' : 5.0, # dBm
-        'tau_length_start' : 1500.0, # ns
-        'tau_length_end' : 1500.0, # ns
-        'tau_length_step' : 1, # ns
-        'microwaves' : True, # Boolean
-        'frequency' : 1.36319, #GHz
-        'desired_power' : -32.0, # dBm
-        'pi_length' : 273.0, # ns
+        'tau_length_start' : 10.0, # ns
+        'tau_length_end' : 1410.0, # ns
+        'tau_length_step' : 30, # ns
+        'microwaves' : False, # Boolean
+        'frequency' : 1.3529, #GHz
+        'desired_power' : -9.0, # dBm
+        'pi_length' : 78.0, # ns
         'CFDLevel0' : 125,
         'CFDZeroCross0' : 10,
-        'CFDLevel1' : 12,
+        'CFDLevel1' : 125,
         'CFDZeroCross1' : 10,
         'Binning' : 5,
         'Offset' : 0,
         'SyncDiv' : 1,
         'SyncOffset' : -10000,
-        'acquisition_time' : 60.0, # s
+        'acquisition_time' : 20.0, # s
         'temperature_tolerance' : 2.0, # Kelvin
         'MeasCycles' : 150,
         'random' : 1
         }
 
 
-tlca = np.array((0.14,0.11,0.19))
+# Create a measurement object m
+print 'About to proceed -- waiting 5 s for quit (press q to quit)'
+time.sleep(5.0)
+name_string = '3C_nomicrowave'
+m = singlespin.SiC_DoublePulse_Master(name_string)
+#xsettings['exposure_time'] = 90.0 # seconds
+xsettings['MeasCycles'] = 405
+# since params is not just a dictionary, it's easy to incrementally load
+# parameters from multiple dictionaries
+# this could be very helpful to load various sets of settings from a global
+# configuration manager!
+m.params.from_dict(xsettings)
+m.sequence(upload=True,program=True,clear=True)
 
 
-for cur in tlca:
+if True:
+    print 'Proceeding with measurement ...'
+    m.prepare()
+    m.measure()
+    m.save_params()
+    m.save_stack()
+else:
+    print 'Measurement aborted!'
 
-    tli = qt.instruments['tl']
-    tli.set_current(cur)
-    # Create a measurement object m
-    print 'About to proceed -- waiting 5 s for quit (press q to quit)'
-    time.sleep(5.0)
-    name_string = '3C_microwave_%.2f A' % cur
-    m = singlespin.SiC_DoublePulse_Master(name_string)
-    xsettings['MeasCycles'] = 170
-    # since params is not just a dictionary, it's easy to incrementally load
-    # parameters from multiple dictionaries
-    # this could be very helpful to load various sets of settings from a global
-    # configuration manager!
-    m.params.from_dict(xsettings)
-    m.sequence(upload=True,program=True,clear=True)
-
-
-    if True:
-        print 'Proceeding with measurement ...'
-        m.prepare()
-        m.measure()
-        m.save_params()
-        m.save_stack()
-    else:
-        print 'Measurement aborted!'
-
-    # important! hdf5 data must be closed, otherwise will not be readable!
-    # (can also be done by hand, of course)
-    m.finish()
+# important! hdf5 data must be closed, otherwise will not be readable!
+# (can also be done by hand, of course)
+m.finish()
 
 # Alert that measurement has finished
 ea_t = qt.instruments['ea']

@@ -298,13 +298,19 @@ class SiC_Rabi_Master(m2.Measurement):
                 temp_count_data[j] = self._ni63.get('ctr1')
                 qt.msleep(0.004) # keeps GUI responsive and checks if plot needs updating.
                 self._keystroke_check('abort')
+
                 if self.keystroke('abort') in ['q','Q']:
                     print 'Measurement aborted.'
                     self.stop_keystroke_monitor('abort')
                     self._stop_measurement = True
                     scan_on = False
                     break
-
+                if msvcrt.kbhit() or scan_on == False or self._stop_measurement == True:
+                    kb_char=msvcrt.getch()
+                    if kb_char == "q" or scan_on == False or self._stop_measurement == True:
+                        print 'Measurement aborted.'
+                        self._stop_measurement = True
+                        break
             # Check for a break, and break out of this loop as well.
             # It's important to check here, before we add the array to the total
             # since doing it the other way risks adding incomplete data to the
@@ -410,7 +416,7 @@ p_high = -32
 p_nstep = 1
 
 p_array = np.linspace(p_low,p_high,p_nstep)
-p_array = np.array((-37.0, -34.0, -31.5, -29.5, -28.0, -27.0, -25.5, -24.5, -23))
+
 
 for rr in range(np.size(p_array)):
     # Create a measurement object m
@@ -423,19 +429,6 @@ for rr in range(np.size(p_array)):
     m = SiC_Rabi_Master(name_string)
     xsettings['readout_length'] = 130.0
     xsettings['desired_power'] = p_array[rr]
-    # Predict the desired Rabi period
-    freq = np.sqrt(np.power(10,(p_array[rr]/10)))/np.sqrt(np.power(10,-32.0/10.0))*0.001831
-    period = 1/freq
-    T_end = 0.75*period
-    a = np.ceil(T_end/5.0)
-    T_end_rounded = a*5.0
-    N_points = 15
-    N_step = T_end_rounded/float(N_points)
-    b = np.round(N_step/5.0)*5.0
-    true_end = b*float(N_points)
-    xsettings['RF_length_step'] = b
-    xsettings['RF_length_end'] = true_end
-    xsettings['MeasCycles'] = 45
     # since params is not just a dictionary, it's easy to incrementally load
     # parameters from multiple dictionaries
     # this could be very helpful to load various sets of settings from a global

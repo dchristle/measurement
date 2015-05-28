@@ -24,7 +24,7 @@ class noisy_instrument(Instrument):
                 type=types.FloatType,
                 flags=Instrument.FLAG_GETSET | \
                 Instrument.FLAG_GET_AFTER_SET,
-                minval=-180., maxval=180.)
+                minval=-180, maxval=180)
         self.add_parameter('cmax_position',
                 type=types.FloatType,
                 flags=Instrument.FLAG_GETSET | \
@@ -83,10 +83,10 @@ class noisy_instrument(Instrument):
 ### here we get a noisy
     def get_counts(self):
         # define the function
-        f_ideal = (np.exp(-0.5*(self._angle1-42.8/180.0*np.pi)**2.0/((5.0/180.*np.pi)**2.0)) + \
-            np.exp(-0.5*(self._angle2-29.8/180.0*np.pi)**2.0/((12.0/180.0*np.pi)**2.0)) + \
-            np.exp(-0.5*(self._phase-2.0)**2.0/(5.0**2.0)))*1.0 - \
-            15.0*(self._cmax_position-3.4289)**2.0
+        f_ideal = (np.exp(-(self._angle1-42.8/180.0*np.pi)**2/(2.0*2.0)**2) + \
+            np.exp(-(self._angle2-29.8/180.0*np.pi)**2/(2.0*2.0)**2) + \
+            np.exp(-(self._phase-2.0)**2/(0.5*3.0)**2))*300 - \
+            15*(self._cmax_position-3.4289)**2
         f_inverted = f_ideal*(-1.0)
         noise = np.random.randn(1)[0]*self._sigma
         output = f_ideal + noise
@@ -94,8 +94,8 @@ class noisy_instrument(Instrument):
     def set_optimum(self):
         self.set_angle1(42.8/180.*np.pi)
         self.set_angle2(29.8/180*np.pi)
-        self.set_phase(2.0)
-        self.set_cmax_position(3.4289)
+        self.set_phase(2)
+        self.set_cmax_position(3.4)
         return
     def set_initial(self):
         self.set_angle1(32.0/180.*np.pi)

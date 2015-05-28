@@ -30,10 +30,10 @@ plot2d = qt.Plot2D(data, name='measure2D', coorddim=0, valdim=1)
 cont = True
 
 ls332.set_cmode1(3)
-ls332.set_mout1(20)
-time.sleep(220)
+ls332.set_mout1(5)
+time.sleep(30)
 t0 = time.time()
-ls332.set_mout1(80)
+ls332.set_mout1(15)
 while cont:
     if msvcrt.kbhit():
                 kb_char=msvcrt.getch()
@@ -41,10 +41,10 @@ while cont:
     data.add_data_point(time.time()-t0, ls332.get_kelvinA())
     plot2d.update()
     time.sleep(1.0)
-    if (time.time()-t0) > 180.0:
+    if (time.time()-t0) > 160.0:
         t1 = time.time()-t0
         cont = False
-ls332.set_mout1(20)
+ls332.set_mout1(5)
 t0 = time.time()
 print 'Entering second step.'
 cont = True
@@ -55,7 +55,7 @@ while cont:
     data.add_data_point(time.time()-t0 + t1, ls332.get_kelvinA())
     plot2d.update()
     time.sleep(1.0)
-    if (time.time()-t0) > 180.0:
+    if (time.time()-t0) > 160.0:
         cont = False
 
 qt.mend()
