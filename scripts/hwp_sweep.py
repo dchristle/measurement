@@ -24,7 +24,7 @@ def simple(s_vec):
     st0 = qt.instruments['Standa0']
 
 
-    ni63 = qt.instruments['NIDAQ6363']
+
 
 
     qt.mstart()
@@ -40,7 +40,7 @@ def simple(s_vec):
 
     for s in s_vec:
         if (msvcrt.kbhit() and (msvcrt.getch() == 'q')): break
-        st0.move(int(s))
+        st0.move(s)
         logging.debug('step set: %s' % (s))
         n = 0
         qt.msleep(0.2)
@@ -53,7 +53,7 @@ def simple(s_vec):
                 qt.msleep(0.5)
 
         qt.msleep(0.5)
-        counts = ni63.get('ctr0')
+        ni63.get('ctr0')
         data.add_data_point(s,counts)
 
 
