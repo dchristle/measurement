@@ -357,8 +357,6 @@ class SiC_ESR_Master(m2.Measurement):
                     break
                 # Check if a track should occur. If so, track.
                 if time.time() > track_time:
-                    print 'Tracking!'
-
                     self._fbl.optimize()
                     # Set new track time, fbl_time into the future plus a small
                     # random time.
@@ -457,9 +455,9 @@ xsettings = {
         'power' : 5.0, # dBm
         'constant_attenuation' : 28.0, # dBm -- set by the fixed attenuators in setup
         'desired_power' : -7.0, # dBm
-        'f_low' : 0.5, #GHz
-        'f_high' : 0.85, #Ghz
-        'f_step' : 5*4*1.25e-4, #Ghz
+        'f_low' : 1.215, #GHz
+        'f_high' : 1.44, #Ghz
+        'f_step' : 2*4*1.25e-4, #Ghz
         'dwell_time' : 1550.0, # ms
         'temperature_tolerance' : 3.0, # Kelvin
         'MeasCycles' : 800,
@@ -474,8 +472,8 @@ xsettings = {
 
 # Generate array of powers -- in this case, just one power.
 
-p_low = -23
-p_high = -23
+p_low = -26
+p_high = -26
 p_nstep = 1
 
 p_array = np.linspace(p_low,p_high,p_nstep)

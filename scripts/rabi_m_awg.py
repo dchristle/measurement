@@ -396,9 +396,9 @@ xsettings = {
         'constant_attenuation' : 28.0, # dBm -- set by the fixed attenuators in setup
         'desired_power' : -9.0, # dBm
         'RF_length_start' : 0.0, # ns
-        'RF_length_end' : 2040, # ns
-        'RF_length_step' : 30.0, # ns
-        'freq' : 1.36319, #GHz
+        'RF_length_end' : 800, # ns
+        'RF_length_step' : 25.0, # ns
+        'freq' : 1.2825, #GHz
         'dwell_time' : 1600.0, # ms
         'temperature_tolerance' : 2.0, # Kelvin
         'MeasCycles' : 1200,
@@ -410,7 +410,7 @@ p_high = -32
 p_nstep = 1
 
 p_array = np.linspace(p_low,p_high,p_nstep)
-p_array = np.array((-37.0, -34.0, -31.5, -29.5, -28.0, -27.0, -25.5, -24.5, -23))
+
 
 for rr in range(np.size(p_array)):
     # Create a measurement object m
@@ -423,19 +423,7 @@ for rr in range(np.size(p_array)):
     m = SiC_Rabi_Master(name_string)
     xsettings['readout_length'] = 130.0
     xsettings['desired_power'] = p_array[rr]
-    # Predict the desired Rabi period
-    freq = np.sqrt(np.power(10,(p_array[rr]/10)))/np.sqrt(np.power(10,-32.0/10.0))*0.001831
-    period = 1/freq
-    T_end = 0.75*period
-    a = np.ceil(T_end/5.0)
-    T_end_rounded = a*5.0
-    N_points = 15
-    N_step = T_end_rounded/float(N_points)
-    b = np.round(N_step/5.0)*5.0
-    true_end = b*float(N_points)
-    xsettings['RF_length_step'] = b
-    xsettings['RF_length_end'] = true_end
-    xsettings['MeasCycles'] = 45
+
     # since params is not just a dictionary, it's easy to incrementally load
     # parameters from multiple dictionaries
     # this could be very helpful to load various sets of settings from a global

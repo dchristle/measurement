@@ -231,6 +231,7 @@ class SiC_PESR_Master(m2.Measurement):
             didx = np.logical_and( (freq > self.params['dropout_low']) , (freq < self.params['dropout_high']) )
             print 'Freq size is %s' % freq.size
             freq = np.delete(freq,np.where(didx))
+            freq = np.concatenate((np.arange(1.265-0.006,1.265+0.006,0.0005),np.arange(1.321-0.006,1.321+0.006,0.0005),np.arange(1.357-0.006,1.357+0.006,0.0005),np.arange(1.419-0.006,1.419+0.006,0.0005)))
             print 'Now freq size is %s' % freq.size
             n_steps = freq.size
 
@@ -505,17 +506,17 @@ xsettings = {
         'power' : 5.0, # dBm
         'constant_attenuation' : 28.0, # dB -- set by the fixed attenuators in setup
         'desired_power' : -7.0, # dBm
-        'f_low' : 1.2775, # GHz
-        'f_high' : 1.3925, # GHz
-        'f_step' : 0.8*4*1.25e-4, # GHz
+        'f_low' : 1.265, # GHz
+        'f_high' : 1.41, # GHz
+        'f_step' : 1*4*1.25e-4, # GHz
         'RF_delay' : 50.0, # ns
         'RF_buffer' : 300.0, # ns
-        'pi_length' : 273, # ns
+        'pi_length' : 148.1, # ns
         'dwell_time' : 1500.0, # ms
         'temperature_tolerance' : 3.0, # Kelvin
         'MeasCycles' : 1000,
         'trigger_period' : 100000.0, #ns
-        'dropout' : False,
+        'dropout' : True,
         'dropout_low' : 1.31268, # GHz
         'dropout_high' : 1.355, # GHz
         'readout_length' : 130.0
@@ -526,8 +527,8 @@ xsettings = {
 
 # Generate array of powers -- in this case, just one power.
 
-p_low = -32
-p_high = -32
+p_low = -28.5
+p_high = -28.5
 p_nstep = 1
 
 p_array = np.linspace(p_low,p_high,p_nstep)
