@@ -55,7 +55,7 @@ class SiC_PESR_Master(m2.Measurement):
         total_rf_pulses = self.params['RF_delay'] + self.params['pi_length'] + self.params['RF_buffer']
         AOM_start_time = total_rf_pulses - self.params['AOM_light_delay']
         readout_start_time = AOM_start_time + self.params['AOM_light_delay']
-        trigger_period = AOM_start_time + self.params['AOM_length'] + self.params['AOM_light_delay'] + self.params['AOM_end_buffer']
+        trigger_period = AOM_start_time + self.params['AOM_length'] + self.params['AOM_end_buffer']
 
         e = element.Element('CW_mode', pulsar=qt.pulsar)
         e.add(pulse.cp(sq_pulseAOM, amplitude=1, length=100e-6), name='lasercw')
@@ -71,9 +71,9 @@ class SiC_PESR_Master(m2.Measurement):
         elements.append(e)
 
         total_rf_pulses = self.params['RF_delay'] + self.params['pi_length'] + self.params['RF_buffer']
-        AOM_start_time = total_rf_pulses - self.params['AOM_light_delay']
+        AOM_start_time = np.max((total_rf_pulses - self.params['AOM_light_delay'],0.0))
         readout_start_time = AOM_start_time + self.params['AOM_light_delay']
-        trigger_period = AOM_start_time + self.params['AOM_length'] + self.params['AOM_light_delay'] + self.params['AOM_end_buffer']
+        trigger_period = AOM_start_time + self.params['AOM_length'] + self.params['AOM_end_buffer']
         e = element.Element('ElectronPESR', pulsar=qt.pulsar)
 
 
@@ -87,10 +87,10 @@ class SiC_PESR_Master(m2.Measurement):
         name='photoncountpulse', start=readout_start_time*1.0e-9)
 
         e.add(pulse.cp(sq_pulseMW_Imod, amplitude=1.0, length=trigger_period*1.0e-9),
-        name='MWimodpulse', start=0e-9)
+        name='MWimodpulse', start=0.0e-9)
 
         e.add(pulse.cp(sq_pulseMW_Qmod, amplitude=0.0, length=trigger_period*1.0e-9),
-        name='MWqmodpulse', start=0e-9)
+        name='MWqmodpulse', start=0.0e-9)
         elements.append(e)
 
 
@@ -231,7 +231,7 @@ class SiC_PESR_Master(m2.Measurement):
             didx = np.logical_and( (freq > self.params['dropout_low']) , (freq < self.params['dropout_high']) )
             print 'Freq size is %s' % freq.size
             freq = np.delete(freq,np.where(didx))
-            freq = np.concatenate((np.arange(1.265-0.006,1.265+0.006,0.0005),np.arange(1.321-0.006,1.321+0.006,0.0005),np.arange(1.357-0.006,1.357+0.006,0.0005),np.arange(1.419-0.006,1.419+0.006,0.0005)))
+            freq = np.concatenate((np.arange(1.2635-0.004,1.2635+0.004,0.00025),np.arange(1.32052-0.004,1.32052+0.004,0.00025),np.arange(1.35948-0.004,1.35948+0.004,0.00025),np.arange(1.41464-0.004,1.41464+0.004,0.00025)))
             print 'Now freq size is %s' % freq.size
             n_steps = freq.size
 
@@ -270,16 +270,8 @@ class SiC_PESR_Master(m2.Measurement):
         # location. So I wait 15 s, then FBL again.
         print 'Waiting 5 s for temperature stabilization...'
         time.sleep(5.0)
-        if self._fbl.optimize() == False:
-            if self._fbl.optimize() == False:
-                print 'FBL failed twice, breaking.'
-        self._keystroke_check('abort')
-        if self.keystroke('abort') in ['q','Q']:
-            print 'Measurement aborted.'
-            self.stop_keystroke_monitor('abort')
-            self._pxi.set_status('off')
-            return
-        # And do it again...
+
+
         if self.params['desired_power'] >= -9.0:
             print 'Final power is high -- going to ramp slowly.'
             print 'Waiting 2 s for temperature stabilization, power to %.2f dBm' % (self.params['power']-5.0)
@@ -500,23 +492,23 @@ xsettings = {
         'focus_limit_displacement' : 20, # microns inward
         'fbl_time' : 155.0, # seconds
         'ctr_term' : 'PFI2',
-        'AOM_length' : 1600.0, # ns
+        'AOM_length' : 700.0, # ns
         'AOM_light_delay' : 655.0, # ns
-        'AOM_end_buffer' : 1200.0, # ns
+        'AOM_end_buffer' : 655 + 600.0, # ns
         'power' : 5.0, # dBm
         'constant_attenuation' : 28.0, # dB -- set by the fixed attenuators in setup
         'desired_power' : -7.0, # dBm
-        'f_low' : 1.265, # GHz
-        'f_high' : 1.41, # GHz
-        'f_step' : 1*4*1.25e-4, # GHz
-        'RF_delay' : 50.0, # ns
-        'RF_buffer' : 300.0, # ns
-        'pi_length' : 148.1, # ns
+        'f_low' : 1.278, # GHz
+        'f_high' : 1.394, # GHz
+        'f_step' : 1.0*4*1.25e-4, # GHz
+        'RF_delay' : 0.0, # ns
+        'RF_buffer' : 80.0, # ns
+        'pi_length' : 248.7, # ns
         'dwell_time' : 1500.0, # ms
         'temperature_tolerance' : 3.0, # Kelvin
         'MeasCycles' : 1000,
         'trigger_period' : 100000.0, #ns
-        'dropout' : True,
+        'dropout' : False,
         'dropout_low' : 1.31268, # GHz
         'dropout_high' : 1.355, # GHz
         'readout_length' : 130.0
@@ -527,8 +519,8 @@ xsettings = {
 
 # Generate array of powers -- in this case, just one power.
 
-p_low = -28.5
-p_high = -28.5
+p_low = -33
+p_high = -33
 p_nstep = 1
 
 p_array = np.linspace(p_low,p_high,p_nstep)
