@@ -231,7 +231,7 @@ class SiC_PESR_Master(m2.Measurement):
             didx = np.logical_and( (freq > self.params['dropout_low']) , (freq < self.params['dropout_high']) )
             print 'Freq size is %s' % freq.size
             freq = np.delete(freq,np.where(didx))
-            freq = np.concatenate((np.arange(1.2635-0.004,1.2635+0.004,0.00025),np.arange(1.32052-0.004,1.32052+0.004,0.00025),np.arange(1.35948-0.004,1.35948+0.004,0.00025),np.arange(1.41464-0.004,1.41464+0.004,0.00025)))
+            #freq = np.concatenate((np.arange(1.315-0.006,1.315+0.006,0.0005),np.arange(1.327-0.006,1.327+0.006,0.0005),np.arange(1.344-0.006,1.344+0.006,0.0005),np.arange(1.358-0.006,1.358+0.006,0.0005)))
             print 'Now freq size is %s' % freq.size
             n_steps = freq.size
 
@@ -490,7 +490,7 @@ class SiC_PESR_Master(m2.Measurement):
 
 xsettings = {
         'focus_limit_displacement' : 20, # microns inward
-        'fbl_time' : 155.0, # seconds
+        'fbl_time' : 185.0, # seconds
         'ctr_term' : 'PFI2',
         'AOM_length' : 700.0, # ns
         'AOM_light_delay' : 655.0, # ns
@@ -498,19 +498,19 @@ xsettings = {
         'power' : 5.0, # dBm
         'constant_attenuation' : 28.0, # dB -- set by the fixed attenuators in setup
         'desired_power' : -7.0, # dBm
-        'f_low' : 1.278, # GHz
-        'f_high' : 1.394, # GHz
-        'f_step' : 1.0*4*1.25e-4, # GHz
+        'f_low' : 1.10, # GHz
+        'f_high' : 1.695, # GHz
+        'f_step' : 2*4*1.25e-4, # GHz
         'RF_delay' : 0.0, # ns
         'RF_buffer' : 80.0, # ns
-        'pi_length' : 248.7, # ns
+        'pi_length' : 88.3, # ns
         'dwell_time' : 1500.0, # ms
         'temperature_tolerance' : 3.0, # Kelvin
         'MeasCycles' : 1000,
         'trigger_period' : 100000.0, #ns
-        'dropout' : False,
-        'dropout_low' : 1.31268, # GHz
-        'dropout_high' : 1.355, # GHz
+        'dropout' : True,
+        'dropout_low' : 1.28, # GHz
+        'dropout_high' : 1.460, # GHz
         'readout_length' : 130.0
         }
 
@@ -519,8 +519,8 @@ xsettings = {
 
 # Generate array of powers -- in this case, just one power.
 
-p_low = -33
-p_high = -33
+p_low = -24
+p_high = -24
 p_nstep = 1
 
 p_array = np.linspace(p_low,p_high,p_nstep)

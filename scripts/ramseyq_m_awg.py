@@ -208,7 +208,6 @@ class SiC_RamseyQ_Master(m2.Measurement):
                 time.sleep(5)
                 state = self._awg.get_state()
                 self._awg.clear_visa()
-                state = self._awg.get_state()
                 break
             except(visa.visa.VI_ERROR_TMO):
                 print 'Could not get state from AWG, probably still busy.'
@@ -470,13 +469,13 @@ xsettings = {
         'constant_attenuation' : 28.0, # dB -- set by the fixed attenuators in setup
         'desired_power' : -9.0, # dBm
         'tau_length_start' : 0.0, # ns
-        'tau_length_end' : 3280.0, # ns
-        'tau_length_step' : 40, # ns
+        'tau_length_end' : 3600.0, # ns
+        'tau_length_step' : 60, # ns
         'fringe_frequency' : 0.002, # GHz
         'poisson_gap' : True,
-        'numpoints_poisson' : 54, # number of points
-        'freq' : 1.36319, #GHz
-        'pi2_length' : 136.3, # ns
+        'numpoints_poisson' : 27, # number of points
+        'freq' : 1.357, #GHz
+        'pi2_length' : 122, # ns
         'dwell_time' : 1500.0, # ms
         'temperature_tolerance' : 2.0, # Kelvin
         'MeasCycles' : 1400,
