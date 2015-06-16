@@ -19,6 +19,7 @@ from instrument import Instrument
 import types
 import qt
 import time
+import numpy as np
 
 class SSPDController(Instrument):
 
@@ -78,6 +79,7 @@ class SSPDController(Instrument):
 #        self.add_function('iv')
 #        self.add_function('standard_iv')
         self.add_function('iv_counts0')
+        self.add_function('iv_counts_pulseconverter')
         self.add_function('iv_counts1')
         self.add_function('reset_bias')
         self.add_function('ch0on')
@@ -147,7 +149,7 @@ class SSPDController(Instrument):
 
         n = 0
         val = self.get(vmeaspar)
-        while abs(val) > self._zerosignal and n < 10:
+        while np.abs(val) > self._zerosignal and n < 10:
             print 'detector switched normal, restoring...'
             was_super = False
             self.set(biaspar, 0)
@@ -233,6 +235,52 @@ class SSPDController(Instrument):
                 counts = self.get_counts0()
             else:
                 counts = self.get_counts1()
+            print 'v_out, current_out, v_meas, counts: %f, %f, %f, %d' % (v_out, current, v_meas, counts)
+            data.add_data_point(v_out, v_meas, counts)
+
+            if v_meas > 0.5:
+                break
+
+        self.set(biaspar, 0)
+
+        qt.plot(data, name='ivcounts', clear=True)
+        qt.plot(data, name='ivcounts', valdim=2, right=True)
+
+        return data
+
+    def iv_counts_pulseconverter(self, channel, start=0, stop=7.5, step=0.25, delay=0.2):
+        '''
+        Take an IV on channel chan and measure count rate:
+        - start / stop in V
+        - steps
+        '''
+
+        print ''
+
+        biaspar = 'bias%d' % channel
+        vmeaspar = 'vmeas%d' % channel
+        ni63 = qt.instruments['NIDAQ6363'] # Get internal DAQ instrument
+        ni63.set_count_time(1.0)
+        ni63.set_ctr0_src('PFI0')
+        r = self.get_resistance() / 1000.0
+        n = (int(abs((stop - start) / step))) + 1
+        data = qt.Data(name='iv')
+        data.add_coordinate('Vbias', units='V')
+        data.add_value('Vmeas', units='V')
+        data.add_value('Counts', units='')
+        data.create_file()
+        for i in range(n):
+            v_out = start + i * step
+            current = v_out/r
+            self.set(biaspar, v_out, check=False)
+            time.sleep(delay)
+            v_meas = self.get(vmeaspar)
+            # This assumes you have the pulse converter output connected to the DAQ
+            # PFI0
+            if channel == 0:
+                counts = ni63.get('ctr0')
+            else:
+                counts = ni63.get('ctr0')
             print 'v_out, current_out, v_meas, counts: %f, %f, %f, %d' % (v_out, current, v_meas, counts)
             data.add_data_point(v_out, v_meas, counts)
 
@@ -356,10 +404,9 @@ class SSPDController(Instrument):
         return d
 
     def ch0on(self):
-        # Constant for this channel,determined by D. Christle 2014/01/31
-        # Quantum efficiency: 23.3% @ 1060 nm
-        # Dark counts: 5 per second
-        default_bias_ch0 = 3.45
+        # Constant for this channel,determined by D. Christle 2015/06/15
+        # Should give about ~200 dark counts.
+        default_bias_ch0 = -2.15
         self.set_bias0(default_bias_ch0)
         print 'SNSPD channel 0 enabled, bias set to %s V' % default_bias_ch0
         print 'Checking for superconducting state...'
