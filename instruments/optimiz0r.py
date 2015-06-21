@@ -121,7 +121,7 @@ class optimiz0r(Instrument):
                     # Use AO Smooth Goto code to smoothly go to the beginning point
                     self._fsm.AO_smooth(cur_pos, cur_pos-scan_length/2.0, 'X')
                     # Now write the points and get the counts
-                    fsm_rate = 20.0 # Hz
+                    fsm_rate = 40.0 # Hz
 
                     counts = self._fsm.sweep_and_count(temp_point_array,fsm_rate, 'ctr0','PFI0','X')
                     # Find the difference between readouts to get the counts measured
@@ -160,7 +160,7 @@ class optimiz0r(Instrument):
                     # Use AO Smooth Goto code to smoothly go to the beginning point
                     self._fsm.AO_smooth(cur_pos, cur_pos-scan_length/2.0, 'Y')
                     # Now write the points and get the counts
-                    fsm_rate = 20.0 # Hz
+                    fsm_rate = 40.0 # Hz
                     counts = self._fsm.sweep_and_count(temp_point_array,fsm_rate, 'ctr0','PFI0','Y')
                     # Find the difference between readouts to get the counts measured
                     # at a certain point, then divide by the period to get the estimate
@@ -199,7 +199,7 @@ class optimiz0r(Instrument):
                     # Now write the points and get the counts
                     counts = np.zeros(nr_of_points)
                     # HARDCODED SETUP FOR COUNT READING
-                    xps_rate = 20.0 # Hz
+                    xps_rate = 40.0 # Hz
                     xps_settle_time = 10.0*0.001 # 10 ms
                     prev_ctr0_src = self._ni63.get_ctr0_src()
                     self._ni63.set_ctr0_src('PFI0')

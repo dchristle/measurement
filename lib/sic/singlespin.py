@@ -1311,14 +1311,14 @@ class SiC_PLPolarizationBasic_Master(m2.Measurement):
             for ij in range(n_steps):
 
 
-                if time.time() > track_time or deltaM > 3000:
-                    print 'Tracking!'
-
-                    self._fbl.optimize()
-                    # Set new track time, fbl_time into the future plus a small
-                    # random time.
-                    track_time = time.time() + self.params['fbl_time'] + 5.0*np.random.uniform()
-                    deltaM = 0.0
+##                if time.time() > track_time or deltaM > 3000:
+##                    print 'Tracking!'
+##
+##                    self._fbl.optimize()
+##                    # Set new track time, fbl_time into the future plus a small
+##                    # random time.
+##                    track_time = time.time() + self.params['fbl_time'] + 5.0*np.random.uniform()
+##                    deltaM = 0.0
                 current_position = self._st0.get_position()
                 self._st0.move(int(Mvals[ij]))
                 deltaM = deltaM + (Mvals[ij] - current_position)
@@ -1332,9 +1332,9 @@ class SiC_PLPolarizationBasic_Master(m2.Measurement):
                     if np.abs(cur_pos - Mvals[ij]) < 2:
                         break
                     nn = nn + 1
-                if ij == 1:
-                    qt.msleep(0.1)
-                    self._fbl.optimize()
+
+                qt.msleep(0.1)
+                self._fbl.optimize()
                 self._ni63.set_count_time(self.params['dwell_time']/1000.0)
                 self._flip.flip()
                 curX = self._fsm.get_abs_positionX()

@@ -128,7 +128,7 @@ class SiC_PESR_Master(m2.Measurement):
         self._fbl = qt.instruments['fbl']
         self._tl = qt.instruments['tl']
         self._ni63 = qt.instruments['NIDAQ6363']
-        #self._snspd = qt.instruments['snspd']
+        self._snspd = qt.instruments['snspd']
         self._fsm = qt.instruments['fsm']
         self._ls332 = qt.instruments['ls332']
         self._pxi = qt.instruments['pxi']
@@ -183,8 +183,8 @@ class SiC_PESR_Master(m2.Measurement):
             self._va.set_attenuation(desired_atten)
         print 'Variable attenuator set to %.1f dB attenuation.' % desired_atten
         # Check if the SNSPD is still superconducting
-        #if self._snspd.check() == False:
-        #    print 'SNSPD went normal and could not restore!'
+        if self._snspd.check() == False:
+            print 'SNSPD went normal and could not restore!'
         # Start the AWG
         if self._awg.get_state() == 'Idle':
             self._awg.start()
@@ -231,7 +231,7 @@ class SiC_PESR_Master(m2.Measurement):
             didx = np.logical_and( (freq > self.params['dropout_low']) , (freq < self.params['dropout_high']) )
             print 'Freq size is %s' % freq.size
             freq = np.delete(freq,np.where(didx))
-            #freq = np.concatenate((np.arange(1.315-0.006,1.315+0.006,0.0005),np.arange(1.327-0.006,1.327+0.006,0.0005),np.arange(1.344-0.006,1.344+0.006,0.0005),np.arange(1.358-0.006,1.358+0.006,0.0005)))
+            freq = np.concatenate((np.arange(1.105,1.21,0.0015),np.arange(1.464,1.576,0.0015)))
             print 'Now freq size is %s' % freq.size
             n_steps = freq.size
 
@@ -363,6 +363,8 @@ class SiC_PESR_Master(m2.Measurement):
 
             # Enter the loop for actually sweeping the ESR frequencies
             t1 = time.time() # Take note of the time
+            self._awg.sq_forced_jump(2) # the 2 is because the indices start at 1, and the first sequence is CW mode
+            self.awg_confirm(2)
             for j in range(n_steps):
                 # This code will check for a keyboard key press of "q", and if
                 # it detects it, sets scan_on = False and then breaks out of
@@ -386,12 +388,14 @@ class SiC_PESR_Master(m2.Measurement):
                     print 'Tracking!'
                     self._awg.sq_forced_jump(1)
                     self.awg_confirm(1)
+                    self._snspd.check()
                     self._fbl.optimize()
                     # Set new track time, fbl_time into the future plus a small
                     # random time.
                     track_time = time.time() + self.params['fbl_time'] + 5.0*np.random.uniform()
-                self._awg.sq_forced_jump(2) # the 2 is because the indices start at 1, and the first sequence is CW mode
-                self.awg_confirm(2)
+                    self._awg.sq_forced_jump(2) # the 2 is because the indices start at 1, and the first sequence is CW mode
+                    self.awg_confirm(2)
+                self._snspd.check()
                 # Set the frequency to the new desired frequency
                 self._pxi.set_frequency(freq_temp[j]*1.0e9) # Remember GHz
                 setVal = self._pxi.wait_until_settled() # default wait is 50 ms
@@ -444,9 +448,9 @@ class SiC_PESR_Master(m2.Measurement):
                 print 'Temperature out of bounds, breaking.'
                 break
             # Check if the SNSPD is still superconducting
-##            if self._snspd.check() == False:
-##                print 'SNSPD went normal and could not restore, breaking.'
-##                break
+            if self._snspd.check() == False:
+                print 'SNSPD went normal and could not restore, breaking.'
+                break
             # Checks have all passed, so proceed...
 
             # Now add the sorted data array to the total array
@@ -490,27 +494,27 @@ class SiC_PESR_Master(m2.Measurement):
 
 xsettings = {
         'focus_limit_displacement' : 20, # microns inward
-        'fbl_time' : 185.0, # seconds
+        'fbl_time' : 235.0, # seconds
         'ctr_term' : 'PFI2',
-        'AOM_length' : 700.0, # ns
+        'AOM_length' : 650.0, # ns
         'AOM_light_delay' : 655.0, # ns
         'AOM_end_buffer' : 655 + 600.0, # ns
         'power' : 5.0, # dBm
         'constant_attenuation' : 28.0, # dB -- set by the fixed attenuators in setup
         'desired_power' : -7.0, # dBm
-        'f_low' : 1.10, # GHz
-        'f_high' : 1.695, # GHz
-        'f_step' : 2*4*1.25e-4, # GHz
+        'f_low' : 2.482, # GHz
+        'f_high' : 2.702, # GHz
+        'f_step' : 3*4*1.25e-4, # GHz
         'RF_delay' : 0.0, # ns
-        'RF_buffer' : 80.0, # ns
+        'RF_buffer' : 50.0, # ns
         'pi_length' : 88.3, # ns
         'dwell_time' : 1500.0, # ms
-        'temperature_tolerance' : 3.0, # Kelvin
+        'temperature_tolerance' : 0.5, # Kelvin
         'MeasCycles' : 1000,
         'trigger_period' : 100000.0, #ns
-        'dropout' : True,
-        'dropout_low' : 1.28, # GHz
-        'dropout_high' : 1.460, # GHz
+        'dropout' : False,
+        'dropout_low' : 1.48, # GHz
+        'dropout_high' : 1.56, # GHz
         'readout_length' : 130.0
         }
 
@@ -545,7 +549,7 @@ for rr in range(p_nstep):
     # into the measurement object 'm' that we just made, which will now have
     # the new power
     m.params.from_dict(xsettings)
-    do_awg_stuff = True
+    do_awg_stuff = False
     m.sequence(upload=do_awg_stuff, program=do_awg_stuff, clear=do_awg_stuff)
     # The if/then here is just leftover from previous code -- since True is
     # always True, it will always execute.
