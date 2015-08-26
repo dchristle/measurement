@@ -41,7 +41,7 @@ class optimiz0r(Instrument):
                     'sigma' : 0.35
                     },
                 'z' : {
-                    'scan_length' : 4.0,
+                    'scan_length' : 3.0,
                     'nr_of_points' : 50,
                     'qt_ins' : 'xps',
                     'channel' : 'Z',
