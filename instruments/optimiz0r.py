@@ -14,6 +14,7 @@ import types
 import qt
 import msvcrt
 import numpy as np
+import scipy
 from analysis.lib.fitting import fit,common
 reload(fit)
 reload(common)
@@ -26,26 +27,29 @@ class optimiz0r(Instrument):
         self.dimension_sets = {
             'default' : {
                 'x' : {
-                    'scan_length' : 2.0,
-                    'nr_of_points' : 60,
+                    'scan_length' : 2,
+                    'nr_of_points' : 30,
                     'qt_ins' : 'fsm',
                     'channel' : 'X',
-                    'sigma' : 0.35
+                    'sigma' : 0.35,
+                    'drift_prior' : 0.3,
 
                     },
                 'y' : {
-                    'scan_length' : 2.0,
-                    'nr_of_points' : 60,
+                    'scan_length' : 2,
+                    'nr_of_points' : 30,
                     'qt_ins' : 'fsm',
                     'channel' : 'Y',
-                    'sigma' : 0.35
+                    'sigma' : 0.35,
+                    'drift_prior' : 0.3,
                     },
                 'z' : {
-                    'scan_length' : 3.0,
+                    'scan_length' : 3.5,
                     'nr_of_points' : 50,
                     'qt_ins' : 'xps',
                     'channel' : 'Z',
-                    'sigma' : 1.1/1000.0
+                    'sigma' : 1.1/1000.0,
+                    'drift_prior' : 0.3/1000.0,
                     },
                 'xxps' : {
                     'scan_length' : 2.4,
@@ -79,7 +83,7 @@ class optimiz0r(Instrument):
         self._opt_sigma_prev = {
                                 'x' : 0.35,
                                 'y' : 0.35,
-                                'z' : 2.0/1000.0
+                                'z' : 1.1/1000.0
                                 }
         self._opt_pos = {'x' : self._fsm.get_abs_positionX(),
                          'y' : self._fsm.get_abs_positionY(),
@@ -130,7 +134,7 @@ class optimiz0r(Instrument):
                     cps = np.diff(counts)*fsm_rate
                     # Call the fitting routine to determine optimal position
                     # and set it as self._opt_pos['x'], in this case.
-                    ret = self.process_fit(point_array, cps, 'x')
+                    ret = self.process_fit(point_array, np.diff(counts), 'x', fsm_rate)
                     print 'Previous x: %.3f, new optimum: %.3f (delta %.1f nm)' % (self._opt_pos_prev['x'], self._opt_pos['x'], self._opt_pos['x']*1E3-self._opt_pos_prev['x']*1E3)
                     #
                     if np.array(point_array).min() < self._opt_pos['x'] < np.array(point_array).max():
@@ -168,7 +172,7 @@ class optimiz0r(Instrument):
                     cps = np.diff(counts)*fsm_rate
                     # Call the fitting routine to determine optimal position
                     # and set it as self._opt_pos['y'], in this case.
-                    ret = self.process_fit(point_array, cps, 'y')
+                    ret = self.process_fit(point_array, np.diff(counts), 'y', fsm_rate)
                     print 'Previous y: %.3f, new optimum: %.3f (delta %.1f nm)' % (self._opt_pos_prev['y'], self._opt_pos['y'], self._opt_pos['y']*1.0E3-self._opt_pos_prev['y']*1.0E3)
 
                     if np.array(point_array).min() < self._opt_pos['y'] < np.array(point_array).max():
@@ -219,7 +223,7 @@ class optimiz0r(Instrument):
 
                     # Call the fitting routine to determine optimal position
                     # and set it as self._opt_pos['z'], in this case.
-                    ret = self.process_fit(point_array, cps, 'z')
+                    ret = self.process_fit(point_array, counts, 'z', xps_rate)
                     print 'Previous z: %.6f, new optimum is %.6f (delta %.1f nm)' % (self._opt_pos_prev['z'], self._opt_pos['z'], self._opt_pos['z']*1.0E6-self._opt_pos_prev['z']*1.0E6)
 
 
@@ -242,7 +246,7 @@ class optimiz0r(Instrument):
 
         return ret
 
-    def process_fit(self, p, cr, dimension):
+    def process_fit(self, p, cr, dimension, rate):
 
         # p is position array
         # cr is countrate array
@@ -255,10 +259,10 @@ class optimiz0r(Instrument):
 
         if self._gaussian_fit:
             # Come up with some robust estimates, for low signal/noise conditions
-            a_guess = np.array(cr).min()
+            a_guess = np.array(cr).min()*0.9
             A_guess = np.array(cr).max()-np.array(cr).min()
             p_size = np.size(p)
-            x0_guess = p[np.round(p_size/2.0)] #np.sum(np.array(cr) * np.array(p))/np.sum(np.array(cr)**2)
+            x0_guess = p[np.round(p_size/2.0)]  #np.sum(np.array(cr) * np.array(p))/np.sum(np.array(cr)**2)
             #sigma_guess = 1.0#np.sqrt(np.sum(((np.array(cr)-x0_guess)**2)*(np.array(p))) / np.sum((np.array(p))))
             #print 'Guesses: %r %r %r %r' % (a_guess,  x0_guess,A_guess,sigma_guess)
             # The following statement is that if the old sigma is within a factor of 2 of the initial fixed value
@@ -268,45 +272,157 @@ class optimiz0r(Instrument):
             else:
                 sigma_guess = self.dimensions[dimension]['sigma']
 
-            gaussian_fit = fit.fit1d(np.array(p,dtype=float), np.array(cr,dtype=float),common.fit_gauss, a_guess,
-                    x0_guess,A_guess, sigma_guess, do_print=False,ret=True)
+            ababfunc = (a_guess + A_guess*np.exp(-(p-x0_guess)**2/(2.0*sigma_guess**2)))*rate
+            # Old method for Gaussian fit based on fit1d sub-routine; commented out 2015/08/27
+##            gaussian_fit = fit.fit1d(np.array(p,dtype=float), np.array(cr,dtype=float),common.fit_gauss, a_guess,
+##                    x0_guess,A_guess, sigma_guess, do_print=False,ret=True)
+##
+##
+##
+##            if type(gaussian_fit) != dict:
+##                pamax = np.argmax(cr)
+##                self._opt_pos[dimension] = p[pamax]
+##                ret = False
+##                print '(%s) fit failed! Set to maximum.' % dimension
+##
+##
+##            else:
+##
+##                if gaussian_fit['success'] != False:
+##                    self._fit_result = [gaussian_fit['params'][1],
+##                            gaussian_fit['params'][2],
+##                            gaussian_fit['params'][3],
+##                            gaussian_fit['params'][0] ]
+##                    self._fit_error = [gaussian_fit['error'][1],
+##                            gaussian_fit['error'][2],
+##                            gaussian_fit['error'][3],
+##                            gaussian_fit['error'][0] ]
+##                    self._opt_pos[dimension] = self._fit_result[0]
+##                    self._opt_sigma_prev[dimension] = self._fit_result[2]
+##                    ret = True
+##                    final_fit_func = gaussian_fit['params'][0] + gaussian_fit['params'][2]*np.exp(-(p-gaussian_fit['params'][1])**2/(2.0*gaussian_fit['params'][3]**2))
+##                    qt.plot(p,cr,p,ababfunc,p,final_fit_func,name='fbl_plot',needtempfile=False)
+##                    #print '(%s) optimize succeeded!' % self.get_name()
+##
+##
+##                else:
+##                    self.set_data('fit', zeros(len(p)))
+##                    ret = False
+##                    print '(%s) optimize failed! Set to maximum.' % dimension
+##                    self._opt_pos[dimension] = p[np.argmax(cr)]
+##                    qt.plot(p,cr,p,ababfunc,name='fbl_plot',clear=True,needtempfile=False)
+            # New method for fitting
+            # Purpose of this new method is to improve the robustness of both the numerical optimization and the 'mistracks'
+            # that can occur because of nearby luminescence.
+            # I think that the numerical robustness can be improved by using a
+            # multiple start technique -- start the optimization at a series of
+            # guesses across the frequency range, and note the 'best fit' value
+            # of each. Pick the one with the best fit of each of these fits, and
+            # return it, subject to the condition that the center of the peak is
+            # within the min/max of the scan range. This way, it will be no
+            # worse than the existing method and significantly more robust to
+            # finding the global minimum.
+            # The second modification is to reduce the probability of a fit to
+            # a nearby peak that isn't the one we want, which I call a 'mistrack'.
+            # This can be done by multiplying the likelihood by a prior, making
+            # it a Bayesian method, that incorporates our knowledge that the
+            # peak we want will not drift too far from scan to scan. Therefore,
+            # given two peaks that fit equally well, the one nearest to the old
+            # peak location should be selected preferentially. The exception to
+            # this is if the other peak fits exceedingly well; these statements
+            # are quantified by the exact prior probability distribution used.
+            bf_ret = self.bayesian_fit(p, cr, np.array((A_guess, x0_guess, sigma_guess, a_guess)),self.dimensions[dimension]['drift_prior'])
 
-            ababfunc = a_guess + A_guess*np.exp(-(p-x0_guess)**2/(2.0*sigma_guess**2))
-
-            if type(gaussian_fit) != dict:
+            # check if fit result is in range, process it accordingly
+            if not (bf_ret[1] > np.min(p)) and (bf_ret[1] < np.max(p)):
+                # fit out of range, set location to max
                 pamax = np.argmax(cr)
                 self._opt_pos[dimension] = p[pamax]
                 ret = False
+
                 print '(%s) fit failed! Set to maximum.' % dimension
 
 
             else:
+                self._opt_pos[dimension] = bf_ret[1]
+                self._opt_sigma_prev[dimension] = bf_ret[2]
+                ret = True
 
-                if gaussian_fit['success'] != False:
-                    self._fit_result = [gaussian_fit['params'][1],
-                            gaussian_fit['params'][2],
-                            gaussian_fit['params'][3],
-                            gaussian_fit['params'][0] ]
-                    self._fit_error = [gaussian_fit['error'][1],
-                            gaussian_fit['error'][2],
-                            gaussian_fit['error'][3],
-                            gaussian_fit['error'][0] ]
-                    self._opt_pos[dimension] = self._fit_result[0]
-                    self._opt_sigma_prev[dimension] = self._fit_result[2]
-                    ret = True
-                    final_fit_func = gaussian_fit['params'][0] + gaussian_fit['params'][2]*np.exp(-(p-gaussian_fit['params'][1])**2/(2.0*gaussian_fit['params'][3]**2))
-                    qt.plot(p,cr,p,ababfunc,p,final_fit_func,name='fbl_plot',needtempfile=False)
-                    #print '(%s) optimize succeeded!' % self.get_name()
+                final_fit_func = (bf_ret[3] + bf_ret[0]*np.exp(-(p-bf_ret[1])**2/(2.0*bf_ret[2]**2)))*rate
+                qt.plot(p,cr*rate,p,ababfunc,p,final_fit_func,name='fbl_plot',needtempfile=False)
+                #print '(%s) optimize succeeded!' % self.get_name()
 
-
-                else:
-                    self.set_data('fit', zeros(len(p)))
-                    ret = False
-                    print '(%s) optimize failed! Set to maximum.' % dimension
-                    self._opt_pos[dimension] = p[np.argmax(cr)]
-                    qt.plot(p,cr,p,ababfunc,name='fbl_plot',clear=True,needtempfile=False)
 
 
 
 
         return ret
+    def bayesian_fit(self, x, y, guess, dp):
+        A_guess = guess[0]
+        x0_guess = guess[1]
+        sigma_guess = guess[2]
+        a_guess = guess[3]
+
+        # use the previous guess for the gaussian's center as our prior
+        # probability density parameter for the center. The 300 nm width
+        # and degrees of freedom are hardcoded here, for now.
+        prior = np.array((guess[1], dp, 4))
+
+        # make an anonymous function to substitute into the optimization
+        # routine for minimization
+        func = lambda p: -1.0*self.bayesian_gauss(p,x,y,prior)
+
+        # now allocate an array to store the 'best fit' values in
+        F = np.zeros((10,1))
+        xf = np.zeros((10,4))
+        ##gval = func(np.array((A_guess, x0_guess, sigma_guess, a_guess)))
+        ##print 'guess params are %s' % (np.array((A_guess, x0_guess, sigma_guess, a_guess)))
+        ##print 'guess val is %s' % gval
+        # set up the array of starting x guesses; other parameters are the same
+        # between runs
+        x_trials = np.linspace(np.min(x),np.max(x),10)
+        for i in range(10):
+            res = scipy.optimize.minimize(func, np.array((A_guess, x_trials[i], sigma_guess, a_guess)), jac=None, bounds=((np.min(y)*0.1,np.max(y)), (np.min(x), np.max(x)), (0.05*sigma_guess,5*sigma_guess), (0,0.95*np.max(y))), method='L-BFGS-B', options={'disp': False, 'eps' : 2.0e-8})
+            # put the fit results into the array
+            if res.success:
+                xf[i,:] = res.x
+                F[i] = res.fun
+            else:
+                # fit failed, set F to inf
+                xf[i,:] = np.array((A_guess, x_trials[i], sigma_guess, a_guess))
+                F[i] = np.inf
+        # now determine what fit was the best fit
+        min_index = np.argmin(F)
+        #print 'x F %s %s' % (xf, F)
+        # select out the best fit parameters
+        return xf[min_index,:]
+
+
+    def bayesian_gauss(self, p, x, y, prior):
+        # p is a parameter array, x is the spatial position array, y is the
+        # array of counts received at that position, prior is an array of
+        # fixed prior parameters
+        #
+        # The parameter array correspondence is:
+        # A = p[0], the amplitude of the gaussian
+        # mu = p[1], the location parameter of the gaussian
+        # sigma = p[2], the width of the gaussian
+        # C = p[3], the background offset
+        #
+        # For the prior parameter density, I use a student t distribution
+        # mu_t = prior[0], the location parameter of the student t
+        # sigma_t = prior[1], the scale parameter of the student t
+        # v_t = prior[2], the degrees of freedom of the student t
+
+        # compute the ideal curve
+        y_ideal = p[3] + p[0]*np.exp(-(x-p[1])**2/(2.0*p[2]**2))
+
+        # note the slight tweak to the error weights -- sqrt(y+1.0) to handle
+        # the condition when y = 0; won't affect the statistical result much
+        chis = np.sum(-(y_ideal - y)**2.0/(2.0*(y+1.0)) - np.log(np.sqrt(y+1.0)))
+        # student t argument definition
+        q = (p[1]-prior[0])/prior[1]
+        # unnormalized log of student t
+        priorlogpdf = np.log((prior[2]/(prior[2]+q**2.0))**((1+prior[2])/2.0))
+
+        return (priorlogpdf + chis)
