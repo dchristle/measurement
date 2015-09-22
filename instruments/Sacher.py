@@ -1,13 +1,7 @@
 #-------------------------------------------------------------------------------
 # Sacher.py driver for Sacher Laser
-# Purpose:
-#
-# Author:      DiamondAdmin
-#
+# Author:      David Christle
 # Created:     21/04/2014
-# Copyright:   (c) DiamondAdmin 2014
-# Licence:     <your licence>
-#-------------------------------------------------------------------------------
 
 from instrument import Instrument
 import visa
@@ -138,13 +132,14 @@ class Sacher(Instrument):
 
     def get_all(self):
 
-        return self.get_current_limit()
-        return self.get_current()
-        return self.get_power()
-        return self.get_TEC_status()
-        return self.get_temperature()
-        return self.get_piezo_status()
-        return self.get_piezo_offset()
+        self.get_current_limit()
+        self.get_current()
+        self.get_power()
+        self.get_TEC_status()
+        self.get_temperature()
+        self.get_piezo_status()
+        self.get_piezo_offset()
+        return
 
 
     def do_get_current_limit(self):
