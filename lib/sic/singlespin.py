@@ -800,7 +800,7 @@ class SiC_DoublePulse_Master(m2.Measurement):
         e = element.Element('CW_mode_wfm', pulsar=qt.pulsar)
         e.add(pulse.cp(sq_pulseAOM, amplitude=1.0, length=100e-6,start=0.0e-9), name='lasercw')
         e.add(pulse.cp(sq_pulsePC, amplitude=1.0, length=100e-6,start=0.0e-9), name='photoncountpulsecw')
-        e.add(pulse.cp(sq_pulseMW_Imod, amplitude=1.0, length=100e-6),
+        e.add(pulse.cp(sq_pulseMW_Imod, amplitude=0.398*0.5, length=100e-6),
         name='MWimodpulsecw', start=0e-9)
         e.add(pulse.cp(sq_pulseMW_Qmod, amplitude=0.0, length=100e-6),
         name='MWqmodpulsecw', start=0e-9)
@@ -822,7 +822,7 @@ class SiC_DoublePulse_Master(m2.Measurement):
                     e.add(pulse.cp(sq_pulseAOM, amplitude=1, length=self.params['AOM_readout_length']*1.0e-9), name='laser readout', start=readout_start_time*1.0e-9)
 
                     trigger_period = self.params['AOM_start_buffer'] + self.params['AOM_init_length'] + self.params['tau_delay'][self.params['pts']-1] + self.params['AOM_readout_length'] + self.params['AOM_light_delay'] + self.params['AOM_end_buffer']
-                    e.add(pulse.cp(sq_pulseMW_Imod, amplitude=1.0, length=trigger_period*1.0e-9),
+                    e.add(pulse.cp(sq_pulseMW_Imod, amplitude=0.398*0.5, length=trigger_period*1.0e-9),
                     name='MWimodpulse', start=0e-9)
 
                     e.add(pulse.cp(sq_pulseMW_Qmod, amplitude=0.0, length=trigger_period*1.0e-9),
@@ -842,7 +842,7 @@ class SiC_DoublePulse_Master(m2.Measurement):
                     e.add(pulse.cp(sq_pulseMW, length = self.params['pi_length']*1.0e-9, amplitude = 1.0), name='microwave pi pulse', start=center_time*1.0e-9)
 
                     trigger_period = self.params['AOM_start_buffer'] + self.params['AOM_init_length'] + self.params['tau_delay'][self.params['pts']-1] + self.params['AOM_readout_length'] + self.params['AOM_light_delay'] + self.params['AOM_end_buffer']
-                    e.add(pulse.cp(sq_pulseMW_Imod, amplitude=1.0, length=trigger_period*1.0e-9),
+                    e.add(pulse.cp(sq_pulseMW_Imod, amplitude=0.398*0.5, length=trigger_period*1.0e-9),
                     name='MWimodpulse', start=0e-9)
 
                     e.add(pulse.cp(sq_pulseMW_Qmod, amplitude=0.0, length=trigger_period*1.0e-9),
@@ -892,7 +892,7 @@ class SiC_DoublePulse_Master(m2.Measurement):
         self._fbl = qt.instruments['fbl']
         self._tl = qt.instruments['tl']
         self._ni63 = qt.instruments['NIDAQ6363']
-        #self._snspd = qt.instruments['snspd']
+        self._snspd = qt.instruments['snspd']
         self._fsm = qt.instruments['fsm']
         self._ls332 = qt.instruments['ls332']
         self._pxi = qt.instruments['pxi']
@@ -972,12 +972,12 @@ class SiC_DoublePulse_Master(m2.Measurement):
         else:
             print 'Temperature in reference (%.2f from setpoint), proceeding.' % (np.abs(self._ls332.get_kelvinA() - self._ls332.get_setpoint1()))
 
-##        if self._snspd.check():
-##            print 'SNSPD is superconducting.'
-##        else:
-##            print 'SNSPD is not superconducting!'
-##            self._stop_measurement = False
-##            return
+        if self._snspd.check():
+            print 'SNSPD is superconducting.'
+        else:
+            print 'SNSPD is not superconducting!'
+            self._stop_measurement = False
+            return
 
 
         print 'Press q now to abort.'
@@ -1139,9 +1139,9 @@ class SiC_DoublePulse_Master(m2.Measurement):
             if np.abs(self._ls332.get_kelvinA() - self._ls332.get_setpoint1()) > self.params['temperature_tolerance']:
                 print 'Temperature out of bounds, breaking.'
                 break
-##            if self._snspd.check() == False:
-##                print 'SNSPD went normal and could not restore, breaking.'
-##                break
+            if self._snspd.check() == False:
+                print 'SNSPD went normal and could not restore, breaking.'
+                break
             # Checks have all passed, so proceed...
             qt.msleep(0.02)
 
