@@ -27,29 +27,29 @@ class optimiz0r(Instrument):
         self.dimension_sets = {
             'default' : {
                 'x' : {
-                    'scan_length' : 2,
-                    'nr_of_points' : 30,
+                    'scan_length' : 1.5,
+                    'nr_of_points' : 40,
                     'qt_ins' : 'fsm',
                     'channel' : 'X',
                     'sigma' : 0.35,
-                    'drift_prior' : 0.3,
+                    'drift_prior' : 0.1,
 
                     },
                 'y' : {
-                    'scan_length' : 2,
-                    'nr_of_points' : 30,
+                    'scan_length' : 1.5,
+                    'nr_of_points' : 40,
                     'qt_ins' : 'fsm',
                     'channel' : 'Y',
                     'sigma' : 0.35,
-                    'drift_prior' : 0.3,
+                    'drift_prior' : 0.1,
                     },
                 'z' : {
-                    'scan_length' : 3.5,
+                    'scan_length' : 3.0,
                     'nr_of_points' : 50,
                     'qt_ins' : 'xps',
                     'channel' : 'Z',
                     'sigma' : 1.1/1000.0,
-                    'drift_prior' : 0.3/1000.0,
+                    'drift_prior' : 0.1/1000.0,
                     },
                 'xxps' : {
                     'scan_length' : 2.4,
@@ -236,9 +236,10 @@ class optimiz0r(Instrument):
                         self._opt_pos['z'] = self._opt_pos_prev['z']
                         ret = False
                     # Use 10^6 instead of 10^3 to convert from mm to nm
+                    qt.msleep(0.1)
 
 
-                qt.msleep(1)
+                qt.msleep(0.05)
             if msvcrt.kbhit():
                 kb_char=msvcrt.getch()
                 if kb_char == "q" : break
