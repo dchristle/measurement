@@ -359,9 +359,9 @@ class SiC_WaveMotor_Master(m2.Measurement):
             if np.abs(self._ls332.get_kelvinA() - self._ls332.get_setpoint1()) > self.params['temperature_tolerance']:
                 print 'Temperature out of bounds, breaking.'
                 break
-##            if self._snspd.check() == False:
-##                print 'SNSPD went normal and could not restore, breaking.'
-##                break
+            if self._snspd.check() == False:
+                print 'SNSPD went normal and could not restore, breaking.'
+                break
             # Checks have all passed, so proceed...
 
             # Now add the sorted data array to the total array
