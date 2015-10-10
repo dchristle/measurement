@@ -16,7 +16,7 @@ reload(pulselib)
 
 class SiC_Toptica_Piezo_Sweep(m2.Measurement):
 
-    mprefix = 'wavemotor'
+    mprefix = 'topticapiezo'
 
     def sequence(self, upload=True, program=True, clear=False):
         gc.collect()
@@ -237,7 +237,7 @@ class SiC_Toptica_Piezo_Sweep(m2.Measurement):
         # Populate some arrays
         self.params['motor_pts'] = np.uint32(1 + np.ceil(np.abs(self.params['motor_end']-self.params['motor_start'])/self.params['motor_step_size']))
         self.params['motor_array'] = np.linspace(self.params['motor_start'], self.params['motor_start'] + (self.params['motor_pts']-1)*self.params['motor_step_size'], self.params['motor_pts'])
-        self.params['piezo_pts'] = np.uint32(1 + np.ceil(np.abs(self.params['peizo_end']-self.params['piezo_start'])/self.params['piezo_step_size']))
+        self.params['piezo_pts'] = np.uint32(1 + np.ceil(np.abs(self.params['piezo_end']-self.params['piezo_start'])/self.params['piezo_step_size']))
         a = np.linspace(self.params['piezo_start'], self.params['piezo_start'] + (self.params['piezo_pts']-1)*self.params['piezo_step_size'], self.params['piezo_pts'])
         b = np.linspace(self.params['piezo_start'] + (self.params['piezo_pts']-1)*self.params['piezo_step_size'], self.params['piezo_start'], self.params['piezo_pts'])
         self.params['piezo_array'] = a + b
@@ -296,7 +296,7 @@ class SiC_Toptica_Piezo_Sweep(m2.Measurement):
         self._motdl.set_position(self.params['motor_array'][self.params['motor_pts']-1])
 		#This is the reference frequency we will store in the data file, 50 GHz below the wavemeter reading at motor_position_end
         frq1 = (299792458.0/self._wvm.get_wavelength()) - 50.0 #Ghz
-
+        print 'Reference frequency: %.2f GHz' % (frq1 + 50.0)
         self.params['bins'] = np.uint32(1 + np.ceil(np.absolute(frq2-frq1)/self.params['bin_size']))
         #column 1 of the data set, i.e. relative frequency
         self.params['frq_array'] = np.linspace(0.0, (self.params['bins']-1)*self.params['bin_size'], self.params['bins'])
@@ -440,7 +440,7 @@ class SiC_Toptica_Piezo_Sweep(m2.Measurement):
             hits_array_non0 = hits_array_non0[np.nonzero(total_hits_data)]
             avg_cts_array_non0 = cts_array_non0/float(hits_array_non0)
 
-            plot2d_1 = qt.Plot2D(frq_array_non0,avg_cts_array_non0, name='WaveMotor_avg', clear=True)
+            plot2d_1 = qt.Plot2D(frq_array_non0,avg_cts_array_non0, name='topticap_avg', clear=True)
             N_cmeas = N_cmeas + 1
             average_count_data = total_count_data/float(N_cmeas)
 
@@ -466,23 +466,23 @@ class SiC_Toptica_Piezo_Sweep(m2.Measurement):
 
 xsettings = {
         'focus_limit_displacement' : 20, # microns inward
-        'fbl_time' : 30.0, # seconds
+        'fbl_time' : 50.0, # seconds
         'AOM_start_buffer' : 50.0, # ns
         'AOM_length' : 1600.0, # ns
         'AOM_light_delay' : 655.0, # ns
         'AOM_end_buffer' : 1155.0, # ns
         'Sacher_AOM_length' : 3000.0, # ns
-        'Sacher_AOM_light_delay' : 655.0, # ns
+        'Sacher_AOM_light_delay' : 950.0, # ns
         'Sacher_AOM_end_buffer' : 1155.0, # ns
         'readout_length' : 3000.0, # ns
         'ctr_term' : 'PFI2',
-        'motor_start' : 83000, # steps, make lower than motor_end
-        'motor_end' : 84000, # steps
-        'motor_step_size' : 1, # steps
-        'peizo_start' : 0, #volts
+        'motor_start' : 93900, # steps, make lower than motor_end
+        'motor_end' : 99600, # steps
+        'motor_step_size' : 200, # steps
+        'piezo_start' : 0, #volts
         'piezo_end' : 90, #volts
-        'pieoz_step' : .1, # volts
-        'bin_size' : .1, # GHz, should be same order of magnitude as (step_size * .1 GHz)
+        'pieoz_step' : 2.25, # volts
+        'bin_size' : 0.5, # GHz, should be same order of magnitude as (step_size * .1 GHz)
         'microwaves' : False, # modulate with microwaves on or off
         'off_resonant_laser' : True, # cycle between resonant and off-resonant
         'power' : 5.0, # dBm
@@ -504,19 +504,19 @@ p_array = np.linspace(p_low,p_high,p_nstep)
 for rr in range(np.size(p_array)):
     # Create a measurement object m
     print 'About to proceed -- waiting 5 s for quit (press q to quit)'
-    time.sleep(5.0)
+    time.sleep(1.0)
     if msvcrt.kbhit():
                 kb_char=msvcrt.getch()
                 if kb_char == "q": break
     name_string = 'power %.2f dBm' % (p_array[rr])
-    m = SiC_WaveMotor_Master(name_string)
+    m = SiC_Toptica_Piezo_Sweep(name_string)
     xsettings['desired_power'] = p_array[rr]
     # since params is not just a dictionary, it's easy to incrementally load
     # parameters from multiple dictionaries
     # this could be very helpful to load various sets of settings from a global
     # configuration manager!
     m.params.from_dict(xsettings)
-    do_awg_stuff = True
+    do_awg_stuff = False
     m.sequence(upload=do_awg_stuff, program=do_awg_stuff, clear=do_awg_stuff)
 
 

@@ -458,7 +458,7 @@ xsettings = {
         'Sacher_AOM_end_buffer' : 1155.0, # ns
         'readout_length' : 3000.0, # ns
         'ctr_term' : 'PFI2',
-        'motor_start' : 94095, # steps, make lower than motor_end
+        'motor_start' : 94000, # steps, make lower than motor_end
         'motor_end' : 99400, # steps
         'motor_step_size' : 100, # steps
         'bin_size' : 4, # GHz, should be same order of magnitude as (step_size * .1 GHz)
