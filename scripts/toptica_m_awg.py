@@ -149,7 +149,7 @@ class SiC_Toptica_Motor_Sweep(m2.Measurement):
         self._motdl = qt.instruments['motdl']
         self._topitca = qt.instruments['toptica']
         self._fp = qt.instruments['fp']
-        self._wvm = qt.instruments['wvm']
+        self._wvm = qt.instruments['bristol']
 
         # Prepare instruments for measurement and verify FBL output
         # Set the trigger source to internal
@@ -285,12 +285,12 @@ class SiC_Toptica_Motor_Sweep(m2.Measurement):
         self._motdl.set_position(self.params['motor_array'][0])
 		#This is the high end frequency limit, 25 GHz above the first wavemeter reading at motor_position_start we will limit our array of stored data to
         frq2 = (299792458.0/self._wvm.get_wavelength()) + 25.0 #GHz
-        self._motdl.set_position(self.params['motor_array'][self.params['pts']])
+        self._motdl.set_position(self.params['motor_array'][self.params['pts']-1])
 		#This is the reference frequency we will store in the data file, 25 GHz below the wavemeter reading at motor_position_end
         frq1 = (299792458.0/self._wvm.get_wavelength()) - 25.0 #Ghz
-
+        print 'Reference frequency: %.2f GHz' % (frq1 + 25.0)
         self.params['bins'] = np.uint32(1 + np.ceil(np.absolute(frq2-frq1)/self.params['bin_size']))
-        self.params['frq_array'] = np.linspace(0.0, (bins-1)*self.params['bin_size'], bins)
+        self.params['frq_array'] = np.linspace(0.0, (self.params['bins']-1)*self.params['bin_size'], self.params['bins'])
 		#column 2
         total_count_data = np.zeros(np.size(self.params['frq_array']), dtype='uint32')
         #column 3
@@ -344,9 +344,9 @@ class SiC_Toptica_Motor_Sweep(m2.Measurement):
 
                 # Set the new motor position
                 self._motdl.set_position(self.params['motor_array'][j])
-
+                time.sleep(0.01)
 				#Measure frequency and counts
-                frq = 299792458.0/self._wvm.get_wavelength()-frq1 #Ghz
+                frq = 299792458.0/self._wvm.get_wavelength()- frq1 + 25.0 #GHZ - should be approximately zero for the first step.
                 temp_count_data[j] = self._ni63.get('ctr1')
 
 				#Live Plot
@@ -436,7 +436,7 @@ class SiC_Toptica_Motor_Sweep(m2.Measurement):
         grp = h5.DataGroup('SiC_WaveMotor_data', self.h5data, base=self.h5base)
         grp.add('wavelength', data=self.params['frq_array'], unit='GHz', note='frequency')
         grp.add('counts', data=total_count_data, unit='counts', note='total counts per sweep')
-        grp.add('average_counts', data=total_hit_data, unit='hits', note='how many times each bin was populated')
+        grp.add('average_counts', data=total_hits_data, unit='hits', note='how many times each bin was populated')
         grp.add('initial_measured_frequency', data=frq1, unit='hits', note='base frequency')
 
 
@@ -454,14 +454,14 @@ xsettings = {
         'AOM_light_delay' : 655.0, # ns
         'AOM_end_buffer' : 1155.0, # ns
         'Sacher_AOM_length' : 3000.0, # ns
-        'Sacher_AOM_light_delay' : 655.0, # ns
+        'Sacher_AOM_light_delay' : 955.0, # ns
         'Sacher_AOM_end_buffer' : 1155.0, # ns
         'readout_length' : 3000.0, # ns
         'ctr_term' : 'PFI2',
-        'motor_start' : 83000, # steps, make lower than motor_end
-        'motor_end' : 84000, # steps
-        'motor_step_size' : 1, # steps
-        'bin_size' : .1, # GHz, should be same order of magnitude as (step_size * .1 GHz)
+        'motor_start' : 94095, # steps, make lower than motor_end
+        'motor_end' : 99400, # steps
+        'motor_step_size' : 100, # steps
+        'bin_size' : 4, # GHz, should be same order of magnitude as (step_size * .1 GHz)
         'microwaves' : False, # modulate with microwaves on or off
         'off_resonant_laser' : True, # cycle between resonant and off-resonant
         'power' : 5.0, # dBm
@@ -483,19 +483,19 @@ p_array = np.linspace(p_low,p_high,p_nstep)
 for rr in range(np.size(p_array)):
     # Create a measurement object m
     print 'About to proceed -- waiting 5 s for quit (press q to quit)'
-    time.sleep(5.0)
+    time.sleep(1.0)
     if msvcrt.kbhit():
                 kb_char=msvcrt.getch()
                 if kb_char == "q": break
     name_string = 'power %.2f dBm' % (p_array[rr])
-    m = SiC_WaveMotor_Master(name_string)
+    m = SiC_Toptica_Motor_Sweep(name_string)
     xsettings['desired_power'] = p_array[rr]
     # since params is not just a dictionary, it's easy to incrementally load
     # parameters from multiple dictionaries
     # this could be very helpful to load various sets of settings from a global
     # configuration manager!
     m.params.from_dict(xsettings)
-    do_awg_stuff = True
+    do_awg_stuff = False
     m.sequence(upload=do_awg_stuff, program=do_awg_stuff, clear=do_awg_stuff)
 
 

@@ -292,14 +292,14 @@ class SiC_Toptica_Piezo_Sweep(m2.Measurement):
         self._motdl.set_position(self.params['motor_array'][0])
 
 		#This is the high end frequency limit, 50 GHz above the first wavemeter reading at motor_position_start we will limit our array of stored data to
-        frq2 = (299792458.0/self._wvm.get_wavelength()) +50 #GHz
-        self._motdl.set_position(self.params['motor_array'][self.params['motor_pts']])
+        frq2 = (299792458.0/self._wvm.get_wavelength()) + 50.0 #GHz
+        self._motdl.set_position(self.params['motor_array'][self.params['motor_pts']-1])
 		#This is the reference frequency we will store in the data file, 50 GHz below the wavemeter reading at motor_position_end
-        frq1 = (299792458.0/self._wvm.get_wavelength()) -50 #Ghz
+        frq1 = (299792458.0/self._wvm.get_wavelength()) - 50.0 #Ghz
 
         self.params['bins'] = np.uint32(1 + np.ceil(np.absolute(frq2-frq1)/self.params['bin_size']))
         #column 1 of the data set, i.e. relative frequency
-        self.params['frq_array'] = np.linspace(0.0, (bins-1)*self.params['bin_size'], bins)
+        self.params['frq_array'] = np.linspace(0.0, (self.params['bins']-1)*self.params['bin_size'], self.params['bins'])
         #column 2, number of counts
         total_count_data = np.zeros(np.size(self.params['frq_array']), dtype='uint32')
         #column 3, number of hits in each bin
@@ -364,7 +364,7 @@ class SiC_Toptica_Piezo_Sweep(m2.Measurement):
                     self._toptica.set_piezo_voltage(self.params['piezo_array'][k])
 
                     #Measure frequency and counts
-                    frq = 299792458.0/self._wvm.get_wavelength()-frq1 #Ghz
+                    frq = 299792458.0/self._wvm.get_wavelength() - frq1 + 50.0 #Ghz
                     cts = self._ni63.get('ctr1')
 
 				    #Live Plot
@@ -454,7 +454,7 @@ class SiC_Toptica_Piezo_Sweep(m2.Measurement):
         grp = h5.DataGroup('SiC_WaveMotor_data', self.h5data, base=self.h5base)
         grp.add('wavelength', data=self.params['frq_array'], unit='GHz', note='frequency')
         grp.add('counts', data=total_count_data, unit='counts', note='total counts per sweep')
-        grp.add('average_counts', data=total_hit_data, unit='hits', note='how many times each bin was populated')
+        grp.add('average_counts', data=total_hits_data, unit='hits', note='how many times each bin was populated')
         grp.add('initial_measured_frequency', data=frq1, unit='hits', note='base frequency')
 
 
@@ -490,7 +490,7 @@ xsettings = {
         'desired_power' : -28.0, # dBm
         'freq' : 1.30122, #GHz
         'dwell_time' : 2200.0, # ms
-        'temperature_tolerance' : 2.0, # Kelvin
+        'temperature_tolerance' : 4.0, # Kelvin
         'MeasCycles' : 1200,
         }
 
