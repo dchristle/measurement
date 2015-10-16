@@ -20,7 +20,7 @@ reload(singlespin)
 xsettings = {
         'focus_limit_displacement' : 20, # microns inward
         'fbl_time' : 130.0, # seconds
-        'constant_attenuation' : 28.0, # dBm -- set by the fixed attenuators in setup
+        'constant_attenuation' : 14.0, # dBm -- set by the fixed attenuators in setup
         'AOM_light_delay' : 655.0, # ns
         'AOM_start_buffer' : 155.0, # ns
         'AOM_end_buffer' : 20.0, # ns
@@ -33,12 +33,12 @@ xsettings = {
         'tau_length_end' : 1500.0, # ns
         'tau_length_step' : 1, # ns
         'microwaves' : True, # Boolean
-        'frequency' : 1.36319, #GHz
-        'desired_power' : -32.0, # dBm
-        'pi_length' : 273.0, # ns
+        'frequency' : 1.3225, #GHz
+        'desired_power' : -19.0, # dBm
+        'pi_length' : 260.0, # ns
         'CFDLevel0' : 125,
         'CFDZeroCross0' : 10,
-        'CFDLevel1' : 12,
+        'CFDLevel1' : 110,
         'CFDZeroCross1' : 10,
         'Binning' : 5,
         'Offset' : 0,
@@ -51,7 +51,7 @@ xsettings = {
         }
 
 
-tlca = np.array((0.14,0.11,0.19))
+tlca = np.array((0.20,))
 
 
 for cur in tlca:
@@ -61,6 +61,11 @@ for cur in tlca:
     # Create a measurement object m
     print 'About to proceed -- waiting 5 s for quit (press q to quit)'
     time.sleep(5.0)
+    if msvcrt.kbhit():
+                    kb_char=msvcrt.getch()
+                    if kb_char == "q" :
+                        scan_on = False
+                        break
     name_string = '3C_microwave_%.2f A' % cur
     m = singlespin.SiC_DoublePulse_Master(name_string)
     xsettings['MeasCycles'] = 170
@@ -84,6 +89,13 @@ for cur in tlca:
     # important! hdf5 data must be closed, otherwise will not be readable!
     # (can also be done by hand, of course)
     m.finish()
+    print 'Quit now before next measurement'
+    time.sleep(5.0)
+    if msvcrt.kbhit():
+                    kb_char=msvcrt.getch()
+                    if kb_char == "q" :
+                        scan_on = False
+                        break
 
 # Alert that measurement has finished
 ea_t = qt.instruments['ea']
@@ -101,6 +113,12 @@ track_iter = 0
 while track_on == True and track_iter < 50:
     track_iter = track_iter + 1
     print 'Tracking for %d iteration.' % track_iter
+    time.sleep(1.0)
+    if msvcrt.kbhit():
+                    kb_char=msvcrt.getch()
+                    if kb_char == "q" :
+                        scan_on = False
+                        break
     fbl_t.optimize()
     time.sleep(5.0)
     if msvcrt.kbhit() or track_on == False:
