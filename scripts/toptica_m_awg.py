@@ -290,7 +290,7 @@ class SiC_Toptica_Motor_Sweep(m2.Measurement):
         frq1 = (299792458.0/self._wvm.get_wavelength()) - 25.0 #Ghz
         print 'Reference frequency: %.2f GHz' % (frq1 + 25.0)
         self.params['bins'] = np.uint32(1 + np.ceil(np.absolute(frq2-frq1)/self.params['bin_size']))
-        self.params['frq_array'] = np.linspace(0.0, (self.params['bins']-1)*self.params['bin_size'], self.params['bins'])
+        self.params['frq_array'] = np.linspace(-25.0, (self.params['bins']-1)*self.params['bin_size']-25.0, self.params['bins'])
 		#column 2
         total_count_data = np.zeros(np.size(self.params['frq_array']), dtype='uint32')
         #column 3
@@ -345,8 +345,8 @@ class SiC_Toptica_Motor_Sweep(m2.Measurement):
                 # Set the new motor position
                 self._motdl.set_position(self.params['motor_array'][j])
                 time.sleep(0.01)
-				#Measure frequency and counts
-                frq = 299792458.0/self._wvm.get_wavelength()- frq1 + 25.0 #GHZ - should be approximately zero for the first step.
+				# Measure frequency and counts
+                frq = 299792458.0/self._wvm.get_wavelength()- (frq1 + 25.0) # GHz - should be approximately zero for the first step.
                 temp_count_data[j] = self._ni63.get('ctr1')
 
 				#Live Plot

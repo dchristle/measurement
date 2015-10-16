@@ -842,7 +842,7 @@ class SiC_DoublePulse_Master(m2.Measurement):
                     e.add(pulse.cp(sq_pulseMW, length = self.params['pi_length']*1.0e-9, amplitude = 1.0), name='microwave pi pulse', start=center_time*1.0e-9)
 
                     trigger_period = self.params['AOM_start_buffer'] + self.params['AOM_init_length'] + self.params['tau_delay'][self.params['pts']-1] + self.params['AOM_readout_length'] + self.params['AOM_light_delay'] + self.params['AOM_end_buffer']
-                    e.add(pulse.cp(sq_pulseMW_Imod, amplitude=0.398*0.5, length=trigger_period*1.0e-9),
+                    e.add(pulse.cp(sq_pulseMW_Imod, amplitude=1.0, length=trigger_period*1.0e-9),
                     name='MWimodpulse', start=0e-9)
 
                     e.add(pulse.cp(sq_pulseMW_Qmod, amplitude=0.0, length=trigger_period*1.0e-9),
@@ -944,14 +944,38 @@ class SiC_DoublePulse_Master(m2.Measurement):
             self._stop_measurement = False
             return
 
+                # set the AWG to CW mode
+        for i in range(20):
+            try:
+                if self._awg.get_state() == 'Idle':
+                    self._awg.start()
+                break
+            except(visa.visa.VI_ERROR_TMO):
+                print 'AWG still busy -- trying again...'
+
         # set the AWG to CW mode
-        print 'Booting up AWG.'
-        self._awg.start()
-        time.sleep(5.0)
-        print 'Sequence force jump to CW waveform...'
+        print 'Waiting 15 s for AWG to start...'
+        time.sleep(10.0)
+
+        for i in range(20):
+            time.sleep(5.0)
+            state = ''
+            print 'Waiting for AWG to start...'
+            try:
+                state = self._awg.get_state()
+            except(visa.visa.VI_ERROR_TMO):
+                print 'Still waiting for AWG after timeout...'
+            if state == 'Running':
+                    print 'AWG started OK...Clearing VISA interface.'
+                    self._awg.clear_visa()
+                    break
+            if state == 'Idle':
+                self._awg.start()
+
         self._awg.sq_forced_jump(1)
-        time.sleep(3.0)
+        time.sleep(1)
         self.awg_confirm(1)
+
         print 'CW waveform confirmed.'
 
 
@@ -1014,9 +1038,7 @@ class SiC_DoublePulse_Master(m2.Measurement):
         print '--Double pulse meas. from %.4f ns to %.4f ns in %.4f ns steps (%.2f steps), %.5f GHz --' % (self.params['tau_length_start'], self.params['tau_length_end'], self.params['tau_length_step'], self.params['pts'], self.params['frequency'])
 
 
-        # Start the AWG sequencing
-        self._awg.start()
-        time.sleep(3)
+
         N_cmeas = 0
         # Set a time that controls when the next feedback occurs
         # Add a bit of randomness to this process
@@ -1083,7 +1105,8 @@ class SiC_DoublePulse_Master(m2.Measurement):
 
 
                 # Check signal count
-                time.sleep(0.25)
+                time.sleep(0.015)
+                self._snspd.check()
                 self._ni63.set_count_time(1.0)
                 if msvcrt.kbhit():
                     kb_char=msvcrt.getch()
