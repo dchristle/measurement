@@ -404,7 +404,16 @@ class SiC_Toptica_Piezo_Sweep(m2.Measurement):
 
             print 'Cycle %d/%d total time is %.3f, efficiency of %.2f percent. Heater output is at %.1f. ' % (i+1, int(self.params['MeasCycles']), tt, (self.params['motor_pts'] *self.params['dwell_time']/1000.0)/tt*100.0, self._ls332.get_heater_output())
 
+            # Sum along all sweeps so far for the y values, and just use the last frequency displacement measurement
+            # for the x-axis. This is an approximation assuming the repeatability is good.
+            frq_array_non0 = self.params['frq_array'][np.nonzero(total_hits_data)]
+            cts_array_non0 = total_count_data[np.nonzero(total_hits_data)]
+            hits_array_non0 = total_hits_data[np.nonzero(total_hits_data)]
+            avg_cts_array_non0 = cts_array_non0/float(hits_array_non0)
 
+            plot2d_1 = qt.Plot2D(frq_array_non0,avg_cts_array_non0, name='topticap_avg', clear=True)
+            N_cmeas = N_cmeas + 1
+            average_count_data = total_count_data/float(N_cmeas)
 
 
             qt.msleep(0.002) # keeps GUI responsive and checks if plot needs updating.
@@ -430,16 +439,7 @@ class SiC_Toptica_Piezo_Sweep(m2.Measurement):
                 break
             # Checks have all passed, so proceed...
 
-            # Sum along all sweeps so far for the y values, and just use the last frequency displacement measurement
-            # for the x-axis. This is an approximation assuming the repeatability is good.
-            frq_array_non0 = self.params['frq_array'][np.nonzero(total_hits_data)]
-            cts_array_non0 = total_count_data[np.nonzero(total_hits_data)]
-            hits_array_non0 = hits_array_non0[np.nonzero(total_hits_data)]
-            avg_cts_array_non0 = cts_array_non0/float(hits_array_non0)
 
-            plot2d_1 = qt.Plot2D(frq_array_non0,avg_cts_array_non0, name='topticap_avg', clear=True)
-            N_cmeas = N_cmeas + 1
-            average_count_data = total_count_data/float(N_cmeas)
 
 
 
@@ -448,11 +448,12 @@ class SiC_Toptica_Piezo_Sweep(m2.Measurement):
         # Set AWG to CW mode
         self._awg.sq_forced_jump(1)
         print 'Size of freq is %d, counts is %d, avg is %d, init is %d' % (np.size(self.params['frq_array']), np.size(total_count_data), np.size(total_hits_data), np.size(frq1))
+
         # Measurement has ended, so start saving data
         grp = h5.DataGroup('SiC_WaveMotor_data', self.h5data, base=self.h5base)
-        grp.add('frequency', data=self.params['frq_array'], unit='GHz', note='frequency')
-        grp.add('counts', data=total_count_data, unit='counts', note='total counts per sweep')
-        grp.add('average_counts', data=total_hits_data, unit='hits', note='how many times each bin was populated')
+        grp.add('frequency', data=frq_array_non0, unit='GHz', note='frequency')
+        grp.add('counts', data=cts_array_non0, unit='counts', note='total counts per sweep')
+        grp.add('total_hits_array', data=hits_array_non0, unit='hits', note='how many times each bin was populated')
         grp.add('initial_measured_frequency', data=frq1, unit='hits', note='base frequency')
 
 
@@ -475,25 +476,26 @@ xsettings = {
         'readout_length' : 3000.0, # ns
         'ctr_term' : 'PFI2',
         'motor_start' : 87900, # steps, make lower than motor_end
-        'motor_end' : 113600, # steps
-        'motor_step_size' : 300, # steps
+        'motor_end' : 88200, # steps
+        #'motor_end' : 113600, # steps
+        'motor_step_size' : 350, # steps
         'piezo_start' : 0, #volts
-        'piezo_end' : 90, #volts
-        'piezo_step_size' : 1.5, # volts (dispersion is roughly ~0.4 GHz/V)
-        'bin_size' : 0.25, # GHz, should be same order of magnitude as (step_size * .1 GHz)
+        'piezo_end' : 1, #volts
+        'piezo_step_size' : 1.0, # volts (dispersion is roughly ~0.4 GHz/V)
+        'bin_size' : 0.4, # GHz, should be same order of magnitude as (step_size * .1 GHz)
         'microwaves' : False, # modulate with microwaves on or off
         'off_resonant_laser' : True, # cycle between resonant and off-resonant
         'power' : 5.0, # dBm
         'constant_attenuation' : 28.0, # dBm -- set by the fixed attenuators in setup
         'desired_power' : -28.0, # dBm
-        'freq' : 1.30122, #GHz
+        'freq' : 1.3358, #GHz
         'dwell_time' : 2200.0, # ms
         'temperature_tolerance' : 4.0, # Kelvin
         'MeasCycles' : 1,
         }
 
-p_low = -28
-p_high = -28
+p_low = -25
+p_high = -25
 p_nstep = 1
 
 p_array = np.linspace(p_low,p_high,p_nstep)
@@ -514,7 +516,7 @@ for rr in range(np.size(p_array)):
     # this could be very helpful to load various sets of settings from a global
     # configuration manager!
     m.params.from_dict(xsettings)
-    do_awg_stuff = False
+    do_awg_stuff = True
     m.sequence(upload=do_awg_stuff, program=do_awg_stuff, clear=do_awg_stuff)
 
 
