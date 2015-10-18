@@ -357,23 +357,24 @@ class SiC_Toptica_Piezo_Sweep(m2.Measurement):
                     #Measure frequency and counts
                     frq = 299792458.0/self._wvm.get_wavelength() - (frq1 + 100.0) #Ghz
                     self._snspd.check()
-                    cts = self._ni63.get('ctr1')
+                    if frq > frq1 and frq < frq2:
+                        cts = self._ni63.get('ctr1')
 
-				    #Live Plot
-                    data.add_data_point(frq,cts)
+    				    #Live Plot
+                        data.add_data_point(frq,cts)
 
-				    #find where in the 3 column data structure to add counts
-                    index = np.searchsorted(self.params['frq_array'], frq)
+    				    #find where in the 3 column data structure to add counts
+                        index = np.searchsorted(self.params['frq_array'], frq)
 
-				    #update the appropriate two columns keeping track of total counts and total hits
-                    total_count_data[index] = total_count_data[index] + temp_count_data[j]
-                    total_hits_data[index] = total_hits_data[index] + 1
+    				    #update the appropriate two columns keeping track of total counts and total hits
+                        total_count_data[index] = total_count_data[index] + temp_count_data[j]
+                        total_hits_data[index] = total_hits_data[index] + 1
 
 
-                    qt.msleep(0.002) # keeps GUI responsive and checks if plot needs updating.
+                        qt.msleep(0.002) # keeps GUI responsive and checks if plot needs updating.
 
-                    # check snspd
-                    self._snspd.check()
+                        # check snspd
+                        self._snspd.check()
 
                     # Check if a track should occur. If so, track.
                     if time.time() > track_time:
@@ -418,7 +419,7 @@ class SiC_Toptica_Piezo_Sweep(m2.Measurement):
             frq_array_non0 = self.params['frq_array'][np.nonzero(total_hits_data)]
             cts_array_non0 = total_count_data[np.nonzero(total_hits_data)]
             hits_array_non0 = total_hits_data[np.nonzero(total_hits_data)]
-            avg_cts_array_non0 = np.divide(cts_array_non0,hits_array_non0.astype(float64))
+            avg_cts_array_non0 = np.divide(cts_array_non0.astype(float64),hits_array_non0.astype(float64))
 
             plot2d_1 = qt.Plot2D(frq_array_non0,avg_cts_array_non0, name='topticap_avg', clear=True)
             N_cmeas = N_cmeas + 1
@@ -484,9 +485,9 @@ xsettings = {
         'Sacher_AOM_end_buffer' : 1155.0, # ns
         'readout_length' : 3000.0, # ns
         'ctr_term' : 'PFI2',
-        'motor_start' : 91000, # steps, should be lower than motor_end
-        'motor_end' : 106600, # steps
-        'motor_step_size' : 360, # steps
+        'motor_start' : 104600, # steps, should be lower than motor_end
+        'motor_end' : 123600, # steps
+        'motor_step_size' : 290, # steps
         'piezo_start' : 0, #volts
         'piezo_end' : 90, #volts
         'piezo_step_size' : 0.5, # volts (dispersion is roughly ~0.4 GHz/V)
