@@ -286,15 +286,18 @@ class SiC_Toptica_Piezo_Sweep(m2.Measurement):
         else:
 			self._motdl.set_position(0)
 
-        self._toptica.set_piezo_voltage(self.params['piezo_array'][0])
         self._motdl.set_position(self.params['motor_array'][0])
+
+        self._toptica.set_piezo_voltage(self.params['piezo_array'][0])
+
 
 		#This is the high end frequency limit, 100 GHz above the first wavemeter reading at motor_position_start we will limit our array of stored data to
         frq2 = (299792458.0/self._wvm.get_wavelength()) + 100.0 #GHz
+
         self._motdl.set_position(self.params['motor_array'][self.params['motor_pts']-1])
 		#This is the reference frequency we will store in the data file, 100 GHz below the wavemeter reading at motor_position_end
         frq1 = (299792458.0/self._wvm.get_wavelength()) - 100.0 #Ghz
-        print 'Reference frequency: %.2f GHz' % (frq1 + 100.0)
+        print 'Start (reference) frequency %.2f GHz / %.2f nm -- End frequency %.2f GHz / %.2f nm' % (frq1 + 100.0,299792458.0/(frq1 + 100.0), frq2 - 100.0, 299792458.0/(frq2-100.0))
         self.params['bins'] = np.uint32(1 + np.ceil(np.absolute(frq2-frq1)/self.params['bin_size']))
         #column 1 of the data set, i.e. relative frequency
         self.params['frq_array'] = np.linspace(-100.0, np.absolute(frq2-frq1), self.params['bins'])
@@ -302,7 +305,12 @@ class SiC_Toptica_Piezo_Sweep(m2.Measurement):
         total_count_data = np.zeros(np.size(self.params['frq_array']), dtype='uint32')
         #column 3, number of hits in each bin
         total_hits_data = np.zeros(np.size(self.params['frq_array']), dtype='uint32')
+        if self.params['motor_array'][0] > 10000:
+			self._motdl.set_position(self.params['motor_array'][0]-10000)
+        else:
+			self._motdl.set_position(0)
 
+        self._motdl.set_position(self.params['motor_array'][0])
         for i in range(self.params['MeasCycles']):
 
             # Create array for the single-sweep data
@@ -348,6 +356,7 @@ class SiC_Toptica_Piezo_Sweep(m2.Measurement):
                     time.sleep(0.05)
                     #Measure frequency and counts
                     frq = 299792458.0/self._wvm.get_wavelength() - (frq1 + 100.0) #Ghz
+                    self._snspd.check()
                     cts = self._ni63.get('ctr1')
 
 				    #Live Plot
@@ -409,7 +418,7 @@ class SiC_Toptica_Piezo_Sweep(m2.Measurement):
             frq_array_non0 = self.params['frq_array'][np.nonzero(total_hits_data)]
             cts_array_non0 = total_count_data[np.nonzero(total_hits_data)]
             hits_array_non0 = total_hits_data[np.nonzero(total_hits_data)]
-            avg_cts_array_non0 = cts_array_non0/float(hits_array_non0)
+            avg_cts_array_non0 = np.divide(cts_array_non0,hits_array_non0.astype(float64))
 
             plot2d_1 = qt.Plot2D(frq_array_non0,avg_cts_array_non0, name='topticap_avg', clear=True)
             N_cmeas = N_cmeas + 1
@@ -475,13 +484,12 @@ xsettings = {
         'Sacher_AOM_end_buffer' : 1155.0, # ns
         'readout_length' : 3000.0, # ns
         'ctr_term' : 'PFI2',
-        'motor_start' : 87900, # steps, make lower than motor_end
-        'motor_end' : 88200, # steps
-        #'motor_end' : 113600, # steps
-        'motor_step_size' : 350, # steps
+        'motor_start' : 91000, # steps, should be lower than motor_end
+        'motor_end' : 106600, # steps
+        'motor_step_size' : 360, # steps
         'piezo_start' : 0, #volts
-        'piezo_end' : 1, #volts
-        'piezo_step_size' : 1.0, # volts (dispersion is roughly ~0.4 GHz/V)
+        'piezo_end' : 90, #volts
+        'piezo_step_size' : 0.5, # volts (dispersion is roughly ~0.4 GHz/V)
         'bin_size' : 0.4, # GHz, should be same order of magnitude as (step_size * .1 GHz)
         'microwaves' : False, # modulate with microwaves on or off
         'off_resonant_laser' : True, # cycle between resonant and off-resonant
