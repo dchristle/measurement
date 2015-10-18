@@ -355,9 +355,10 @@ class SiC_Toptica_Piezo_Sweep(m2.Measurement):
                     self._toptica.set_piezo_voltage(self.params['piezo_array'][k])
                     time.sleep(0.05)
                     #Measure frequency and counts
-                    frq = 299792458.0/self._wvm.get_wavelength() - (frq1 + 100.0) #Ghz
+                    cur_frq = 299792458.0/self._wvm.get_wavelength()
+                    frq = cur_frq - (frq1 + 100.0) #Ghz
                     self._snspd.check()
-                    if frq > frq1 and frq < frq2:
+                    if cur_frq > frq1 and cur_frq < frq2:
                         cts = self._ni63.get('ctr1')
 
     				    #Live Plot
