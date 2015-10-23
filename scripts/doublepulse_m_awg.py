@@ -33,7 +33,7 @@ xsettings = {
         'tau_length_end' : 1500.0, # ns
         'tau_length_step' : 1, # ns
         'microwaves' : True, # Boolean
-        'frequency' : 1.3225, #GHz
+        'frequency' : 1.3358, #GHz
         'desired_power' : -19.0, # dBm
         'pi_length' : 260.0, # ns
         'CFDLevel0' : 125,

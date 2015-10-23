@@ -234,7 +234,7 @@ class SiC_Toptica_Piezo_Sweep(m2.Measurement):
 
         # Populate some arrays
         self.params['motor_pts'] = np.uint32(1 + np.ceil(np.abs(self.params['motor_end']-self.params['motor_start'])/self.params['motor_step_size']))
-        self.params['motor_array'] = np.linspace(self.params['motor_start'], self.params['motor_start'] + (self.params['motor_pts']-1)*self.params['motor_step_size'], self.params['motor_pts'])
+        self.params['motor_array'] = np.uint32(np.linspace(self.params['motor_start'], self.params['motor_start'] + (self.params['motor_pts']-1)*self.params['motor_step_size'], self.params['motor_pts']))
         self.params['piezo_pts'] = np.uint32(1 + np.ceil(np.abs(self.params['piezo_end']-self.params['piezo_start'])/self.params['piezo_step_size']))
         a = np.linspace(self.params['piezo_start'],self.params['piezo_end'], self.params['piezo_pts'])
         #b = np.linspace(self.params['piezo_end'] + (self.params['piezo_pts']-1)*self.params['piezo_step_size'], self.params['piezo_start'], self.params['piezo_pts'])
@@ -290,12 +290,44 @@ class SiC_Toptica_Piezo_Sweep(m2.Measurement):
 
         self._toptica.set_piezo_voltage(self.params['piezo_array'][0])
 
+        # Monitor laser frequency
+        frq_recent = np.zeros(3)
+        for zz in range(3):
+            time.sleep(1.0)
+            frq_recent[zz] = 299792458/self._wvm.get_wavelength()
+        # Check if laser is stable, if not, wait
+        for zz in range(30):
+            if (np.max(frq_recent) - np.min(frq_recent)) < 3.0:
+                break
+            time.sleep(1.0)
+            np.roll(frq_recent,1)
+            frq_recent[0] = 299792458/self._wvm.get_wavelength()
+            if zz >=29:
+                print 'Laser frequency readout on wavemeter did not stabilize after 30 seconds!'
 
 		#This is the high end frequency limit, 100 GHz above the first wavemeter reading at motor_position_start we will limit our array of stored data to
         frq2 = (299792458.0/self._wvm.get_wavelength()) + 100.0 #GHz
 
         self._motdl.set_position(self.params['motor_array'][self.params['motor_pts']-1])
+
 		#This is the reference frequency we will store in the data file, 100 GHz below the wavemeter reading at motor_position_end
+        time.sleep(2.0)
+
+        # Monitor laser frequency
+        frq_recent = np.zeros(5)
+        for zz in range(5):
+            time.sleep(1.0)
+            frq_recent[zz] = 299792458/self._wvm.get_wavelength()
+        # Check if laser is stable, if not, wait
+        for zz in range(30):
+            if (np.max(frq_recent) - np.min(frq_recent)) < 3.0:
+                break
+            time.sleep(1.0)
+            np.roll(frq_recent,1)
+            frq_recent[0] = 299792458/self._wvm.get_wavelength()
+            if zz >=29:
+                print 'Laser frequency readout on wavemeter did not stabilize after 30 seconds!'
+
         frq1 = (299792458.0/self._wvm.get_wavelength()) - 100.0 #Ghz
         print 'Start (reference) frequency %.2f GHz / %.2f nm -- End frequency %.2f GHz / %.2f nm' % (frq1 + 100.0,299792458.0/(frq1 + 100.0), frq2 - 100.0, 299792458.0/(frq2-100.0))
         self.params['bins'] = np.uint32(1 + np.ceil(np.absolute(frq2-frq1)/self.params['bin_size']))
@@ -346,6 +378,21 @@ class SiC_Toptica_Piezo_Sweep(m2.Measurement):
                 self._toptica.set_piezo_voltage(self.params['piezo_array'][0])
                 self._motdl.set_position(self.params['motor_array'][j])
                 time.sleep(2)
+                # Monitor laser frequency
+                frq_recent = np.zeros(5)
+                for zz in range(5):
+                    time.sleep(1.0)
+                    frq_recent[zz] = 299792458/self._wvm.get_wavelength()
+                # Check if laser is stable, if not, wait
+                for zz in range(30):
+                    if (np.max(frq_recent) - np.min(frq_recent)) < 3.0:
+                        break
+                    time.sleep(1.0)
+                    np.roll(frq_recent,1)
+                    frq_recent[0] = 299792458/self._wvm.get_wavelength()
+                    if zz >=29:
+                        print 'Laser frequency readout on wavemeter did not stabilize after 30 seconds!'
+
 
                 temp_count_data = np.zeros(self.params['piezo_pts'] , dtype='uint32')
 
@@ -363,6 +410,8 @@ class SiC_Toptica_Piezo_Sweep(m2.Measurement):
 
     				    #Live Plot
                         data.add_data_point(frq,cts)
+                        # Keep track of the last frequency for settling purposes
+                        last_frq = frq
 
     				    #find where in the 3 column data structure to add counts
                         index = np.searchsorted(self.params['frq_array'], frq)
@@ -486,12 +535,12 @@ xsettings = {
         'Sacher_AOM_end_buffer' : 1155.0, # ns
         'readout_length' : 3000.0, # ns
         'ctr_term' : 'PFI2',
-        'motor_start' : 104600, # steps, should be lower than motor_end
-        'motor_end' : 123600, # steps
-        'motor_step_size' : 290, # steps
+        'motor_start' : 96000, # steps, should be lower than motor_end
+        'motor_end' : 101000, # steps
+        'motor_step_size' : 200, # steps
         'piezo_start' : 0, #volts
         'piezo_end' : 90, #volts
-        'piezo_step_size' : 0.5, # volts (dispersion is roughly ~0.4 GHz/V)
+        'piezo_step_size' : 0.025, # volts (dispersion is roughly ~0.4 GHz/V)
         'bin_size' : 0.4, # GHz, should be same order of magnitude as (step_size * .1 GHz)
         'microwaves' : False, # modulate with microwaves on or off
         'off_resonant_laser' : True, # cycle between resonant and off-resonant
