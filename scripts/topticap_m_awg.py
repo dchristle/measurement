@@ -297,7 +297,8 @@ class SiC_Toptica_Piezo_Sweep(m2.Measurement):
             frq_recent[zz] = 299792458/self._wvm.get_wavelength()
         # Check if laser is stable, if not, wait
         for zz in range(30):
-            if (np.max(frq_recent) - np.min(frq_recent)) < 3.0:
+            if (np.max(frq_recent) - np.min(frq_recent)) < 1.0:
+                print 'Laser stabilized. Dispersion %.2f MHz, range %.2f MHz' % (np.std(frq_recent)*1000.0, 1000.0*(np.max(frq_recent)-np.min(frq_recent)))
                 break
             time.sleep(1.0)
             np.roll(frq_recent,1)
@@ -308,6 +309,10 @@ class SiC_Toptica_Piezo_Sweep(m2.Measurement):
 		#This is the high end frequency limit, 100 GHz above the first wavemeter reading at motor_position_start we will limit our array of stored data to
         frq2 = (299792458.0/self._wvm.get_wavelength()) + 100.0 #GHz
 
+        if self.params['motor_array'][0] > 10000:
+			self._motdl.set_position(self.params['motor_array'][self.params['motor_pts']-1]-10000)
+        else:
+			self._motdl.set_position(0)
         self._motdl.set_position(self.params['motor_array'][self.params['motor_pts']-1])
 
 		#This is the reference frequency we will store in the data file, 100 GHz below the wavemeter reading at motor_position_end
@@ -320,8 +325,8 @@ class SiC_Toptica_Piezo_Sweep(m2.Measurement):
             frq_recent[zz] = 299792458.0/self._wvm.get_wavelength()
         # Check if laser is stable, if not, wait
         for zz in range(30):
-            if (np.max(frq_recent) - np.min(frq_recent)) < 3.0:
-                print 'Laser stabilized. Dispersion %.2f GHz, range %.2f GHz' % (np.std(frq_recent), np.max(frq_recent)-np.min(frq_recent))
+            if (np.max(frq_recent) - np.min(frq_recent)) < 1.0:
+                print 'Laser stabilized. Dispersion %.2f MHz, range %.2f MHz' % (np.std(frq_recent)*1000.0, 1000.0*(np.max(frq_recent)-np.min(frq_recent)))
                 break
             time.sleep(1.0)
             np.roll(frq_recent,1)
@@ -391,7 +396,8 @@ class SiC_Toptica_Piezo_Sweep(m2.Measurement):
                     frq_recent[zz] = 299792458/self._wvm.get_wavelength()
                 # Check if laser is stable, if not, wait
                 for zz in range(30):
-                    if (np.max(frq_recent) - np.min(frq_recent)) < 3.0:
+                    if (np.max(frq_recent) - np.min(frq_recent)) < 1.0:
+                        print 'Laser stabilized. Dispersion %.2f MHz, range %.2f MHz' % (np.std(frq_recent)*1000.0, 1000.0*(np.max(frq_recent)-np.min(frq_recent)))
                         break
                     time.sleep(1.0)
                     np.roll(frq_recent,1)
@@ -411,6 +417,10 @@ class SiC_Toptica_Piezo_Sweep(m2.Measurement):
                     cur_frq = 299792458.0/self._wvm.get_wavelength()
                     frq = cur_frq - (frq1 + 100.0) #Ghz
                     self._snspd.check()
+                    # this will ensure points aren't retaken -- but it will also cause subsequent scans to skip,
+                    # so it's a bit of a hack, just to try this out for now. the hack is that if the current frequency
+                    # is nearby any previously sampled frequency to within 1 bin width, we skip it.
+
                     if cur_frq > frq1 and cur_frq < frq2:
                         cts = self._ni63.get('ctr1')
 
@@ -541,13 +551,13 @@ xsettings = {
         'Sacher_AOM_end_buffer' : 1155.0, # ns
         'readout_length' : 3000.0, # ns
         'ctr_term' : 'PFI2',
-        'motor_start' : 96800, # steps, should be lower than motor_end
-        'motor_end' : 101000, # steps
+        'motor_start' : 92000, # steps, should be lower than motor_end
+        'motor_end' : 98000, # steps
         'motor_step_size' : 150, # steps
         'piezo_start' : 0, #volts
         'piezo_end' : 90, #volts
-        'piezo_step_size' : 0.08, # volts (dispersion is roughly ~0.4 GHz/V)
-        'bin_size' : 0.01, # GHz, should be same order of magnitude as (step_size * .1 GHz)
+        'piezo_step_size' : 0.16, # volts (dispersion is roughly ~0.4 GHz/V)
+        'bin_size' : 0.03, # GHz, should be same order of magnitude as (step_size * .1 GHz)
         'microwaves' : False, # modulate with microwaves on or off
         'off_resonant_laser' : True, # cycle between resonant and off-resonant
         'power' : 5.0, # dBm
