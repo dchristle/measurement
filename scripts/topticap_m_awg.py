@@ -338,11 +338,11 @@ class SiC_Toptica_Piezo_Sweep(m2.Measurement):
         print 'Start (reference) frequency %.2f GHz / %.2f nm -- End frequency %.2f GHz / %.2f nm' % (frq1 + 100.0,299792458.0/(frq1 + 100.0), frq2 - 100.0, 299792458.0/(frq2-100.0))
         self.params['bins'] = np.uint32(1 + np.ceil(np.absolute(frq2-frq1)/self.params['bin_size']))
         #column 1 of the data set, i.e. relative frequency
-        self.params['frq_array'] = np.linspace(-100.0, np.absolute(frq2-frq1), self.params['bins'])
+        frq_array = np.linspace(-100.0, np.absolute(frq2-frq1), self.params['bins'])
         #column 2, number of counts
-        total_count_data = np.zeros(np.size(self.params['frq_array']), dtype='uint32')
+        total_count_data = np.zeros(np.size(frq_array), dtype='uint32')
         #column 3, number of hits in each bin
-        total_hits_data = np.zeros(np.size(self.params['frq_array']), dtype='uint32')
+        total_hits_data = np.zeros(np.size(frq_array), dtype='uint32')
         if self.params['motor_array'][0] > 10000:
 			self._motdl.set_position(self.params['motor_array'][0]-10000)
         else:
@@ -430,7 +430,7 @@ class SiC_Toptica_Piezo_Sweep(m2.Measurement):
                         last_frq = frq
 
     				    #find where in the 3 column data structure to add counts
-                        index = np.searchsorted(self.params['frq_array'], frq)
+                        index = np.searchsorted(frq_array, frq)
 
     				    #update the appropriate two columns keeping track of total counts and total hits
                         total_count_data[index] = total_count_data[index] + temp_count_data[j]
@@ -482,7 +482,7 @@ class SiC_Toptica_Piezo_Sweep(m2.Measurement):
 
             # Sum along all sweeps so far for the y values, and just use the last frequency displacement measurement
             # for the x-axis. This is an approximation assuming the repeatability is good.
-            frq_array_non0 = self.params['frq_array'][np.nonzero(total_hits_data)]
+            frq_array_non0 = frq_array[np.nonzero(total_hits_data)]
             cts_array_non0 = total_count_data[np.nonzero(total_hits_data)]
             hits_array_non0 = total_hits_data[np.nonzero(total_hits_data)]
             avg_cts_array_non0 = np.divide(cts_array_non0.astype(float64),hits_array_non0.astype(float64))
@@ -523,10 +523,10 @@ class SiC_Toptica_Piezo_Sweep(m2.Measurement):
         self._pxi.set_status('off')
         # Set AWG to CW mode
         self._awg.sq_forced_jump(1)
-        print 'Size of freq is %d, counts is %d, avg is %d, init is %d' % (np.size(self.params['frq_array']), np.size(total_count_data), np.size(total_hits_data), np.size(frq1))
+        print 'Size of freq is %d, counts is %d, avg is %d, init is %d' % (np.size(frq_array), np.size(total_count_data), np.size(total_hits_data), np.size(frq1))
         data.close_file()
         # Measurement has ended, so start saving data
-        grp = h5.DataGroup('SiC_WaveMotor_data', self.h5data, base=self.h5base)
+        grp = h5.DataGroup('SiC_Resonant_data', self.h5data, base=self.h5base)
         grp.add('frequency', data=frq_array_non0, unit='GHz', note='frequency')
         grp.add('counts', data=cts_array_non0, unit='counts', note='total counts per sweep')
         grp.add('total_hits_array', data=hits_array_non0, unit='hits', note='how many times each bin was populated')
