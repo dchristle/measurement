@@ -44,7 +44,7 @@ class optimiz0r(Instrument):
                     'drift_prior' : 0.1,
                     },
                 'z' : {
-                    'scan_length' : 3.0,
+                    'scan_length' : 2.0,
                     'nr_of_points' : 50,
                     'qt_ins' : 'xps',
                     'channel' : 'Z',

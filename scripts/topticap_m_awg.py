@@ -92,7 +92,7 @@ class SiC_Toptica_Piezo_Sweep(m2.Measurement):
             total_microwave_length = resonant_laser_start_time + self.params['Sacher_AOM_length']+ self.params['Sacher_AOM_end_buffer']
             e.add(pulse.cp(sq_pulseMW, length = total_microwave_length*1.0e-9, amplitude = 1.0), name='microwave pulse', start=0.0*1.0e-9)
             # Add the I/Q modulator pulses
-            e.add(pulse.cp(sq_pulseMW_Imod, amplitude=1.0, length=total_microwave_length*1.0e-9),
+            e.add(pulse.cp(sq_pulseMW_Imod, amplitude=0.5, length=total_microwave_length*1.0e-9),
             name='MWimodpulse', start=0e-9)
 
             e.add(pulse.cp(sq_pulseMW_Qmod, amplitude=0.0, length=total_microwave_length*1.0e-9),
@@ -239,7 +239,7 @@ class SiC_Toptica_Piezo_Sweep(m2.Measurement):
         a = np.linspace(self.params['piezo_start'],self.params['piezo_end'], self.params['piezo_pts'])
         #b = np.linspace(self.params['piezo_end'] + (self.params['piezo_pts']-1)*self.params['piezo_step_size'], self.params['piezo_start'], self.params['piezo_pts'])
         self.params['piezo_array'] = a
-        print 'piezo array is %s' %self.params['piezo_array']
+        #print 'piezo array is %s' %self.params['piezo_array']
 		#print '--Toptica motor/piezo scan meas. from %.3f nm to %.3f nm in %.3f nm steps (%f steps)--' % (self.params['wavelength_start'], self.params['wavelength_end'], self.params['wavelength_step_size'], self.params['motor_pts'])
 
         #total_count_data = np.zeros(self.params['motor_pts'] , dtype='uint32')
@@ -410,30 +410,34 @@ class SiC_Toptica_Piezo_Sweep(m2.Measurement):
 
                 #sweep through the piezo_array voltages, which should go from low to high and then back to low
                 for k in range(np.size(self.params['piezo_array'])):
+
                     #Set the new piezo voltage
                     self._toptica.set_piezo_voltage(self.params['piezo_array'][k])
                     time.sleep(0.05)
-                    #Measure frequency and counts
-                    cur_frq = 299792458.0/self._wvm.get_wavelength()
-                    frq = cur_frq - (frq1 + 100.0) #Ghz
-                    self._snspd.check()
-                    # this will ensure points aren't retaken -- but it will also cause subsequent scans to skip,
-                    # so it's a bit of a hack, just to try this out for now. the hack is that if the current frequency
-                    # is nearby any previously sampled frequency to within 1 bin width, we skip it.
 
-                    if cur_frq > frq1 and cur_frq < frq2:
+                    # Measure frequency and counts
+                    cur_frq = 299792458.0/self._wvm.get_wavelength()
+                    offset_frq = cur_frq - frq1
+
+                    # Check for superconductivity
+                    self._snspd.check()
+
+
+                    # Determine if we should measure in the logic statement here
+                    #
+
+                    if cur_frq > frq1 and cur_frq < frq2 and (np.sum(total_hits_data) < 10 or np.min(np.abs( offset_frq - frq_array[np.nonzero(total_hits_data)])) > self.params['bin_size']):
                         cts = self._ni63.get('ctr1')
 
     				    #Live Plot
-                        data.add_data_point(frq,cts)
-                        # Keep track of the last frequency for settling purposes
-                        last_frq = frq
+                        data.add_data_point(cur_frq,cts)
+
 
     				    #find where in the 3 column data structure to add counts
-                        index = np.searchsorted(frq_array, frq)
+                        index = np.searchsorted(frq_array, offset_frq)
 
     				    #update the appropriate two columns keeping track of total counts and total hits
-                        total_count_data[index] = total_count_data[index] + temp_count_data[j]
+                        total_count_data[index] = total_count_data[index] + cts # temp_count_data[j]
                         total_hits_data[index] = total_hits_data[index] + 1
 
 
@@ -517,8 +521,8 @@ class SiC_Toptica_Piezo_Sweep(m2.Measurement):
 
 
 
-
-
+        # Set the piezo voltage back to 0
+        self._toptica.set_piezo_voltage(0.0)
         # Stop PXI sig gen
         self._pxi.set_status('off')
         # Set AWG to CW mode
@@ -541,7 +545,7 @@ class SiC_Toptica_Piezo_Sweep(m2.Measurement):
 
 xsettings = {
         'focus_limit_displacement' : 20, # microns inward
-        'fbl_time' : 50.0, # seconds
+        'fbl_time' : 60.0, # seconds
         'AOM_start_buffer' : 50.0, # ns
         'AOM_length' : 1600.0, # ns
         'AOM_light_delay' : 655.0, # ns
@@ -551,12 +555,12 @@ xsettings = {
         'Sacher_AOM_end_buffer' : 1155.0, # ns
         'readout_length' : 3000.0, # ns
         'ctr_term' : 'PFI2',
-        'motor_start' : 92000, # steps, should be lower than motor_end
-        'motor_end' : 98000, # steps
+        'motor_start' : 96220, # steps, should be lower than motor_end
+        'motor_end' : 109950, # steps
         'motor_step_size' : 150, # steps
         'piezo_start' : 0, #volts
         'piezo_end' : 90, #volts
-        'piezo_step_size' : 0.16, # volts (dispersion is roughly ~0.4 GHz/V)
+        'piezo_step_size' : 0.25, # volts (dispersion is roughly ~0.4 GHz/V)
         'bin_size' : 0.03, # GHz, should be same order of magnitude as (step_size * .1 GHz)
         'microwaves' : False, # modulate with microwaves on or off
         'off_resonant_laser' : True, # cycle between resonant and off-resonant
@@ -564,13 +568,13 @@ xsettings = {
         'constant_attenuation' : 28.0, # dBm -- set by the fixed attenuators in setup
         'desired_power' : -28.0, # dBm
         'freq' : 1.3358, #GHz
-        'dwell_time' : 2200.0, # ms
+        'dwell_time' : 250.0, # ms
         'temperature_tolerance' : 4.0, # Kelvin
         'MeasCycles' : 1,
         }
 
-p_low = -25
-p_high = -25
+p_low = -29
+p_high = -29
 p_nstep = 1
 
 p_array = np.linspace(p_low,p_high,p_nstep)
