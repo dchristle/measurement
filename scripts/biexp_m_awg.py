@@ -141,6 +141,7 @@ class SiC_Biexponential_Master(m2.Measurement):
         self._awg = qt.instruments['awg']
         self._va = qt.instruments['va']
         self._ph = qt.instruments['ph']
+        self._polo = qt.instruments['polo']
 
         # Prepare instruments for measurement and verify FBL output
         # Set the trigger source to internal
@@ -177,7 +178,9 @@ class SiC_Biexponential_Master(m2.Measurement):
         time.sleep(1)
         self.awg_confirm(1)
 
-
+        # set pololu to beam block ON
+        self._polo.set_target0(1840)
+        # optimize
         self._fbl.optimize()
         # Set focus axis limit
         cur_Z = self._xps.get_abs_positionZ()
@@ -276,7 +279,8 @@ class SiC_Biexponential_Master(m2.Measurement):
             # Create an array for the single-sweep data
             temp_count_data = np.zeros(self.params['pts'] , dtype='uint32')
 
-
+            # unblock the Mira
+            self._polo.set_target0(0)
             # Enter the loop for measurement
             t1 = time.time()
             for j in range(int(self.params['pts'])):
@@ -290,7 +294,8 @@ class SiC_Biexponential_Master(m2.Measurement):
                     break
                 # Check if a track should occur. If so, track.
                 if time.time() > track_time:
-
+                    # block the mira
+                    self._polo.set_target0(1840)
                     # set the AWG into CW mode for tracking
                     self._awg.sq_forced_jump(1)
                     self.awg_confirm(1)
@@ -299,14 +304,18 @@ class SiC_Biexponential_Master(m2.Measurement):
                     # Re-optimize
                     fbl.optimize()
 
+                    # unblock the mira
+                    self._polo.set_target0(1840)
+
                     # Set new track time
                     track_time = time.time() + self.params['fbl_time'] + 5.0*np.random.uniform()
+
 
 
                 # Set the new RF pulse length
                 self._awg.sq_forced_jump(seq_index[j]+2) # the +2 is because the indices start at 1, and the first sequence is CW mode
                 time.sleep(0.1)
-                if j < 5 or (j > 5 and np.random.random() < 0.01):
+                if j < 5 or (j > 5 and np.random.random() < 0.02):
                     self.awg_confirm(seq_index[j]+2)
 
                 # Start the PicoHarp acquisition, wait, then retrieve the histogram
@@ -337,7 +346,7 @@ class SiC_Biexponential_Master(m2.Measurement):
                 # Add the data to the master array
                 average_s_data[j+k*n_wfms,:] = average_s_data[j+k*n_wfms,:] + current_data
                 # Compute the total photons collected
-                sad = np.sum(average_s_data[j+k*n_wfms,:])
+                sad = np.sum(average_s_data[j,:])
 
                 # Average the two counts and save it for later as a diagostic
                 signal_0_data[i] = (temp_countA+temp_countB)/2.0
@@ -348,11 +357,11 @@ class SiC_Biexponential_Master(m2.Measurement):
                 self._signal_0_data = signal_0_data;
 
 
-                if self.params['cycle_waveforms'] and j == 0:
-                    plot2dlog0 = qt.Plot2D(np.log(1.0+np.double(average_s_data[0+k*n_wfms,:])), name='sicpl6ph_logarithmstart', clear=True)
+                if j == 0:
+                    plot2dlog0 = qt.Plot2D(np.log(1.0+np.double(average_s_data[0,:])), name='sicbiexp_logarithmstart', clear=True)
 
-                if self.params['cycle_waveforms'] and j == n_wfms-1:
-                    plot2dlog1 = qt.Plot2D(np.log(1.0+np.double(average_s_data[1+k*n_wfms,:])), name='sicpl6ph_logarithmend', clear=True)
+                if j == self.params['pts']-1:
+                    plot2dlog1 = qt.Plot2D(np.log(1.0+np.double(average_s_data[self.params['pts'],:])), name='sicbiexp_logarithmend', clear=True)
 
                 self._keystroke_check('abort')
                 if self.keystroke('abort') in ['q','Q']:
@@ -397,28 +406,18 @@ class SiC_Biexponential_Master(m2.Measurement):
                 break
             # Checks have all passed, so proceed...
 
-            # Now add the sorted data array to the total array
-            # Use the argsort functionality to sort the count data by the frequnecy
-            # it was taken at.
-            total_count_data = total_count_data + temp_count_data[np.array(seq_index).argsort().tolist()]
-            if i == 0:
-                intermediate_total_data[0,:] = total_count_data
-            elif np.mod(i,10) == 0:
-                intermediate_temp_data = np.zeros( (i/10+1,self.params['pts'] ), dtype='uint32')
-                intermediate_temp_data[:-1,:] = intermediate_total_data
-                intermediate_temp_data[i/10,:] = total_count_data
-                intermediate_total_data = np.copy(intermediate_temp_data)
-                #print 'size is %s' % (np.size(intermediate_total_data))
-                #intermediate_total_data = np.vstack((intermediate_total_data,total_count_data))
+
+
             if i == 0:
                 signal[0] = self._ni63.get('ctr1')
             elif np.mod(i,10):
                 signal = np.hstack((signal,self._ni63.get('ctr1')))
-            plot2d_1 = qt.Plot2D(1e9*self.params['MW_pulse_durations'],total_count_data, name='rabi_avg', clear=True)
             N_cmeas = N_cmeas + 1
-            average_count_data = total_count_data/float(N_cmeas)
 
 
+
+        # Block the Mira
+        self._polo.set_target0(1840)
 
         # Stop PXI sig gen
         self._pxi.set_status('off')
@@ -426,10 +425,10 @@ class SiC_Biexponential_Master(m2.Measurement):
         self._awg.sq_forced_jump(1)
         # Measurement has ended, so start saving data
         grp = h5.DataGroup('SiC_Rabi_data', self.h5data, base=self.h5base)
+        grp.add('average_signal', data=average_s_data, unit='counts', note='total signal count histogram array')
         grp.add('length', data=1e9*self.params['MW_pulse_durations'], unit='ns', note='frequency')
         grp.add('counts', data=total_count_data, unit='counts', note='total counts')
         grp.add('N_cmeas', data=N_cmeas, unit='', note='total completed measurement cycles')
-        grp.add('intermediate', data=intermediate_total_data, unit='', note='intermediate total count data')
         grp.add('signal', data=signal, unit='counts', note='signal rate per N iterations')
 
 
