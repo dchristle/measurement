@@ -28,6 +28,7 @@ class SiC_Biexponential_Master(m2.Measurement):
         sq_pulsePC = pulse.SquarePulse(channel='photoncount', name='A square pulse on photon counting switch')
         sq_pulseMW_Imod = pulse.SquarePulse(channel='MW_Imod', name='A square pulse on MW I modulation')
         sq_pulseMW_Qmod = pulse.SquarePulse(channel='MW_Qmod', name='A square pulse on MW I modulation')
+        sq_pulsePH = pulse.SquarePulse(channel='phtrigger', name='A square pulse on phtrigger')
 
 
         self.params['pts'] = np.uint32(1 + np.ceil(np.abs(self.params['RF_length_end'] - self.params['RF_length_start'])/self.params['RF_length_step']))
@@ -55,8 +56,10 @@ class SiC_Biexponential_Master(m2.Measurement):
         e.add(pulse.cp(sq_pulseAOM, amplitude=1, length=100e-6), name='lasercw')
         e.add(pulse.cp(sq_pulsePC, amplitude=1.0, length=100e-6),
         name='photoncountpulsecw')
-        e.add(pulse.cp(sq_pulseMW_Imod, amplitude=1, length=100e-6),
+        e.add(pulse.cp(sq_pulseMW_Imod, amplitude=0.01, length=100e-6),
         name='MWimodpulsecw', start=0e-9)
+##        e.add(pulse.cp(sq_pulseMW_Imod, amplitude=1, length=100e-6),
+##        name='MWimodpulsecw', start=0e-9)
         e.add(pulse.cp(sq_pulseMW_Qmod, amplitude=0.0, length=100e-6),
         name='MWqmodpulsecw', start=0e-9)
         # Add a microwave pulse to allow microwave energy to reach the sample even while tracking.
@@ -84,11 +87,15 @@ class SiC_Biexponential_Master(m2.Measurement):
             e.add(pulse.cp(sq_pulsePC, amplitude=1.0, length=self.params['readout_length']*1.0e-9),
             name='photoncountpulse', start=readout_start_time*1.0e-9)
 
-            e.add(pulse.cp(sq_pulseMW_Imod, amplitude=1*1, length=trigger_period*1.0e-9),
+            e.add(pulse.cp(sq_pulseMW_Imod, amplitude=0.01*1, length=trigger_period*1.0e-9),
             name='MWimodpulse', start=0e-9)
 
             e.add(pulse.cp(sq_pulseMW_Qmod, amplitude=0.0, length=trigger_period*1.0e-9),
             name='MWqmodpulse', start=0e-9)
+
+            e.add(pulse.cp(sq_pulsePH, amplitude=-0.7, length=self.params['PH_trigger_length']*1.0e-9), name='picoharp trigger', start=self.params['PH_trigger_time']*1.0e-9)
+
+
             elements.append(e)
 
 
@@ -179,7 +186,8 @@ class SiC_Biexponential_Master(m2.Measurement):
         self.awg_confirm(1)
 
         # set pololu to beam block ON
-        self._polo.set_target0(1840)
+        self._polo.set_target0(10)
+        time.sleep(1.0)
         # optimize
         self._fbl.optimize()
         # Set focus axis limit
@@ -280,7 +288,8 @@ class SiC_Biexponential_Master(m2.Measurement):
             temp_count_data = np.zeros(self.params['pts'] , dtype='uint32')
 
             # unblock the Mira
-            self._polo.set_target0(0)
+            self._polo.set_target0(1840)
+            time.sleep(1.0)
             # Enter the loop for measurement
             t1 = time.time()
             for j in range(int(self.params['pts'])):
@@ -295,7 +304,8 @@ class SiC_Biexponential_Master(m2.Measurement):
                 # Check if a track should occur. If so, track.
                 if time.time() > track_time:
                     # block the mira
-                    self._polo.set_target0(1840)
+                    self._polo.set_target0(10)
+                    time.sleep(1.0)
                     # set the AWG into CW mode for tracking
                     self._awg.sq_forced_jump(1)
                     self.awg_confirm(1)
@@ -306,6 +316,7 @@ class SiC_Biexponential_Master(m2.Measurement):
 
                     # unblock the mira
                     self._polo.set_target0(1840)
+                    time.sleep(1.0)
 
                     # Set new track time
                     track_time = time.time() + self.params['fbl_time'] + 5.0*np.random.uniform()
@@ -344,14 +355,14 @@ class SiC_Biexponential_Master(m2.Measurement):
                 qt.msleep(0.004) # keeps GUI responsive and checks if plot needs updating.
 
                 # Add the data to the master array
-                average_s_data[j+k*n_wfms,:] = average_s_data[j+k*n_wfms,:] + current_data
+                average_s_data[seq_index[j],:] = average_s_data[seq_index[j],:] + current_data
                 # Compute the total photons collected
-                sad = np.sum(average_s_data[j,:])
+                sad = np.sum(average_s_data[seq_index[j],:])
 
                 # Average the two counts and save it for later as a diagostic
                 signal_0_data[i] = (temp_countA+temp_countB)/2.0
                 scd = np.sum(current_data)
-                print 'Measured %.1f counts during this acqusition, average sum is %.1f counts, on waveform %d of %d' % (scd, sad, j+1, n_wfms)
+                print 'Measured %.1f counts during this acqusition, average sum is %.1f counts, on waveform %d of %d' % (scd, sad, seq_index[j]+1, self.params['pts'])
                 # Plot the total counts
                 self._average_s_data = average_s_data;
                 self._signal_0_data = signal_0_data;
@@ -379,10 +390,6 @@ class SiC_Biexponential_Master(m2.Measurement):
 
             print 'Cycle %d/%d total time is %.3f, efficiency of %.2f percent. Heater output is at %.1f. ' % (i+1, int(self.params['MeasCycles']), tt, (self.params['pts'] *self.params['dwell_time']/1000.0)/tt*100.0, self._ls332.get_heater_output())
 
-            # Converting to numpy and back is sort of a hack, but it's one line.
-            sorted_temp_data = temp_count_data[np.array(seq_index).argsort().tolist()]
-
-            plot2d_0 = qt.Plot2D(1e9*self.params['MW_pulse_durations'],sorted_temp_data, name='rabi_single_sweep', clear=True)
             qt.msleep(0.002) # keeps GUI responsive and checks if plot needs updating.
             if msvcrt.kbhit() or scan_on == False or self._stop_measurement == True:
                 kb_char=msvcrt.getch()
@@ -417,7 +424,8 @@ class SiC_Biexponential_Master(m2.Measurement):
 
 
         # Block the Mira
-        self._polo.set_target0(1840)
+        self._polo.set_target0(10)
+        time.sleep(1.0)
 
         # Stop PXI sig gen
         self._pxi.set_status('off')
@@ -444,7 +452,7 @@ xsettings = {
         'AOM_length' : 1400.0, # ns
         'AOM_light_delay' : 655.0, # ns
         'AOM_end_buffer' : 1155.0, # ns
-        'RF_delay' : 10.0, # ns
+        'RF_delay' : 5.0, # ns
         'RF_buffer' : 150.0, # ns
         'readout_length' : 130.0, # ns
         'ctr_term' : 'PFI2',
@@ -463,11 +471,13 @@ xsettings = {
         'CFDZeroCross0' : 10,
         'CFDLevel1' : 125,
         'CFDZeroCross1' : 10,
-        'Binning' : 5,
+        'Binning' : 7,
         'Offset' : 0,
         'SyncDiv' : 1,
         'SyncOffset' : 0,
         'AcqTime' : 120, # PicoHarp acquisition time in seconds
+        'PH_trigger_time' : 0.0, #ns
+        'PH_trigger_length' : 50.0, #ns
         }
 
 p_low = -9
