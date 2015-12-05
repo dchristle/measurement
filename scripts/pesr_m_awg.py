@@ -52,11 +52,6 @@ class SiC_PESR_Master(m2.Measurement):
         # Create waveform that has laser, microwaves, photon counting, and 1/0 I/Q modulation on
         # all the time for a long period of time (~100 us).
 
-        total_rf_pulses = self.params['RF_delay'] + self.params['pi_length'] + self.params['RF_buffer']
-        AOM_start_time = total_rf_pulses - self.params['AOM_light_delay']
-        readout_start_time = AOM_start_time + self.params['AOM_light_delay']
-        trigger_period = AOM_start_time + self.params['AOM_length'] + self.params['AOM_end_buffer']
-
         e = element.Element('CW_mode', pulsar=qt.pulsar)
         e.add(pulse.cp(sq_pulseAOM, amplitude=1, length=100e-6), name='lasercw')
         e.add(pulse.cp(sq_pulsePC, amplitude=1.0, length=100e-6),
@@ -67,11 +62,11 @@ class SiC_PESR_Master(m2.Measurement):
         name='MWqmodpulsecw', start=0e-9)
         # Add a microwave pulse to allow microwave energy to reach the sample even while tracking.
         # This will give a much more stable measurement for higher powers.
-        e.add(pulse.cp(sq_pulseMW, length = self.params['pi_length']*1e-9, amplitude = 1.0), name='microwave pulse', start=self.params['RF_delay']*1.0e-9)
+        e.add(pulse.cp(sq_pulseMW, length = self.params['pi_length']*1e-9, amplitude = 1), name='microwave pulse', start=self.params['RF_delay']*1.0e-9)
         elements.append(e)
 
         total_rf_pulses = self.params['RF_delay'] + self.params['pi_length'] + self.params['RF_buffer']
-        AOM_start_time = np.max((total_rf_pulses - self.params['AOM_light_delay'],0.0))
+        AOM_start_time = np.max(((total_rf_pulses - self.params['AOM_light_delay']), 0.0))
         readout_start_time = AOM_start_time + self.params['AOM_light_delay']
         trigger_period = AOM_start_time + self.params['AOM_length'] + self.params['AOM_end_buffer']
         e = element.Element('ElectronPESR', pulsar=qt.pulsar)
@@ -81,12 +76,12 @@ class SiC_PESR_Master(m2.Measurement):
 
         e.add(pulse.cp(sq_pulseAOM, amplitude=1, length=self.params['AOM_length']*1.0e-9), name='laser init', start=AOM_start_time*1.0e-9)
 
-        e.add(pulse.cp(sq_pulseMW, length = self.params['pi_length']*1.0e-9, amplitude = 1.0), name='microwave pulse', start=self.params['RF_delay']*1.0e-9)
+        e.add(pulse.cp(sq_pulseMW, length = self.params['pi_length']*1.0e-9, amplitude = 1), name='microwave pulse', start=self.params['RF_delay']*1.0e-9)
 
         e.add(pulse.cp(sq_pulsePC, amplitude=1.0, length=self.params['readout_length']*1.0e-9),
         name='photoncountpulse', start=readout_start_time*1.0e-9)
 
-        e.add(pulse.cp(sq_pulseMW_Imod, amplitude=1.0, length=trigger_period*1.0e-9),
+        e.add(pulse.cp(sq_pulseMW_Imod, amplitude=.297/400.0*250.0, length=trigger_period*1.0e-9),
         name='MWimodpulse', start=0.0e-9)
 
         e.add(pulse.cp(sq_pulseMW_Qmod, amplitude=0.0, length=trigger_period*1.0e-9),
@@ -177,7 +172,7 @@ class SiC_PESR_Master(m2.Measurement):
         desired_atten = self.params['power'] - self.params['constant_attenuation'] - self.params['desired_power']
         if desired_atten > 15.5:
             print 'Cannot attenuate that high -- setting to 15.5 dB attenuation!'
-            self.va_set_attenuation(15.5)
+            self._va.set_attenuation(15.5)
             # Should figure out a way to stop the measurement here.
         else:
             self._va.set_attenuation(desired_atten)
@@ -231,7 +226,7 @@ class SiC_PESR_Master(m2.Measurement):
             didx = np.logical_and( (freq > self.params['dropout_low']) , (freq < self.params['dropout_high']) )
             print 'Freq size is %s' % freq.size
             freq = np.delete(freq,np.where(didx))
-            freq = np.concatenate((np.arange(1.105,1.21,0.0015),np.arange(1.464,1.576,0.0015)))
+            # freq = np.concatenate((np.arange(1.142,1.18,0.001),np.arange(1.82,1.88,0.001),np.arange(0.674,0.74,0.001)))
             print 'Now freq size is %s' % freq.size
             n_steps = freq.size
 
@@ -496,25 +491,25 @@ xsettings = {
         'focus_limit_displacement' : 20, # microns inward
         'fbl_time' : 235.0, # seconds
         'ctr_term' : 'PFI2',
-        'AOM_length' : 650.0, # ns
+        'AOM_length' : 1200.0, # ns
         'AOM_light_delay' : 655.0, # ns
         'AOM_end_buffer' : 655 + 600.0, # ns
         'power' : 5.0, # dBm
-        'constant_attenuation' : 28.0, # dB -- set by the fixed attenuators in setup
+        'constant_attenuation' : 14.0, # dB -- set by the fixed attenuators in setup
         'desired_power' : -7.0, # dBm
-        'f_low' : 2.482, # GHz
-        'f_high' : 2.702, # GHz
-        'f_step' : 3*4*1.25e-4, # GHz
+        'f_low' : 1.302, # GHz
+        'f_high' : 1.367, # GHz
+        'f_step' : 5e-4, # GHz
         'RF_delay' : 0.0, # ns
         'RF_buffer' : 50.0, # ns
-        'pi_length' : 88.3, # ns
+        'pi_length' : 400, # ns
         'dwell_time' : 1500.0, # ms
-        'temperature_tolerance' : 0.5, # Kelvin
+        'temperature_tolerance' : 3, # Kelvin
         'MeasCycles' : 1000,
         'trigger_period' : 100000.0, #ns
-        'dropout' : False,
-        'dropout_low' : 1.48, # GHz
-        'dropout_high' : 1.56, # GHz
+        'dropout' : True,
+        'dropout_low' : 1.353, # GHz
+        'dropout_high' : 1.38, # GHz
         'readout_length' : 130.0
         }
 
@@ -523,8 +518,8 @@ xsettings = {
 
 # Generate array of powers -- in this case, just one power.
 
-p_low = -24
-p_high = -24
+p_low = -19
+p_high = -19
 p_nstep = 1
 
 p_array = np.linspace(p_low,p_high,p_nstep)
@@ -549,11 +544,11 @@ for rr in range(p_nstep):
     # into the measurement object 'm' that we just made, which will now have
     # the new power
     m.params.from_dict(xsettings)
-    do_awg_stuff = False
+    do_awg_stuff = True
     m.sequence(upload=do_awg_stuff, program=do_awg_stuff, clear=do_awg_stuff)
     # The if/then here is just leftover from previous code -- since True is
     # always True, it will always execute.
-    if True:
+    if False:
         print 'Proceeding with measurement ...'
 
 
@@ -584,18 +579,18 @@ msg_string = 'Pulsed ESR measurement stopped at %s, temperature is %.2f K' % (ti
 ea_t.email_alert(msg_string)
 
 # Now just keep tracking until 'q' is pressed
-track_on = True
-fbl_t = qt.instruments['fbl']
-track_iter = 0
-while track_on == True and track_iter < 50:
-    time.sleep(1.0)
-    if msvcrt.kbhit() or track_on == False:
-                kb_char=msvcrt.getch()
-                if kb_char == "q" or track_on == False: break
-    track_iter = track_iter + 1
-    print 'Tracking for %d iteration.' % track_iter
-    fbl_t.optimize()
-    time.sleep(5.0)
-    if msvcrt.kbhit() or track_on == False:
-                kb_char=msvcrt.getch()
-                if kb_char == "q" or track_on == False: break
+# track_on = True
+# fbl_t = qt.instruments['fbl']
+# track_iter = 0
+# while track_on == True and track_iter < 50:
+#     time.sleep(1.0)
+#     if msvcrt.kbhit() or track_on == False:
+#                 kb_char=msvcrt.getch()
+#                 if kb_char == "q" or track_on == False: break
+#     track_iter = track_iter + 1
+#     print 'Tracking for %d iteration.' % track_iter
+#     fbl_t.optimize()
+#     time.sleep(5.0)
+#     if msvcrt.kbhit() or track_on == False:
+#                 kb_char=msvcrt.getch()
+#                 if kb_char == "q" or track_on == False: break

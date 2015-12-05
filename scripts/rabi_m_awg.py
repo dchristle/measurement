@@ -55,7 +55,7 @@ class SiC_Rabi_Master(m2.Measurement):
         e.add(pulse.cp(sq_pulseAOM, amplitude=1, length=100e-6), name='lasercw')
         e.add(pulse.cp(sq_pulsePC, amplitude=1.0, length=100e-6),
         name='photoncountpulsecw')
-        e.add(pulse.cp(sq_pulseMW_Imod, amplitude=1.0, length=100e-6),
+        e.add(pulse.cp(sq_pulseMW_Imod, amplitude=1, length=100e-6),
         name='MWimodpulsecw', start=0e-9)
         e.add(pulse.cp(sq_pulseMW_Qmod, amplitude=0.0, length=100e-6),
         name='MWqmodpulsecw', start=0e-9)
@@ -65,7 +65,7 @@ class SiC_Rabi_Master(m2.Measurement):
         elements.append(e)
         # find the maximum pulse length
         total_rf_pulses = self.params['RF_delay'] + self.params['RF_length_end'] + self.params['RF_buffer']
-        AOM_start_time = total_rf_pulses - self.params['AOM_light_delay']
+        AOM_start_time = np.max( ((total_rf_pulses - self.params['AOM_light_delay']), 0.0))
         readout_start_time = AOM_start_time + self.params['AOM_light_delay']
         trigger_period = AOM_start_time + self.params['AOM_length'] + self.params['AOM_light_delay'] + self.params['AOM_end_buffer']
         print 'Total trigger period is %d ns.' % trigger_period
@@ -79,12 +79,12 @@ class SiC_Rabi_Master(m2.Measurement):
 
             e.add(pulse.cp(sq_pulseAOM, amplitude=1, length=self.params['AOM_length']*1.0e-9), name='laser init', start=AOM_start_time*1.0e-9)
 
-            e.add(pulse.cp(sq_pulseMW, length = self.params['MW_pulse_durations'][i], amplitude = 1.0), name='microwave pulse', start=self.params['RF_delay']*1.0e-9)
+            e.add(pulse.cp(sq_pulseMW, length = self.params['MW_pulse_durations'][i], amplitude = 1), name='microwave pulse', start=self.params['RF_delay']*1.0e-9)
 
             e.add(pulse.cp(sq_pulsePC, amplitude=1.0, length=self.params['readout_length']*1.0e-9),
             name='photoncountpulse', start=readout_start_time*1.0e-9)
 
-            e.add(pulse.cp(sq_pulseMW_Imod, amplitude=1.0, length=trigger_period*1.0e-9),
+            e.add(pulse.cp(sq_pulseMW_Imod, amplitude=1*1, length=trigger_period*1.0e-9),
             name='MWimodpulse', start=0e-9)
 
             e.add(pulse.cp(sq_pulseMW_Qmod, amplitude=0.0, length=trigger_period*1.0e-9),
@@ -132,7 +132,7 @@ class SiC_Rabi_Master(m2.Measurement):
         self._fbl = qt.instruments['fbl']
         self._tl = qt.instruments['tl']
         self._ni63 = qt.instruments['NIDAQ6363']
-        #self._snspd = qt.instruments['snspd']
+        self._snspd = qt.instruments['snspd']
         self._fsm = qt.instruments['fsm']
         self._ls332 = qt.instruments['ls332']
         self._pxi = qt.instruments['pxi']
@@ -335,9 +335,9 @@ class SiC_Rabi_Master(m2.Measurement):
             if np.abs(self._ls332.get_kelvinA() - self._ls332.get_setpoint1()) > self.params['temperature_tolerance']:
                 print 'Temperature out of bounds, breaking.'
                 break
-##            if self._snspd.check() == False:
-##                print 'SNSPD went normal and could not restore, breaking.'
-##                break
+            if self._snspd.check() == False:
+                print 'SNSPD went normal and could not restore, breaking.'
+                break
             # Checks have all passed, so proceed...
 
             # Now add the sorted data array to the total array
@@ -385,28 +385,28 @@ class SiC_Rabi_Master(m2.Measurement):
 xsettings = {
         'focus_limit_displacement' : 20, # microns inward
         'fbl_time' : 150.0, # seconds
-        'AOM_length' : 1600.0, # ns
+        'AOM_length' : 1400.0, # ns
         'AOM_light_delay' : 655.0, # ns
         'AOM_end_buffer' : 1155.0, # ns
-        'RF_delay' : 10.0, # ns
-        'RF_buffer' : 150.0, # ns
+        'RF_delay' : 50.0, # ns
+        'RF_buffer' : 50.0, # ns
         'readout_length' : 130.0, # ns
         'ctr_term' : 'PFI2',
         'power' : 5.0, # dBm
-        'constant_attenuation' : 28.0, # dBm -- set by the fixed attenuators in setup
+        'constant_attenuation' : 14.0, # dBm -- set by the fixed attenuators in setup
         'desired_power' : -9.0, # dBm
         'RF_length_start' : 0.0, # ns
-        'RF_length_end' : 800, # ns
-        'RF_length_step' : 25.0, # ns
-        'freq' : 1.2825, #GHz
-        'dwell_time' : 1600.0, # ms
+        'RF_length_end' : 150.0, # ns
+        'RF_length_step' : 10.0, # ns
+        'freq' : 1.3358, #GHz
+        'dwell_time' : 1000.0, # ms
         'temperature_tolerance' : 2.0, # Kelvin
         'MeasCycles' : 1200,
         'random' : 1
         }
 
-p_low = -32
-p_high = -32
+p_low = -9
+p_high = -9
 p_nstep = 1
 
 p_array = np.linspace(p_low,p_high,p_nstep)

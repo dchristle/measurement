@@ -63,7 +63,7 @@ class SiC_Hahn_Master(m2.Measurement):
                 # precalculate some of the times
                 total_rf_length = self.params['RF_delay'] + self.params['pi_length'] + self.params['pi2_length']*2 + self.params['tau_delay'][i] # just for the RF to play out completely
                 total_rf_pulses = total_rf_length + self.params['RF_buffer']
-                AOM_start_time = total_rf_pulses - self.params['AOM_light_delay']
+                AOM_start_time = np.max(((total_rf_pulses - self.params['AOM_light_delay']), 0.0))
                 readout_start_time = AOM_start_time + self.params['AOM_light_delay']
                 #print '%s %s %s %s' % (total_rf_length, total_rf_pulses, AOM_start_time, readout_start_time)
                 if j == 0:
