@@ -43,7 +43,7 @@ class SiC_ESR_Master(m2.Measurement):
         e.add(pulse.cp(sq_pulseAOM, amplitude=1, length=100e-6), name='laser')
         e.add(pulse.cp(sq_pulseMW, amplitude=1.0, length=100e-6), name='microwaves')
         e.add(pulse.cp(sq_pulsePC, amplitude=1.0, length=100e-6), name='photoncountpulse')
-        e.add(pulse.cp(sq_pulseMW_Imod, amplitude=1.0, length=100e-6),
+        e.add(pulse.cp(sq_pulseMW_Imod, amplitude=self.params['Imod'], length=100e-6),
         name='MWimodpulsecw', start=0e-9)
         e.add(pulse.cp(sq_pulseMW_Qmod, amplitude=0.0, length=100e-6),
         name='MWqmodpulsecw', start=0e-9)
@@ -67,7 +67,7 @@ class SiC_ESR_Master(m2.Measurement):
         self._fbl = qt.instruments['fbl']
         self._tl = qt.instruments['tl']
         self._ni63 = qt.instruments['NIDAQ6363']
-        #self._snspd = qt.instruments['snspd']
+        self._snspd = qt.instruments['snspd']
         self._fsm = qt.instruments['fsm']
         self._ls332 = qt.instruments['ls332']
         self._pxi = qt.instruments['pxi']
@@ -119,9 +119,11 @@ class SiC_ESR_Master(m2.Measurement):
         else:
             self._va.set_attenuation(desired_atten)
         print 'Variable attenuator set to %.1f dB attenuation.' % desired_atten
+        full_attenuation = self.params['power'] - self.params['constant_attenuation'] - np.max((0,np.min((desired_atten,15.5)))) + np.log(self.params['Imod'])/np.log(10.0)*10
+        print 'Fully attenuated power is %.2f dBm' % full_attenuation
         # Check if the SNSPD is still superconducting
-        #if self._snspd.check() == False:
-        #    print 'SNSPD went normal and could not restore!'
+        if self._snspd.check() == False:
+            print 'SNSPD went normal and could not restore!'
         # Start the AWG
         for i in range(20):
             try:
@@ -285,7 +287,7 @@ class SiC_ESR_Master(m2.Measurement):
             time.sleep(2.0)
             self._fbl.optimize()
             current_temp = self._ls332.get_kelvinA()
-            if np.abs(current_temp-current_setpoint) < 0.15:
+            if np.abs(current_temp-current_setpoint) < 0.99:
                 mm = mm + 1
             else:
                 mm = 0
@@ -349,6 +351,7 @@ class SiC_ESR_Master(m2.Measurement):
                 # one sweep would have stopped from our keyboard press of "q",
                 # the script would just continue to the next sweep, which we
                 # don't want.
+                self._snspd.check()
                 self._keystroke_check('abort')
                 if self.keystroke('abort') in ['q','Q']:
                     print 'Measurement aborted.'
@@ -403,9 +406,9 @@ class SiC_ESR_Master(m2.Measurement):
                 print 'Temperature out of bounds, breaking.'
                 break
             # Check if the SNSPD is still superconducting
-            #if self._snspd.check() == False:
-            #    print 'SNSPD went normal and could not restore, breaking.'
-            #    break
+            if self._snspd.check() == False:
+                print 'SNSPD went normal and could not restore, breaking.'
+                break
             # Checks have all passed, so proceed...
 
             # Now add the sorted data array to the total array
@@ -450,21 +453,22 @@ class SiC_ESR_Master(m2.Measurement):
 
 xsettings = {
         'focus_limit_displacement' : 20, # microns inward
-        'fbl_time' : 155.0, # seconds
+        'fbl_time' : 55.0, # seconds
         'ctr_term' : 'PFI0',
         'power' : 5.0, # dBm
-        'constant_attenuation' : 28.0, # dBm -- set by the fixed attenuators in setup
+        'constant_attenuation' : 14.0, # dBm -- set by the fixed attenuators in setup
         'desired_power' : -7.0, # dBm
-        'f_low' : 1.215, #GHz
-        'f_high' : 1.44, #Ghz
-        'f_step' : 2*4*1.25e-4, #Ghz
+        'f_low' : 1.29, #GHz
+        'f_high' : 1.381, #Ghz
+        'f_step' : 2.0e-3, #Ghz
         'dwell_time' : 1550.0, # ms
         'temperature_tolerance' : 3.0, # Kelvin
         'MeasCycles' : 800,
         'trigger_period' : 100000.0, #ns
         'dropout' : False,
-        'dropout_low' : 1.325, # GHz
-        'dropout_high' : 1.342, # GHz
+        'dropout_low' : 1.23, # GHz
+        'dropout_high' : 1.56, # GHz
+        'Imod' : 0.2511
         }
 
 
@@ -472,8 +476,8 @@ xsettings = {
 
 # Generate array of powers -- in this case, just one power.
 
-p_low = -26
-p_high = -26
+p_low = -19
+p_high = -19
 p_nstep = 1
 
 p_array = np.linspace(p_low,p_high,p_nstep)
@@ -505,7 +509,7 @@ for rr in range(p_nstep):
     # always True, it will always execute.
     if True:
         print 'Proceeding with measurement ...'
-        do_awg_stuff = True
+        do_awg_stuff =True
         m.sequence(upload=do_awg_stuff, program=do_awg_stuff, clear=do_awg_stuff)
         m.prepare()
         m.measure()
@@ -532,23 +536,23 @@ ls332_t = qt.instruments['ls332']
 cur_temp = ls332_t.get_kelvinA()
 msg_string = 'ESR measurement stopped at %s, temperature is %.2f K' % (time.strftime('%c'), cur_temp)
 ea_t.email_alert(msg_string)
-
-# Now just keep tracking until 'q' is pressed
-track_on = True
-fbl_t = qt.instruments['fbl']
-track_iter = 0
-print 'About to track...'
-do_track = True
-time.sleep(2.0)
-if msvcrt.kbhit():
-                kb_char=msvcrt.getch()
-                if kb_char == "q":
-                    do_track = False
-while track_on == True and track_iter < 50 and do_track == True:
-    track_iter = track_iter + 1
-    print 'Tracking for %d iteration.' % track_iter
-    fbl_t.optimize()
-    time.sleep(5.0)
-    if msvcrt.kbhit() or track_on == False:
-                kb_char=msvcrt.getch()
-                if kb_char == "q" or track_on == False: break
+##
+### Now just keep tracking until 'q' is pressed
+##track_on = True
+##fbl_t = qt.instruments['fbl']
+##track_iter = 0
+##print 'About to track...'
+##do_track = True
+##time.sleep(2.0)
+##if msvcrt.kbhit():
+##                kb_char=msvcrt.getch()
+##                if kb_char == "q":
+##                    do_track = False
+##while track_on == True and track_iter < 50 and do_track == True:
+##    track_iter = track_iter + 1
+##    print 'Tracking for %d iteration.' % track_iter
+##    fbl_t.optimize()
+##    time.sleep(5.0)
+##    if msvcrt.kbhit() or track_on == False:
+##                kb_char=msvcrt.getch()
+##                if kb_char == "q" or track_on == False: break

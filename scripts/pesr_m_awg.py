@@ -81,7 +81,7 @@ class SiC_PESR_Master(m2.Measurement):
         e.add(pulse.cp(sq_pulsePC, amplitude=1.0, length=self.params['readout_length']*1.0e-9),
         name='photoncountpulse', start=readout_start_time*1.0e-9)
 
-        e.add(pulse.cp(sq_pulseMW_Imod, amplitude=.297/400.0*250.0, length=trigger_period*1.0e-9),
+        e.add(pulse.cp(sq_pulseMW_Imod, amplitude=self.params['Imod'], length=trigger_period*1.0e-9),
         name='MWimodpulse', start=0.0e-9)
 
         e.add(pulse.cp(sq_pulseMW_Qmod, amplitude=0.0, length=trigger_period*1.0e-9),
@@ -177,6 +177,9 @@ class SiC_PESR_Master(m2.Measurement):
         else:
             self._va.set_attenuation(desired_atten)
         print 'Variable attenuator set to %.1f dB attenuation.' % desired_atten
+        # Convert all attenuation to the same scale
+        full_attenuation = self.params['power'] - self.params['constant_attenuation'] - np.max((0,np.min((desired_atten,15.5)))) + np.log(self.params['Imod'])/np.log(10.0)*10
+        print 'Fully attenuated power is %.2f dBm' % full_attenuation
         # Check if the SNSPD is still superconducting
         if self._snspd.check() == False:
             print 'SNSPD went normal and could not restore!'
@@ -489,7 +492,7 @@ class SiC_PESR_Master(m2.Measurement):
 
 xsettings = {
         'focus_limit_displacement' : 20, # microns inward
-        'fbl_time' : 235.0, # seconds
+        'fbl_time' : 75.0, # seconds
         'ctr_term' : 'PFI2',
         'AOM_length' : 1200.0, # ns
         'AOM_light_delay' : 655.0, # ns
@@ -497,12 +500,12 @@ xsettings = {
         'power' : 5.0, # dBm
         'constant_attenuation' : 14.0, # dB -- set by the fixed attenuators in setup
         'desired_power' : -7.0, # dBm
-        'f_low' : 1.302, # GHz
-        'f_high' : 1.367, # GHz
-        'f_step' : 5e-4, # GHz
+        'f_low' : 1.30, # GHz
+        'f_high' : 1.37, # GHz
+        'f_step' : 1.5e-3, # GHz
         'RF_delay' : 0.0, # ns
         'RF_buffer' : 50.0, # ns
-        'pi_length' : 400, # ns
+        'pi_length' : 150, # ns
         'dwell_time' : 1500.0, # ms
         'temperature_tolerance' : 3, # Kelvin
         'MeasCycles' : 1000,
@@ -510,7 +513,8 @@ xsettings = {
         'dropout' : True,
         'dropout_low' : 1.353, # GHz
         'dropout_high' : 1.38, # GHz
-        'readout_length' : 130.0
+        'readout_length' : 130.0,
+        'Imod' : 0.2511
         }
 
 
@@ -518,8 +522,8 @@ xsettings = {
 
 # Generate array of powers -- in this case, just one power.
 
-p_low = -19
-p_high = -19
+p_low = -15
+p_high = -15
 p_nstep = 1
 
 p_array = np.linspace(p_low,p_high,p_nstep)
@@ -548,7 +552,7 @@ for rr in range(p_nstep):
     m.sequence(upload=do_awg_stuff, program=do_awg_stuff, clear=do_awg_stuff)
     # The if/then here is just leftover from previous code -- since True is
     # always True, it will always execute.
-    if False:
+    if True:
         print 'Proceeding with measurement ...'
 
 

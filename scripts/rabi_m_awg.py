@@ -84,7 +84,7 @@ class SiC_Rabi_Master(m2.Measurement):
             e.add(pulse.cp(sq_pulsePC, amplitude=1.0, length=self.params['readout_length']*1.0e-9),
             name='photoncountpulse', start=readout_start_time*1.0e-9)
 
-            e.add(pulse.cp(sq_pulseMW_Imod, amplitude=1*1, length=trigger_period*1.0e-9),
+            e.add(pulse.cp(sq_pulseMW_Imod, amplitude=self.params['Imod'], length=trigger_period*1.0e-9),
             name='MWimodpulse', start=0e-9)
 
             e.add(pulse.cp(sq_pulseMW_Qmod, amplitude=0.0, length=trigger_period*1.0e-9),
@@ -213,6 +213,8 @@ class SiC_Rabi_Master(m2.Measurement):
         desired_atten = self.params['power'] - self.params['constant_attenuation'] - self.params['desired_power']
         self._va.set_attenuation(desired_atten)
         print 'Variable attenuator set to %.1f dB attenuation.' % desired_atten
+        full_attenuation = self.params['power'] - self.params['constant_attenuation'] - np.max((0,np.min((desired_atten,15.5)))) + np.log(self.params['Imod'])/np.log(10.0)*10
+        print 'Fully attenuated power is %.2f dBm' % full_attenuation
 
 
         return
@@ -387,26 +389,27 @@ xsettings = {
         'fbl_time' : 150.0, # seconds
         'AOM_length' : 1400.0, # ns
         'AOM_light_delay' : 655.0, # ns
-        'AOM_end_buffer' : 1155.0, # ns
+        'AOM_end_buffer' : 855.0, # ns
         'RF_delay' : 50.0, # ns
-        'RF_buffer' : 50.0, # ns
+        'RF_buffer' : 150.0, # ns
         'readout_length' : 130.0, # ns
         'ctr_term' : 'PFI2',
         'power' : 5.0, # dBm
         'constant_attenuation' : 14.0, # dBm -- set by the fixed attenuators in setup
         'desired_power' : -9.0, # dBm
         'RF_length_start' : 0.0, # ns
-        'RF_length_end' : 150.0, # ns
+        'RF_length_end' : 600.0, # ns
         'RF_length_step' : 10.0, # ns
-        'freq' : 1.3358, #GHz
+        'freq' : 1.3194, #GHz
         'dwell_time' : 1000.0, # ms
         'temperature_tolerance' : 2.0, # Kelvin
         'MeasCycles' : 1200,
-        'random' : 1
+        'random' : 1,
+        'Imod' : 0.2511
         }
 
-p_low = -9
-p_high = -9
+p_low = -15
+p_high = -15
 p_nstep = 1
 
 p_array = np.linspace(p_low,p_high,p_nstep)

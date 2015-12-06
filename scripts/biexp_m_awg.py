@@ -69,21 +69,15 @@ class SiC_Biexponential_Master(m2.Measurement):
         e.add(pulse.cp(sq_pulseMW, length = self.params['MW_pulse_durations'][int(np.floor(self.params['pts']/2.0))]*1e-9, amplitude = 1.0), name='microwave pulse', start=self.params['RF_delay']*1.0e-9)
         elements.append(e)
 
-
-
-        # find the maximum pulse length
-        total_rf_pulses = self.params['RF_delay'] + self.params['RF_length_end'] + self.params['RF_buffer']
-        AOM_start_time = np.max( ((total_rf_pulses - self.params['AOM_light_delay']), 0.0) ) + self.params['AOM_start_delay']
+        AOM_start_time = self.params['AOM_start_delay']
         readout_start_time = AOM_start_time + self.params['AOM_light_delay']
         trigger_period = AOM_start_time + self.params['AOM_length'] + self.params['AOM_light_delay'] + self.params['AOM_end_buffer']
         print 'Total trigger period is %d ns.' % trigger_period
+
         # Now create the Rabi pulses
         for i in range(self.params['pts']):
 
             e = element.Element('ElectronRabi_pt-%d' % i, pulsar=qt.pulsar)
-
-
-
 
             e.add(pulse.cp(sq_pulseAOM, amplitude=1, length=self.params['AOM_length']*1.0e-9), name='laser init', start=AOM_start_time*1.0e-9)
 
@@ -247,6 +241,8 @@ class SiC_Biexponential_Master(m2.Measurement):
         desired_atten = self.params['power'] - self.params['constant_attenuation'] - self.params['desired_power']
         self._va.set_attenuation(desired_atten)
         print 'Variable attenuator set to %.1f dB attenuation.' % desired_atten
+        full_attenuation = self.params['power'] - self.params['constant_attenuation'] - np.max((0,np.min((desired_atten,15.5)))) + np.log(self.params['Imod'])/np.log(10.0)*10
+        print 'Fully attenuated power is %.2f dBm' % full_attenuation
 
 
         return
@@ -399,7 +395,7 @@ class SiC_Biexponential_Master(m2.Measurement):
             # total array.
             tt = time.time() - t1
 
-            print 'Cycle %d/%d total time is %.3f, efficiency of %.2f percent. Heater output is at %.1f. ' % (i+1, int(self.params['MeasCycles']), tt, (self.params['pts'] *self.params['dwell_time']/1000.0)/tt*100.0, self._ls332.get_heater_output())
+            print 'Cycle %d/%d total time is %.3f, efficiency of %.2f percent. Heater output is at %.1f. ' % (i+1, int(self.params['MeasCycles']), tt, (self.params['pts'] *self.params['AcqTime'])/tt*100.0, self._ls332.get_heater_output())
 
             qt.msleep(0.002) # keeps GUI responsive and checks if plot needs updating.
             if msvcrt.kbhit() or scan_on == False or self._stop_measurement == True:
@@ -459,22 +455,22 @@ class SiC_Biexponential_Master(m2.Measurement):
 
 xsettings = {
         'focus_limit_displacement' : 20, # microns inward
-        'fbl_time' : 150.0, # seconds
-        'AOM_start_delay' : 3400.0,
+        'fbl_time' : 120.0, # seconds
+        'AOM_start_delay' : 800.0,
         'AOM_length' : 1400.0, # ns
         'AOM_light_delay' : 655.0, # ns
         'AOM_end_buffer' : 1155.0, # ns
-        'RF_delay' : 10.0, # ns
-        'RF_buffer' : 10.0, # ns
+        'RF_delay' : 3255.0, # ns
+        'RF_buffer' : 70.0, # ns
         'readout_length' : 130.0, # ns
         'ctr_term' : 'PFI2',
         'power' : 5.0, # dBm
         'constant_attenuation' : 14.0, # dBm -- set by the fixed attenuators in setup
         'desired_power' : -9.0, # dBm
         'RF_length_start' : 0.0, # ns
-        'RF_length_end' : 20.0, # ns
-        'RF_length_step' : 10.0, # ns
-        'freq' : 1.3358, #GHz
+        'RF_length_end' : 469.0, # ns
+        'RF_length_step' : 67.0, # ns
+        'freq' : 1.3194, #GHz
         'dwell_time' : 1000.0, # ms
         'temperature_tolerance' : 2.0, # Kelvin
         'MeasCycles' : 1200,
@@ -483,17 +479,18 @@ xsettings = {
         'CFDZeroCross0' : 10,
         'CFDLevel1' : 125,
         'CFDZeroCross1' : 10,
-        'Binning' : 7,
+        'Binning' : 4,
         'Offset' : 0,
         'SyncDiv' : 1,
         'SyncOffset' : 0,
-        'AcqTime' : 10, # PicoHarp acquisition time in seconds
+        'AcqTime' : 60, # PicoHarp acquisition time in seconds
         'PH_trigger_time' : 0.0, #ns
         'PH_trigger_length' : 50.0, #ns
+        'Imod' : 0.2511,
         }
 
-p_low = -9
-p_high = -9
+p_low = -15
+p_high = -15
 p_nstep = 1
 
 p_array = np.linspace(p_low,p_high,p_nstep)
