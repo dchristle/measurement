@@ -73,7 +73,7 @@ class SiC_Biexponential_Master(m2.Measurement):
 
         # find the maximum pulse length
         total_rf_pulses = self.params['RF_delay'] + self.params['RF_length_end'] + self.params['RF_buffer']
-        AOM_start_time = np.max( ((total_rf_pulses - self.params['AOM_light_delay']), 0.0) )
+        AOM_start_time = np.max( ((total_rf_pulses - self.params['AOM_light_delay']), 0.0) ) + self.params['AOM_start_delay']
         readout_start_time = AOM_start_time + self.params['AOM_light_delay']
         trigger_period = AOM_start_time + self.params['AOM_length'] + self.params['AOM_light_delay'] + self.params['AOM_end_buffer']
         print 'Total trigger period is %d ns.' % trigger_period
@@ -98,13 +98,13 @@ class SiC_Biexponential_Master(m2.Measurement):
             e.add(pulse.cp(sq_pulseMW_Qmod, amplitude=0.0, length=trigger_period*1.0e-9),
             name='MWqmodpulse', start=0e-9)
 
-            #e.add(pulse.cp(sq_pulsePH, amplitude=-0.7, length=self.params['PH_trigger_length']*1.0e-9), name='picoharp trigger', start=self.params['PH_trigger_time']*1.0e-9)
+            e.add(pulse.cp(sq_pulsePH, amplitude=-0.7, length=self.params['PH_trigger_length']*1.0e-9), name='picoharp trigger', start=self.params['PH_trigger_time']*1.0e-9)
 
 
             elements.append(e)
 
         # create a sequence
-        seq = pulsar.Sequence('BiExpElectronRabi sequence')
+        seq = pulsar.Sequence('BiexpElectronRabi sequence')
         # append the pulses to the sequence, but with a trigger wait only for the measurement pulses
         for e in elements:
             if e.name == 'CW_mode':
@@ -117,7 +117,8 @@ class SiC_Biexponential_Master(m2.Measurement):
         time.sleep(4.0)
         # program the AWG
         if program:
-            qt.pulsar.program_sequence(seq)
+            # loop = False prevents Pulsar from setting the last goto target to the first waveform in the sequence
+            qt.pulsar.program_sequence(seq, loop=False)
 
         return
 
@@ -132,8 +133,11 @@ class SiC_Biexponential_Master(m2.Measurement):
                 break
             else:
                 q = q + 1
-            time.sleep(0.2)
-            if q == 4:
+            self._awg.sq_forced_jump(seq_el)
+            time.sleep(0.5)
+            self._awg.sq_forced_jump(seq_el)
+            time.sleep(0.5)
+            if q == 12:
                 print 'AWG not jumping... clearing VISA.'
                 self._awg.clear_visa()
 
@@ -188,7 +192,7 @@ class SiC_Biexponential_Master(m2.Measurement):
                     break
             if state == 'Idle':
                 self._awg.start()
-
+        self._awg.set_event_jump_timing('ASYN')
         self._awg.sq_forced_jump(1)
         time.sleep(1)
         self.awg_confirm(1)
@@ -456,6 +460,7 @@ class SiC_Biexponential_Master(m2.Measurement):
 xsettings = {
         'focus_limit_displacement' : 20, # microns inward
         'fbl_time' : 150.0, # seconds
+        'AOM_start_delay' : 3400.0,
         'AOM_length' : 1400.0, # ns
         'AOM_light_delay' : 655.0, # ns
         'AOM_end_buffer' : 1155.0, # ns
@@ -515,7 +520,7 @@ for rr in range(np.size(p_array)):
     m.sequence(upload=do_awg_stuff, program=do_awg_stuff, clear=do_awg_stuff)
 
 
-    if False:
+    if True:
         print 'Proceeding with measurement ...'
         m.prepare()
         m.measure()
@@ -526,7 +531,7 @@ for rr in range(np.size(p_array)):
 
     # important! hdf5 data must be closed, otherwise will not be readable!
     # (can also be done by hand, of course)
-    # m.finish()
+    m.finish()
 
 # Alert that measurement has finished
 ea_t = qt.instruments['ea']
@@ -537,22 +542,22 @@ ea_t.email_alert(msg_string)
 
 ##ps = qt.instruments['xps']
 ##ps.set_abs_positionZ(12.0)
-#
-# track_on = True
-# fbl_t = qt.instruments['fbl']
-# track_iter = 0
-# print 'About to track...'
-# do_track = True
-# time.sleep(2.0)
-# if msvcrt.kbhit():
-#                 kb_char=msvcrt.getch()
-#                 if kb_char == "q":
-#                     do_track = False
-# while track_on == True and track_iter < 50 and do_track == True:
-#     track_iter = track_iter + 1
-#     print 'Tracking for %d iteration.' % track_iter
-#     fbl_t.optimize()
-#     time.sleep(5.0)
-#     if msvcrt.kbhit() or track_on == False:
-#                 kb_char=msvcrt.getch()
-#                 if kb_char == "q" or track_on == False: break
+
+track_on = True
+fbl_t = qt.instruments['fbl']
+track_iter = 0
+print 'About to track...'
+do_track = True
+time.sleep(2.0)
+if msvcrt.kbhit():
+                kb_char=msvcrt.getch()
+                if kb_char == "q":
+                    do_track = False
+while track_on == True and track_iter < 50 and do_track == True:
+    track_iter = track_iter + 1
+    print 'Tracking for %d iteration.' % track_iter
+    fbl_t.optimize()
+    time.sleep(5.0)
+    if msvcrt.kbhit() or track_on == False:
+                kb_char=msvcrt.getch()
+                if kb_char == "q" or track_on == False: break
