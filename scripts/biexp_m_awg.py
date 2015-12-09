@@ -49,21 +49,24 @@ class SiC_Biexponential_Master(m2.Measurement):
         if clear:
             self._awg.clear_waveforms()
             print 'AWG waveforms cleared.'
-        elements = []
 
+        elements = []
 
         # First create a waveform that keeps the AOM and photon counting switch on all the time
         # but leaves the microwave switch off
         e = element.Element('CW_mode', pulsar=qt.pulsar)
+
         e.add(pulse.cp(sq_pulseAOM, amplitude=1, length=100e-6), name='lasercw')
+
         e.add(pulse.cp(sq_pulsePC, amplitude=1.0, length=100e-6),
         name='photoncountpulsecw')
-        e.add(pulse.cp(sq_pulseMW_Imod, amplitude=0.01, length=100e-6),
+
+        e.add(pulse.cp(sq_pulseMW_Imod, amplitude=0.2*self.params['Imod'], length=100e-6),
         name='MWimodpulsecw', start=0e-9)
-##        e.add(pulse.cp(sq_pulseMW_Imod, amplitude=1, length=100e-6),
-##        name='MWimodpulsecw', start=0e-9)
+
         e.add(pulse.cp(sq_pulseMW_Qmod, amplitude=0.0, length=100e-6),
-        name='MWqmodpulsecw', start=0e-9)
+        name='MWqmodpulsecw', start=0e-9)\
+
         # Add a microwave pulse to allow microwave energy to reach the sample even while tracking.
         # This will give a much more stable measurement for higher powers.
         e.add(pulse.cp(sq_pulseMW, length = self.params['MW_pulse_durations'][int(np.floor(self.params['pts']/2.0))]*1e-9, amplitude = 1.0), name='microwave pulse', start=self.params['RF_delay']*1.0e-9)
@@ -86,7 +89,7 @@ class SiC_Biexponential_Master(m2.Measurement):
             e.add(pulse.cp(sq_pulsePC, amplitude=1.0, length=self.params['readout_length']*1.0e-9),
             name='photoncountpulse', start=readout_start_time*1.0e-9)
 
-            e.add(pulse.cp(sq_pulseMW_Imod, amplitude=0.01*1, length=trigger_period*1.0e-9),
+            e.add(pulse.cp(sq_pulseMW_Imod, amplitude=self.params['Imod'], length=trigger_period*1.0e-9),
             name='MWimodpulse', start=0e-9)
 
             e.add(pulse.cp(sq_pulseMW_Qmod, amplitude=0.0, length=trigger_period*1.0e-9),
@@ -120,7 +123,7 @@ class SiC_Biexponential_Master(m2.Measurement):
     def awg_confirm(self, seq_el):
         q = 0
         time.sleep(0.1)
-        while q < 20:
+        while q < 30:
 
             cur_pos = int(self._awg.get_sq_position())
             if cur_pos == seq_el:
@@ -131,11 +134,11 @@ class SiC_Biexponential_Master(m2.Measurement):
             time.sleep(0.5)
             self._awg.sq_forced_jump(seq_el)
             time.sleep(0.5)
-            if q == 12:
+            if q == 15:
                 print 'AWG not jumping... clearing VISA.'
                 self._awg.clear_visa()
 
-            if q >= 19:
+            if q >= 29:
                 print 'AWG did not jump to proper waveform!'
         return
     def prepare(self):
@@ -258,7 +261,7 @@ class SiC_Biexponential_Master(m2.Measurement):
         print '--Biexponential decay meas. from %.4f ns to %.4f ns in %.4f ns steps (%.2f steps)--' % (self.params['RF_length_start'], self.params['RF_length_end'], self.params['RF_length_step'], self.params['pts'] )
 
         total_count_data = np.zeros(self.params['pts'] , dtype='uint32')
-        average_s_data = np.zeros((self.params['pts'],65536) , dtype='float')
+        total_s_data = np.zeros((self.params['pts'],65536) , dtype='float')
         signal_0_data = np.array(())
 
 
@@ -333,8 +336,7 @@ class SiC_Biexponential_Master(m2.Measurement):
                 # Set the new RF pulse length
                 self._awg.sq_forced_jump(seq_index[j]+2) # the +2 is because the indices start at 1, and the first sequence is CW mode
                 time.sleep(0.1)
-                if j < 5 or (j > 5 and np.random.random() < 0.02):
-                    self.awg_confirm(seq_index[j]+2)
+                self.awg_confirm(seq_index[j]+2)
 
                 # Start the PicoHarp acquisition, wait, then retrieve the histogram
                 temp_countA = int(self._ph.get_CountRate1())
@@ -362,24 +364,24 @@ class SiC_Biexponential_Master(m2.Measurement):
                 qt.msleep(0.004) # keeps GUI responsive and checks if plot needs updating.
 
                 # Add the data to the master array
-                average_s_data[seq_index[j],:] = average_s_data[seq_index[j],:] + current_data
+                total_s_data[seq_index[j],:] = total_s_data[seq_index[j],:] + current_data
                 # Compute the total photons collected
-                sad = np.sum(average_s_data[seq_index[j],:])
+                sad = np.sum(total_s_data[seq_index[j],:])
 
                 # Average the two counts and save it for later as a diagostic
                 signal_0_data = np.append(signal_0_data,(temp_countA+temp_countB)/2.0)
                 scd = np.sum(current_data)
                 print 'Measured %.1f counts during this acqusition, average sum is %.1f counts, on waveform %d of %d' % (scd, sad, seq_index[j]+1, self.params['pts'])
                 # Plot the total counts
-                self._average_s_data = average_s_data;
+                self._total_s_data = total_s_data;
                 self._signal_0_data = signal_0_data;
 
 
                 if seq_index[j] == 0:
-                    plot2dlog0 = qt.Plot2D(np.log(1.0+np.double(average_s_data[0,:])), name='sicbiexp_logarithmstart', clear=True)
+                    plot2dlog0 = qt.Plot2D(np.log(1.0+np.double(total_s_data[0,:])), name='sicbiexp_logarithms', clear=True)
 
                 if seq_index[j] == self.params['pts']-1:
-                    plot2dlog1 = qt.Plot2D(np.log(1.0+np.double(average_s_data[self.params['pts']-1,:])), name='sicbiexp_logarithmend', clear=True)
+                    plot2dlog1 = qt.Plot2D(np.log(1.0+np.double(total_s_data[self.params['pts']-1,:])), name='sicbiexp_logarithmend', clear=True)
 
                 self._keystroke_check('abort')
                 if self.keystroke('abort') in ['q','Q']:
@@ -438,9 +440,10 @@ class SiC_Biexponential_Master(m2.Measurement):
         self._pxi.set_status('off')
         # Set AWG to CW mode
         self._awg.sq_forced_jump(1)
+        self.awg_confirm(1)
         # Measurement has ended, so start saving data
-        grp = h5.DataGroup('SiC_Rabi_data', self.h5data, base=self.h5base)
-        grp.add('average_signal', data=average_s_data, unit='counts', note='total signal count histogram array')
+        grp = h5.DataGroup('SiC_Biexp_data', self.h5data, base=self.h5base)
+        grp.add('total_signal', data=total_s_data, unit='counts', note='total signal count histogram array')
         grp.add('length', data=1e9*self.params['MW_pulse_durations'], unit='ns', note='frequency')
         grp.add('counts', data=total_count_data, unit='counts', note='total counts')
         grp.add('N_cmeas', data=N_cmeas, unit='', note='total completed measurement cycles')
@@ -468,16 +471,16 @@ xsettings = {
         'constant_attenuation' : 14.0, # dBm -- set by the fixed attenuators in setup
         'desired_power' : -9.0, # dBm
         'RF_length_start' : 0.0, # ns
-        'RF_length_end' : 469.0, # ns
-        'RF_length_step' : 67.0, # ns
+        'RF_length_end' : 504.0, # ns
+        'RF_length_step' : 42.0, # ns
         'freq' : 1.3194, #GHz
         'dwell_time' : 1000.0, # ms
         'temperature_tolerance' : 2.0, # Kelvin
         'MeasCycles' : 1200,
         'random' : 1,
-        'CFDLevel0' : 125,
+        'CFDLevel0' : 300,
         'CFDZeroCross0' : 10,
-        'CFDLevel1' : 125,
+        'CFDLevel1' : 95,
         'CFDZeroCross1' : 10,
         'Binning' : 4,
         'Offset' : 0,
