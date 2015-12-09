@@ -61,7 +61,7 @@ class SiC_Biexponential_Master(m2.Measurement):
         e.add(pulse.cp(sq_pulsePC, amplitude=1.0, length=100e-6),
         name='photoncountpulsecw')
 
-        e.add(pulse.cp(sq_pulseMW_Imod, amplitude=0.2*self.params['Imod'], length=100e-6),
+        e.add(pulse.cp(sq_pulseMW_Imod, amplitude=self.params['Imod'], length=100e-6),
         name='MWimodpulsecw', start=0e-9)
 
         e.add(pulse.cp(sq_pulseMW_Qmod, amplitude=0.0, length=100e-6),
@@ -260,10 +260,12 @@ class SiC_Biexponential_Master(m2.Measurement):
 
         print '--Biexponential decay meas. from %.4f ns to %.4f ns in %.4f ns steps (%.2f steps)--' % (self.params['RF_length_start'], self.params['RF_length_end'], self.params['RF_length_step'], self.params['pts'] )
 
-        total_count_data = np.zeros(self.params['pts'] , dtype='uint32')
+
         total_s_data = np.zeros((self.params['pts'],65536) , dtype='float')
         signal_0_data = np.array(())
 
+        # draw a blank plot, which we will populate later
+        plot2dlog = qt.Plot2D(np.log(1.0+np.double(total_s_data[0,:])), name='sicbiexp_logarithms', clear=True)
 
 
         signal = np.zeros(1)
@@ -373,15 +375,15 @@ class SiC_Biexponential_Master(m2.Measurement):
                 scd = np.sum(current_data)
                 print 'Measured %.1f counts during this acqusition, average sum is %.1f counts, on waveform %d of %d' % (scd, sad, seq_index[j]+1, self.params['pts'])
                 # Plot the total counts
-                self._total_s_data = total_s_data;
-                self._signal_0_data = signal_0_data;
+                self._total_s_data = total_s_data
+                self._signal_0_data = signal_0_data
+                # only update the plots on the first and last waveforms, for clarity of presentation
 
-
-                if seq_index[j] == 0:
-                    plot2dlog0 = qt.Plot2D(np.log(1.0+np.double(total_s_data[0,:])), name='sicbiexp_logarithms', clear=True)
-
-                if seq_index[j] == self.params['pts']-1:
-                    plot2dlog1 = qt.Plot2D(np.log(1.0+np.double(total_s_data[self.params['pts']-1,:])), name='sicbiexp_logarithmend', clear=True)
+                if j == self.params['pts']-1:
+                    plot2dlog.clear()
+                    # Now just add those arrays to the now-cleared plot
+                    plot2dlog.add(np.log(1.0+np.double(total_s_data[0,:])))
+                    plot2dlog.add(np.log(1.0+np.double(total_s_data[self.params['pts']-1,:])))
 
                 self._keystroke_check('abort')
                 if self.keystroke('abort') in ['q','Q']:
@@ -445,7 +447,6 @@ class SiC_Biexponential_Master(m2.Measurement):
         grp = h5.DataGroup('SiC_Biexp_data', self.h5data, base=self.h5base)
         grp.add('total_signal', data=total_s_data, unit='counts', note='total signal count histogram array')
         grp.add('length', data=1e9*self.params['MW_pulse_durations'], unit='ns', note='frequency')
-        grp.add('counts', data=total_count_data, unit='counts', note='total counts')
         grp.add('N_cmeas', data=N_cmeas, unit='', note='total completed measurement cycles')
         grp.add('signal', data=signal, unit='counts', note='signal rate per N iterations')
 
@@ -460,11 +461,11 @@ xsettings = {
         'focus_limit_displacement' : 20, # microns inward
         'fbl_time' : 120.0, # seconds
         'AOM_start_delay' : 800.0,
-        'AOM_length' : 1400.0, # ns
+        'AOM_length' : 1000.0, # ns
         'AOM_light_delay' : 655.0, # ns
         'AOM_end_buffer' : 1155.0, # ns
-        'RF_delay' : 3255.0, # ns
-        'RF_buffer' : 70.0, # ns
+        'RF_delay' : 2855.0, # ns
+        'RF_buffer' : 50.0, # ns
         'readout_length' : 130.0, # ns
         'ctr_term' : 'PFI2',
         'power' : 5.0, # dBm
