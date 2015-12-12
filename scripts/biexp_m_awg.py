@@ -268,7 +268,7 @@ class SiC_Biexponential_Master(m2.Measurement):
 
         # draw a blank plot, which we will populate later
         plot2dlog = qt.Plot2D(np.log(1.0+np.double(total_s_data[0,:])), name='sicbiexp_logarithms', clear=True)
-        if self.params['background']
+        if self.params['background']:
             # draw another plot, but this one will have a subtracted background
             plot2dlogbs = qt.Plot2D(np.log(1.0+np.double(total_s_data[0,:])), name='sicbiexp_log_bcksub', clear=True)
 
@@ -380,8 +380,6 @@ class SiC_Biexponential_Master(m2.Measurement):
                 scd = np.sum(current_data)
                 print 'Measured %.1f counts during this acqusition, average sum is %.1f counts, on waveform %d of %d' % (scd, sad, seq_index[j]+1, self.params['pts'])
 
-
-
                 self._keystroke_check('abort')
                 if self.keystroke('abort') in ['q','Q']:
                     print 'Measurement aborted.'
@@ -389,6 +387,7 @@ class SiC_Biexponential_Master(m2.Measurement):
                     self._stop_measurement = True
                     scan_on = False
                     break
+
                 # Take a background scan, if applicable
                 if self.params['background']:
                     # block the mira
@@ -467,12 +466,13 @@ class SiC_Biexponential_Master(m2.Measurement):
                     plot2dlog.add(np.log(1.0+np.double(total_s_data[0,:])))
                     plot2dlog.add(np.log(1.0+np.double(total_s_data[self.params['pts']-1,:])))
                     if self.params['background']:
-                        plot2dlog.clear()
+                        plot2dlogbs.clear()
                         plot2dlogbs.add(np.log(1.0+np.double(np.abs(total_s_data[0,:]-total_b_data[0,:]))))
                         plot2dlogbs.add(np.log(1.0+np.double(np.abs(total_s_data[self.params['pts']-1,:]-total_b_data[self.params['pts']-1,:]))))
                 sbd = np.sum(total_b_data[seq_index[j],:])
                 print 'Background counts are approximately %.0f percent of the total signal counts.' % ( (sbd/sad*100.0) )
             # Check for a break, and break out of this loop as well.
+
             # It's important to check here, before we add the array to the total
             # since doing it the other way risks adding incomplete data to the
             # total array.
@@ -553,11 +553,11 @@ xsettings = {
         'constant_attenuation' : 14.0, # dBm -- set by the fixed attenuators in setup
         'desired_power' : -9.0, # dBm
         'RF_length_start' : 0.0, # ns
-        'RF_length_end' : 167.0, # ns
-        'RF_length_step' : 167.0, # ns
+        'RF_length_end' : 504.0, # ns
+        'RF_length_step' : 84.0, # ns
         'freq' : 1.3194, #GHz
         'dwell_time' : 1000.0, # ms
-        'temperature_tolerance' : 2.0, # Kelvin
+        'temperature_tolerance' : 0.6, # Kelvin
         'MeasCycles' : 1200,
         'random' : 1,
         'CFDLevel0' : 100,
