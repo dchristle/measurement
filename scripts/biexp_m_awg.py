@@ -268,6 +268,9 @@ class SiC_Biexponential_Master(m2.Measurement):
 
         # draw a blank plot, which we will populate later
         plot2dlog = qt.Plot2D(np.log(1.0+np.double(total_s_data[0,:])), name='sicbiexp_logarithms', clear=True)
+        if self.params['background']
+            # draw another plot, but this one will have a subtracted background
+            plot2dlogbs = qt.Plot2D(np.log(1.0+np.double(total_s_data[0,:])), name='sicbiexp_log_bcksub', clear=True)
 
 
         signal = np.zeros(1)
@@ -377,13 +380,7 @@ class SiC_Biexponential_Master(m2.Measurement):
                 scd = np.sum(current_data)
                 print 'Measured %.1f counts during this acqusition, average sum is %.1f counts, on waveform %d of %d' % (scd, sad, seq_index[j]+1, self.params['pts'])
 
-                # only update the plots on the first and last waveforms, for clarity of presentation
 
-                if j == self.params['pts']-1:
-                    plot2dlog.clear()
-                    # Now just add those arrays to the now-cleared plot
-                    plot2dlog.add(np.log(1.0+np.double(total_s_data[0,:])))
-                    plot2dlog.add(np.log(1.0+np.double(total_s_data[self.params['pts']-1,:])))
 
                 self._keystroke_check('abort')
                 if self.keystroke('abort') in ['q','Q']:
@@ -462,7 +459,19 @@ class SiC_Biexponential_Master(m2.Measurement):
                     # Set new track time
                     track_time = time.time() + self.params['fbl_time'] + 5.0*np.random.uniform()
 
+                # only update the plots on the first and last waveforms, for clarity of presentation
 
+                if j == self.params['pts']-1:
+                    plot2dlog.clear()
+                    # Now just add those arrays to the now-cleared plot
+                    plot2dlog.add(np.log(1.0+np.double(total_s_data[0,:])))
+                    plot2dlog.add(np.log(1.0+np.double(total_s_data[self.params['pts']-1,:])))
+                    if self.params['background']:
+                        plot2dlog.clear()
+                        plot2dlogbs.add(np.log(1.0+np.double(np.abs(total_s_data[0,:]-total_b_data[0,:]))))
+                        plot2dlogbs.add(np.log(1.0+np.double(np.abs(total_s_data[self.params['pts']-1,:]-total_b_data[self.params['pts']-1,:]))))
+                sbd = np.sum(total_b_data[seq_index[j],:])
+                print 'Background counts are approximately %.0f percent of the total signal counts.' % ( (sbd/sad*100.0) )
             # Check for a break, and break out of this loop as well.
             # It's important to check here, before we add the array to the total
             # since doing it the other way risks adding incomplete data to the
@@ -564,7 +573,7 @@ xsettings = {
         'PH_trigger_length' : 3.0, #ns
         'Imod' : 0.2511, # dimensionless attenuation factor
         'background' : True,
-        'x_displacement' : 1.5, # microns
+        'x_displacement' : 1.6, # microns
         'y_displacement' : 0.0, # microns
         }
 
