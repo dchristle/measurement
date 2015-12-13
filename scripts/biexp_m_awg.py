@@ -457,7 +457,7 @@ class SiC_Biexponential_Master(m2.Measurement):
 
                     # Set new track time
                     track_time = time.time() + self.params['fbl_time'] + 5.0*np.random.uniform()
-
+                qt.msleep(0.004) # keeps GUI responsive and checks if plot needs updating.
                 # only update the plots on the first and last waveforms, for clarity of presentation
 
                 if j == self.params['pts']-1:
@@ -469,8 +469,12 @@ class SiC_Biexponential_Master(m2.Measurement):
                         plot2dlogbs.clear()
                         plot2dlogbs.add(np.log(1.0+np.double(np.abs(total_s_data[0,:]-total_b_data[0,:]))))
                         plot2dlogbs.add(np.log(1.0+np.double(np.abs(total_s_data[self.params['pts']-1,:]-total_b_data[self.params['pts']-1,:]))))
+
                 sbd = np.sum(total_b_data[seq_index[j],:])
+
                 print 'Background counts are approximately %.0f percent of the total signal counts.' % ( (sbd/sad*100.0) )
+
+                qt.msleep(0.004) # keeps GUI responsive and checks if plot needs updating.
             # Check for a break, and break out of this loop as well.
 
             # It's important to check here, before we add the array to the total
@@ -541,11 +545,11 @@ class SiC_Biexponential_Master(m2.Measurement):
 xsettings = {
         'focus_limit_displacement' : 20, # microns inward
         'fbl_time' : 120.0, # seconds
-        'AOM_start_delay' : 900.0,
+        'AOM_start_delay' : 00.0,
         'AOM_length' : 1000.0, # ns
         'AOM_light_delay' : 655.0, # ns
-        'AOM_end_buffer' : 1000.0, # ns
-        'RF_delay' : 3205.0, # ns
+        'AOM_end_buffer' : 1520.0, # ns
+        'RF_delay' : 2305.0, # ns
         'RF_buffer' : 150.0, # ns
         'readout_length' : 130.0, # ns
         'ctr_term' : 'PFI2',
@@ -601,7 +605,7 @@ for rr in range(np.size(p_array)):
     # this could be very helpful to load various sets of settings from a global
     # configuration manager!
     m.params.from_dict(xsettings)
-    do_awg_stuff = False
+    do_awg_stuff = True
     m.sequence(upload=do_awg_stuff, program=do_awg_stuff, clear=do_awg_stuff)
 
 
