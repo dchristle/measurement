@@ -500,12 +500,12 @@ xsettings = {
         'power' : 5.0, # dBm
         'constant_attenuation' : 14.0, # dB -- set by the fixed attenuators in setup
         'desired_power' : -7.0, # dBm
-        'f_low' : 1.30, # GHz
-        'f_high' : 1.37, # GHz
-        'f_step' : 1.5e-3, # GHz
+        'f_low' : 1.3194-10e-3, # GHz
+        'f_high' : 1.3194+10e-3, # GHz
+        'f_step' : 1.0e-3, # GHz
         'RF_delay' : 0.0, # ns
         'RF_buffer' : 50.0, # ns
-        'pi_length' : 150, # ns
+        'pi_length' : 147, # ns
         'dwell_time' : 1500.0, # ms
         'temperature_tolerance' : 3, # Kelvin
         'MeasCycles' : 1000,

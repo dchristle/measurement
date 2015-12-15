@@ -469,10 +469,8 @@ class SiC_Biexponential_Master(m2.Measurement):
                         plot2dlogbs.clear()
                         plot2dlogbs.add(np.log(1.0+np.double(np.abs(total_s_data[0,:]-total_b_data[0,:]))))
                         plot2dlogbs.add(np.log(1.0+np.double(np.abs(total_s_data[self.params['pts']-1,:]-total_b_data[self.params['pts']-1,:]))))
-
-                sbd = np.sum(total_b_data[seq_index[j],:])
-
-                print 'Background counts are approximately %.0f percent of the total signal counts.' % ( (sbd/sad*100.0) )
+                        sbd = np.sum(total_b_data[seq_index[j],:])
+                        print 'Background counts are approximately %.0f percent of the total signal counts.' % ( (sbd/sad*100.0) )
 
                 qt.msleep(0.004) # keeps GUI responsive and checks if plot needs updating.
             # Check for a break, and break out of this loop as well.
@@ -557,14 +555,14 @@ xsettings = {
         'constant_attenuation' : 14.0, # dBm -- set by the fixed attenuators in setup
         'desired_power' : -9.0, # dBm
         'RF_length_start' : 0.0, # ns
-        'RF_length_end' : 504.0, # ns
-        'RF_length_step' : 84.0, # ns
-        'freq' : 1.3194, #GHz
+        'RF_length_end' : 157.0, # ns
+        'RF_length_step' : 157.0, # ns
+        'freq' : 1.3195, #GHz
         'dwell_time' : 1000.0, # ms
         'temperature_tolerance' : 0.6, # Kelvin
         'MeasCycles' : 1200,
         'random' : 1,
-        'CFDLevel0' : 100,
+        'CFDLevel0' : 350,
         'CFDZeroCross0' : 10,
         'CFDLevel1' : 85,
         'CFDZeroCross1' : 10,
