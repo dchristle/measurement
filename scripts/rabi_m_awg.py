@@ -27,7 +27,7 @@ class SiC_Rabi_Master(m2.Measurement):
         sq_pulseMW = pulse.SquarePulse(channel='MW_pulsemod', name='A square pulse on MW modulation')
         sq_pulsePC = pulse.SquarePulse(channel='photoncount', name='A square pulse on photon counting switch')
         sq_pulseMW_Imod = pulse.SquarePulse(channel='MW_Imod', name='A square pulse on MW I modulation')
-        sq_pulseMW_Qmod = pulse.SquarePulse(channel='MW_Qmod', name='A square pulse on MW I modulation')
+        sq_pulseMW_Qmod = pulse.SquarePulse(channel='MW_Qmod', name='A square pulse on MW Q modulation')
 
 
         self.params['pts'] = np.uint32(1 + np.ceil(np.abs(self.params['RF_length_end'] - self.params['RF_length_start'])/self.params['RF_length_step']))
@@ -61,7 +61,7 @@ class SiC_Rabi_Master(m2.Measurement):
         name='MWqmodpulsecw', start=0e-9)
         # Add a microwave pulse to allow microwave energy to reach the sample even while tracking.
         # This will give a much more stable measurement for higher powers.
-        e.add(pulse.cp(sq_pulseMW, length = self.params['MW_pulse_durations'][int(np.floor(self.params['pts']/2.0))]*1e-9, amplitude = 1.0), name='microwave pulse', start=self.params['RF_delay']*1.0e-9)
+        e.add(pulse.cp(sq_pulseMW, length = self.params['MW_pulse_durations'][int(np.floor(self.params['pts']/2.0))], amplitude = 1.0), name='microwave pulse', start=self.params['RF_delay']*1.0e-9)
         elements.append(e)
         # find the maximum pulse length
         total_rf_pulses = self.params['RF_delay'] + self.params['RF_length_end'] + self.params['RF_buffer']
@@ -398,18 +398,18 @@ xsettings = {
         'constant_attenuation' : 14.0, # dBm -- set by the fixed attenuators in setup
         'desired_power' : -9.0, # dBm
         'RF_length_start' : 0.0, # ns
-        'RF_length_end' : 600.0, # ns
-        'RF_length_step' : 10.0, # ns
-        'freq' : 1.3194, #GHz
+        'RF_length_end' : 100.0, # ns
+        'RF_length_step' : 5.0, # ns
+        'freq' : 1.3195, #GHz
         'dwell_time' : 1000.0, # ms
         'temperature_tolerance' : 2.0, # Kelvin
         'MeasCycles' : 1200,
         'random' : 1,
-        'Imod' : 0.2511
+        'Imod' : 1
         }
 
-p_low = -15
-p_high = -15
+p_low = -9
+p_high = -9
 p_nstep = 1
 
 p_array = np.linspace(p_low,p_high,p_nstep)
