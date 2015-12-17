@@ -33,6 +33,8 @@ class SiC_Biexponential_Master(m2.Measurement):
 
         self.params['pts'] = np.uint32(1 + np.ceil(np.abs(self.params['RF_length_end'] - self.params['RF_length_start'])/self.params['RF_length_step']))
         self.params['MW_pulse_durations'] = 1.0e-9*np.linspace(self.params['RF_length_start'], self.params['RF_length_end'], self.params['pts'])
+        self.params['pts'] = 5
+        self.params['MW_pulse_durations'] = 1.0e-9*np.array((0, 25, 50, 75, 100))
         self._awg = qt.instruments['awg']
         self._awg.stop()
         time.sleep(5.0)
@@ -69,7 +71,7 @@ class SiC_Biexponential_Master(m2.Measurement):
 
         # Add a microwave pulse to allow microwave energy to reach the sample even while tracking.
         # This will give a much more stable measurement for higher powers.
-        e.add(pulse.cp(sq_pulseMW, length = self.params['MW_pulse_durations'][int(np.floor(self.params['pts']/2.0))]*1e-9, amplitude = 1.0), name='microwave pulse', start=self.params['RF_delay']*1.0e-9)
+        e.add(pulse.cp(sq_pulseMW, length = self.params['MW_pulse_durations'][int(np.floor(self.params['pts']/2.0))], amplitude = 1.0), name='microwave pulse', start=self.params['RF_delay']*1.0e-9)
         elements.append(e)
 
         AOM_start_time = self.params['AOM_start_delay']
@@ -464,11 +466,13 @@ class SiC_Biexponential_Master(m2.Measurement):
                     plot2dlog.clear()
                     # Now just add those arrays to the now-cleared plot
                     plot2dlog.add(np.log(1.0+np.double(total_s_data[0,:])))
-                    plot2dlog.add(np.log(1.0+np.double(total_s_data[self.params['pts']-1,:])))
+                    plot2dlog.add(np.log(1.0+np.double(total_s_data[2,:])))
+                    #plot2dlog.add(np.log(1.0+np.double(total_s_data[self.params['pts']-1,:])))
                     if self.params['background']:
                         plot2dlogbs.clear()
                         plot2dlogbs.add(np.log(1.0+np.double(np.abs(total_s_data[0,:]-total_b_data[0,:]))))
-                        plot2dlogbs.add(np.log(1.0+np.double(np.abs(total_s_data[self.params['pts']-1,:]-total_b_data[self.params['pts']-1,:]))))
+                        plot2dlogbs.add(np.log(1.0+np.double(np.abs(total_s_data[2,:]-total_b_data[2,:]))))
+                        #plot2dlogbs.add(np.log(1.0+np.double(np.abs(total_s_data[self.params['pts']-1,:]-total_b_data[self.params['pts']-1,:]))))
                         sbd = np.sum(total_b_data[seq_index[j],:])
                         print 'Background counts are approximately %.0f percent of the total signal counts.' % ( (sbd/sad*100.0) )
 
@@ -547,24 +551,24 @@ xsettings = {
         'AOM_length' : 1000.0, # ns
         'AOM_light_delay' : 655.0, # ns
         'AOM_end_buffer' : 1520.0, # ns
-        'RF_delay' : 2305.0, # ns
-        'RF_buffer' : 150.0, # ns
+        'RF_delay' : 2925.0, # ns
+        'RF_buffer' : 50.0, # ns
         'readout_length' : 130.0, # ns
         'ctr_term' : 'PFI2',
         'power' : 5.0, # dBm
         'constant_attenuation' : 14.0, # dBm -- set by the fixed attenuators in setup
         'desired_power' : -9.0, # dBm
         'RF_length_start' : 0.0, # ns
-        'RF_length_end' : 157.0, # ns
-        'RF_length_step' : 157.0, # ns
+        'RF_length_end' : 504.0, # ns
+        'RF_length_step' : 168.0, # ns
         'freq' : 1.3195, #GHz
         'dwell_time' : 1000.0, # ms
         'temperature_tolerance' : 0.6, # Kelvin
         'MeasCycles' : 1200,
         'random' : 1,
-        'CFDLevel0' : 350,
+        'CFDLevel0' : 320,
         'CFDZeroCross0' : 10,
-        'CFDLevel1' : 85,
+        'CFDLevel1' : 70,
         'CFDZeroCross1' : 10,
         'Binning' : 4,
         'Offset' : 0,
@@ -573,14 +577,14 @@ xsettings = {
         'AcqTime' : 60, # PicoHarp acquisition time in seconds
         'PH_trigger_time' : 5.0, #ns
         'PH_trigger_length' : 3.0, #ns
-        'Imod' : 0.2511, # dimensionless attenuation factor
+        'Imod' : 1.0, # dimensionless attenuation factor
         'background' : True,
         'x_displacement' : 1.6, # microns
         'y_displacement' : 0.0, # microns
         }
 
-p_low = -15
-p_high = -15
+p_low = -9
+p_high = -9
 p_nstep = 1
 
 p_array = np.linspace(p_low,p_high,p_nstep)
