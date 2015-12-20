@@ -5,12 +5,14 @@ import hdf5_data as h5
 import measurement.lib.measurement2.measurement as m2
 import time
 import msvcrt
+import gc
 from measurement.lib.pulsar import pulse, pulselib, element, pulsar
 from random import shuffle
 reload(pulse)
 reload(element)
 reload(pulsar)
 reload(pulselib)
+
 
 class SiC_Spectrum_Master(m2.Measurement):
 
@@ -800,7 +802,7 @@ class SiC_DoublePulse_Master(m2.Measurement):
         e = element.Element('CW_mode_wfm', pulsar=qt.pulsar)
         e.add(pulse.cp(sq_pulseAOM, amplitude=1.0, length=100e-6,start=0.0e-9), name='lasercw')
         e.add(pulse.cp(sq_pulsePC, amplitude=1.0, length=100e-6,start=0.0e-9), name='photoncountpulsecw')
-        e.add(pulse.cp(sq_pulseMW_Imod, amplitude=0.398*0.5, length=100e-6),
+        e.add(pulse.cp(sq_pulseMW_Imod, amplitude=self.params['Imod'], length=100e-6),
         name='MWimodpulsecw', start=0e-9)
         e.add(pulse.cp(sq_pulseMW_Qmod, amplitude=0.0, length=100e-6),
         name='MWqmodpulsecw', start=0e-9)
@@ -822,7 +824,7 @@ class SiC_DoublePulse_Master(m2.Measurement):
                     e.add(pulse.cp(sq_pulseAOM, amplitude=1, length=self.params['AOM_readout_length']*1.0e-9), name='laser readout', start=readout_start_time*1.0e-9)
 
                     trigger_period = self.params['AOM_start_buffer'] + self.params['AOM_init_length'] + self.params['tau_delay'][self.params['pts']-1] + self.params['AOM_readout_length'] + self.params['AOM_light_delay'] + self.params['AOM_end_buffer']
-                    e.add(pulse.cp(sq_pulseMW_Imod, amplitude=0.398*0.5, length=trigger_period*1.0e-9),
+                    e.add(pulse.cp(sq_pulseMW_Imod, amplitude=self.params['Imod'], length=trigger_period*1.0e-9),
                     name='MWimodpulse', start=0e-9)
 
                     e.add(pulse.cp(sq_pulseMW_Qmod, amplitude=0.0, length=trigger_period*1.0e-9),
@@ -842,7 +844,7 @@ class SiC_DoublePulse_Master(m2.Measurement):
                     e.add(pulse.cp(sq_pulseMW, length = self.params['pi_length']*1.0e-9, amplitude = 1.0), name='microwave pi pulse', start=center_time*1.0e-9)
 
                     trigger_period = self.params['AOM_start_buffer'] + self.params['AOM_init_length'] + self.params['tau_delay'][self.params['pts']-1] + self.params['AOM_readout_length'] + self.params['AOM_light_delay'] + self.params['AOM_end_buffer']
-                    e.add(pulse.cp(sq_pulseMW_Imod, amplitude=1.0, length=trigger_period*1.0e-9),
+                    e.add(pulse.cp(sq_pulseMW_Imod, amplitude=self.params['Imod'], length=trigger_period*1.0e-9),
                     name='MWimodpulse', start=0e-9)
 
                     e.add(pulse.cp(sq_pulseMW_Qmod, amplitude=0.0, length=trigger_period*1.0e-9),
@@ -1138,9 +1140,10 @@ class SiC_DoublePulse_Master(m2.Measurement):
                 # Doing this prevents some arrays from averaging more than others if a measurement is stopped before completing every measurement cycle.
                 if int(j) == int(self.params['pts']-1):
                     histogram_array = histogram_array + temporary_histogram_array
-                if int(j) == 1:
-                    plott2d1 = qt.Plot2D(current_data, name='dp1_plot', clear=True)
+                #if int(j) == 1:
+                #    plott2d1 = qt.Plot2D(current_data, name='dp1_plot', clear=True)
                 qt.msleep(0.02)
+                gc.collect()
 
 
 

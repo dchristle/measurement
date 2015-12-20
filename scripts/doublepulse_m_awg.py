@@ -19,7 +19,7 @@ reload(singlespin)
 
 xsettings = {
         'focus_limit_displacement' : 20, # microns inward
-        'fbl_time' : 130.0, # seconds
+        'fbl_time' : 120.0, # seconds
         'constant_attenuation' : 14.0, # dBm -- set by the fixed attenuators in setup
         'AOM_light_delay' : 655.0, # ns
         'AOM_start_buffer' : 155.0, # ns
@@ -33,25 +33,26 @@ xsettings = {
         'tau_length_end' : 1500.0, # ns
         'tau_length_step' : 1, # ns
         'microwaves' : True, # Boolean
-        'frequency' : 1.3358, #GHz
-        'desired_power' : -19.0, # dBm
-        'pi_length' : 260.0, # ns
-        'CFDLevel0' : 125,
+        'frequency' : 1.3195, #GHz
+        'desired_power' : -9.0, # dBm
+        'pi_length' : 50.0, # ns
+        'CFDLevel0' : 320,
         'CFDZeroCross0' : 10,
-        'CFDLevel1' : 110,
+        'CFDLevel1' : 70,
         'CFDZeroCross1' : 10,
         'Binning' : 5,
         'Offset' : 0,
         'SyncDiv' : 1,
         'SyncOffset' : -10000,
         'acquisition_time' : 60.0, # s
-        'temperature_tolerance' : 2.0, # Kelvin
-        'MeasCycles' : 150,
-        'random' : 1
+        'temperature_tolerance' : 0.5, # Kelvin
+        'MeasCycles' : 170,
+        'random' : 1,
+        'Imod' : 1.0,
         }
 
 
-tlca = np.array((0.20,))
+tlca = np.linspace(0.20,0.08,6)
 
 
 for cur in tlca:
@@ -74,7 +75,8 @@ for cur in tlca:
     # this could be very helpful to load various sets of settings from a global
     # configuration manager!
     m.params.from_dict(xsettings)
-    m.sequence(upload=True,program=True,clear=True)
+    do_awg_stuff = True
+    m.sequence(upload=do_awg_stuff,program=do_awg_stuff,clear=do_awg_stuff)
 
 
     if True:
