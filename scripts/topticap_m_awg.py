@@ -92,7 +92,7 @@ class SiC_Toptica_Piezo_Sweep(m2.Measurement):
             total_microwave_length = resonant_laser_start_time + self.params['Sacher_AOM_length']+ self.params['Sacher_AOM_end_buffer']
             e.add(pulse.cp(sq_pulseMW, length = total_microwave_length*1.0e-9, amplitude = 1.0), name='microwave pulse', start=0.0*1.0e-9)
             # Add the I/Q modulator pulses
-            e.add(pulse.cp(sq_pulseMW_Imod, amplitude=0.5, length=total_microwave_length*1.0e-9),
+            e.add(pulse.cp(sq_pulseMW_Imod, amplitude=self.params['Imod'], length=total_microwave_length*1.0e-9),
             name='MWimodpulse', start=0e-9)
 
             e.add(pulse.cp(sq_pulseMW_Qmod, amplitude=0.0, length=total_microwave_length*1.0e-9),
@@ -215,8 +215,17 @@ class SiC_Toptica_Piezo_Sweep(m2.Measurement):
         # Now set the proper attenuation
         desired_atten = self.params['power'] - self.params['constant_attenuation'] - self.params['desired_power']
         self._va.set_attenuation(desired_atten)
+        desired_atten = self.params['power'] - self.params['constant_attenuation'] - self.params['desired_power']
+        self._va.set_attenuation(desired_atten)
         print 'Variable attenuator set to %.1f dB attenuation.' % desired_atten
+        full_attenuation = self.params['power'] - self.params['constant_attenuation'] - np.max((0,np.min((desired_atten,15.5)))) + np.log(self.params['Imod'])/np.log(10.0)*10
+        print 'Fully attenuated power is %.2f dBm' % full_attenuation
 
+        # Check if wavemeter returns a valid wavelength
+        wl_cur = self._wvm.get_wavelength()
+        if wl_cur < 1000.0 or wl_cur > 1170.0:
+            logging.error(__name__ + ': wavelength %.2f from wavemeter is not in range')
+            print 'Wavelength is %.2f nm' % wl_cur
 
         return
     def measure(self):
@@ -545,36 +554,37 @@ class SiC_Toptica_Piezo_Sweep(m2.Measurement):
 
 xsettings = {
         'focus_limit_displacement' : 20, # microns inward
-        'fbl_time' : 60.0, # seconds
+        'fbl_time' : 150.0, # seconds
         'AOM_start_buffer' : 50.0, # ns
         'AOM_length' : 1600.0, # ns
         'AOM_light_delay' : 655.0, # ns
         'AOM_end_buffer' : 1155.0, # ns
-        'Sacher_AOM_length' : 3000.0, # ns
+        'Sacher_AOM_length' : 1000.0, # ns
         'Sacher_AOM_light_delay' : 950.0, # ns
         'Sacher_AOM_end_buffer' : 1155.0, # ns
-        'readout_length' : 3000.0, # ns
+        'readout_length' : 1000.0, # ns
         'ctr_term' : 'PFI2',
-        'motor_start' : 96220, # steps, should be lower than motor_end
-        'motor_end' : 109950, # steps
+        'motor_start' : 97220, # steps, should be lower than motor_end
+        'motor_end' : 98750, # steps
         'motor_step_size' : 150, # steps
         'piezo_start' : 0, #volts
         'piezo_end' : 90, #volts
-        'piezo_step_size' : 0.25, # volts (dispersion is roughly ~0.4 GHz/V)
-        'bin_size' : 0.03, # GHz, should be same order of magnitude as (step_size * .1 GHz)
-        'microwaves' : False, # modulate with microwaves on or off
+        'piezo_step_size' : 0.08, # volts (dispersion is roughly ~0.4 GHz/V)
+        'bin_size' : 0.05, # GHz, should be same order of magnitude as (step_size * .1 GHz)
+        'microwaves' : True, # modulate with microwaves on or off
         'off_resonant_laser' : True, # cycle between resonant and off-resonant
         'power' : 5.0, # dBm
-        'constant_attenuation' : 28.0, # dBm -- set by the fixed attenuators in setup
-        'desired_power' : -28.0, # dBm
+        'constant_attenuation' : 14.0, # dBm -- set by the fixed attenuators in setup
+        'desired_power' : -15.0, # dBm
         'freq' : 1.3358, #GHz
-        'dwell_time' : 250.0, # ms
+        'dwell_time' : 500.0, # ms
         'temperature_tolerance' : 4.0, # Kelvin
         'MeasCycles' : 1,
+        'Imod' : 0.1
         }
 
-p_low = -29
-p_high = -29
+p_low = -9
+p_high = -9
 p_nstep = 1
 
 p_array = np.linspace(p_low,p_high,p_nstep)
@@ -587,7 +597,7 @@ for rr in range(np.size(p_array)):
     if msvcrt.kbhit():
                 kb_char=msvcrt.getch()
                 if kb_char == "q": break
-    name_string = 'power %.2f dBm' % (p_array[rr])
+    name_string = 'T = 5K_nooff'
     m = SiC_Toptica_Piezo_Sweep(name_string)
     xsettings['desired_power'] = p_array[rr]
     # since params is not just a dictionary, it's easy to incrementally load
