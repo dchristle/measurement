@@ -14,7 +14,7 @@ reload(element)
 reload(pulsar)
 reload(pulselib)
 
-class SiC_Toptica_Piezo_Sweep(m2.Measurement):
+class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
 
     mprefix = 'topticapiezo'
 
@@ -62,15 +62,6 @@ class SiC_Toptica_Piezo_Sweep(m2.Measurement):
         if self.params['microwaves']:
             e.add(pulse.cp(sq_pulseMW, length=100e-6, amplitude = 1.0), name='microwave pulse', start=0e-9)
         elements.append(e)
-
-
-##        # find the maximum pulse length
-##        total_rf_pulses = self.params['RF_delay'] + self.params['RF_length_end'] + self.params['RF_buffer']
-##        AOM_start_time = total_rf_pulses - self.params['AOM_light_delay']
-##        readout_start_time = AOM_start_time + self.params['AOM_light_delay']
-##        trigger_period = AOM_start_time + self.params['AOM_length'] + self.params['AOM_light_delay'] + self.params['AOM_end_buffer']
-##        print 'Total trigger period is %d ns.' % trigger_period
-
 
         # Now create the resonant sequence
         e = element.Element('Resonant_mode', pulsar=qt.pulsar)
@@ -143,6 +134,116 @@ class SiC_Toptica_Piezo_Sweep(m2.Measurement):
 
         return
 
+    def flatten_ranges(self, range_list):
+        # this function takes a list of frequency ranges and flattens them,
+        # i.e. if two ranges overlap, they are merged
+        saved = list(range_list[0])
+        for st, en in sorted(range_list):
+            if st <= saved[1]:
+                saved[1] = max(saved[1], en)
+            else:
+                yield tuple(saved)
+                saved[0] = st
+                saved[1] = en
+        yield tuple(saved)
+
+    def difference_ranges(a_range, b_range):
+        # subtract the elements one by one
+        a_saved = a_range
+
+        for b in b_range:
+            a_saved = difference_single_element(a_saved, b)
+
+        return a_saved
+
+    def difference_single_element(a_list, b):
+        true_list = []
+        for i in range(len(a_list)):
+            # pick out one tuple from a_list and save it
+            st, en = list(a_list[i]) # also unpack the tuple into start and end
+
+            if b[0] > st and en > b[0] and en < b[1]:
+                true_list.append((b[0],en))
+            elif b[0] < st and b[1] < en and b[1] > st:
+                true_list.append((b[1],en))
+            elif b[0] < st and b[1] > en:
+                # the range a is completely contained within the range of b
+                # so we return nothing
+                pass
+            elif b[0] > st and b[1] < en:
+                # the range of b is completely contained within a, so we
+                # return two new sub-ranges of a that weren't in b
+                true_list.append((st, b[0]))
+                true_list.append((b[1], en))
+            else:
+                # in this case, b doesn't overlap at all with a, so
+                # we just return a unchanged
+                true_list.append((st,en))
+        return true_list
+
+    def brent_search(self, f, a, b, tol, maxiters):
+        # This method is a fairly general implementation of Brent's search. The
+        # usage goal for it is to take advantage of the relatively smooth nature
+        # of the relation between grating angle and laser frequency, and allow
+        # the program to hunt for a desired laser frequency.
+        fa = f(a)
+        fb = f(b)
+        if fa*fb >= 0:
+            print('Root is not bracketed -- exiting root search.')
+            return (a+b)/2.0, -1
+        if (np.abs(a) < np.abs(b)):
+            # swap a and b
+            a, b = b, a
+            fa, fb = fb, fa
+
+        c = a
+        fc = fa
+        fs = -1.0
+        mflag = True
+        i = 0
+
+        while (fb != 0.0 and fs != 0.0 and np.abs(b - a) > np.abs(tol)) and i < maxiters:
+            if fa != fc and fb != fc:
+                # do inverse quadratic interpolation
+                s = a*fb*fc/((fa - fb)*(fa - fc)) + b*fa*fc/((fb - fa)*(fb - fc)) + c*fa*fb/((fc - fa)*(fc - fb))
+            else:
+                # do secant method
+                s = b - fb*(b - a)/(fb - fa)
+            # check conditions to see if we do the bisection method instead
+            tmp = (3*a+b)/4.0
+            if (not ((tmp < s and s < b) or (b < s and s < tmp)) or \
+                (mflag and np.abs(s-b) >= np.abs(b-c)/2.0) or \
+                ((not mflag) and np.abs(s-b) >= np.abs(c-d)/2.0)):
+                # do bisection instead
+                s = (a+b)/2.0
+                mflag = True
+
+            else:
+                if ((mflag and np.abs(b-c) < np.abs(tol)) or \
+                     ((not mflag) and np.abs(c-d) < np.abs(tol))):
+                    # do bisection instead
+                    s = (a+b)/2.0
+                    mflag = True
+                else:
+                    mflag = False
+
+            fs = f(s)
+            d = c
+            c = b
+            fc = fb
+            if fa*fs < 0.0:
+                b = s
+                fb = fs
+            else:
+                a = s
+                fa = fs
+
+            if np.abs(fa) < np.abs(fb):
+                a, b = b, a
+                fa, fb = fb, fa
+            i = i+1
+
+        return b, i
 
     def awg_confirm(self, seq_el):
         q = 0
@@ -261,45 +362,7 @@ class SiC_Toptica_Piezo_Sweep(m2.Measurement):
             print 'Wavelength is %.2f nm' % wl_cur
 
         return
-    def filter_update(self, felem, seenelem):
-        # first input is a list consistent of a lower bound and upper bound, from the existing filter set
-        # second input is a list of list objects, which are lower/upper bounds of ranges of frequencies already
-        # observed in experiment
-        #
-        # output is a list of lists, with each list element consistent of a lower and upper bound of frequencies
-        # included in the first input element but NOT included in the second.
-        for seen in seenelem:
-            # deal with cases
-            if felem[0] > self.params['filter_set'][l][0] and felem[0] < self.params['filter_set'][l][1]:
-                if felem[1] < self.params['filter_set'][l][1]:
-                    # filled in segment is contained within an existing bound, so split it up
-                    #
-                    # append the second segment
-                    new_filter_set.append( [felem[1],self.params['filter_set'][l][1]] )
-                    # change the upper bound of the first segment to be the lower bound of
-                    # the range we've already scanned
-                    new_filter_set.append([ self.params['filter_set'][l][0], felem[0] ])
-                    del self.params['filter_set'][l]
-                    self.params['filter_set'].append(temp0)
-                    self.params['filter_set'].append(temp1)
-                else:
-                    # the upper bound of the range we've seen exceeds the existing upper bound
-                    # so just change the existing upper bound to the lower bound
-                    self.params['filter_set'][l] = [self.params['filter_set'][l][0],felem[0]]
 
-            elif felem[0] < self.params['filter_set'][l][0] and felem[1] > self.params['filter_set'][l][0]:
-                # the lower bound is not within the set, but the upper bound is either within the set or
-                # above it
-                if felem[1] < self.params['filter_set'][l][1]:
-                    # the upper bound of the set we have scanned is within the existing filter range
-                    #
-                    # so we set the lower bound of the existing range to this upper bound
-                    self.params['filter_set'][l] = [felem[1], self.params['filter_set'][l][1]]
-                else:
-                    # the upper bound of the set is above the filter range, so we have seen this entire
-                    # filter range already
-                    self.params['filter_set'][l] = []
-        return
     def measure(self):
         # Start keystroke monitor
         self.start_keystroke_monitor('abort')
@@ -316,19 +379,9 @@ class SiC_Toptica_Piezo_Sweep(m2.Measurement):
         plot2d_0 = qt.Plot2D(data, name='piezoscan_single_sweep', clear=True)
         data.create_file()
         # Populate some arrays
-        self.params['motor_pts'] = np.uint32(1 + np.ceil(np.abs(self.params['motor_end']-self.params['motor_start'])/self.params['motor_step_size']))
-        self.params['motor_array'] = np.uint32(np.linspace(self.params['motor_start'], self.params['motor_start'] + (self.params['motor_pts']-1)*self.params['motor_step_size'], self.params['motor_pts']))
-
-        # Overwrite those arrays
-        #self.params['motor_array'] = np.array(( 97610, 97760, 98650),dtype='uint32')
-        #self.params['motor_array'] = np.array((97650, 98630-150, 98630, 98630+150),dtype='uint32')
-        self.params['motor_pts'] = np.uint32(self.params['motor_array'].size)
         self.params['piezo_pts'] = np.uint32(1 + np.ceil(np.abs(self.params['piezo_end']-self.params['piezo_start'])/self.params['piezo_step_size']))
-        #b = np.linspace(self.params['piezo_end'] + (self.params['piezo_pts']-1)*self.params['piezo_step_size'], self.params['piezo_start'], self.params['piezo_pts'])
         self.params['piezo_array'] = np.linspace(self.params['piezo_start'],self.params['piezo_end'], self.params['piezo_pts'])
-        #print 'piezo array is %s' %self.params['piezo_array']
-		#print '--Toptica motor/piezo scan meas. from %.3f nm to %.3f nm in %.3f nm steps (%f steps)--' % (self.params['wavelength_start'], self.params['wavelength_end'], self.params['wavelength_step_size'], self.params['motor_pts'])
-
+        self.params['working_set'] = np.copy(self.params['filter_set'])
 
 
         time.sleep(1.0)
@@ -370,20 +423,6 @@ class SiC_Toptica_Piezo_Sweep(m2.Measurement):
         self._awg.sq_forced_jump(2)
         self.awg_confirm(2)
 
-        #make sure motor_step_start is less than motor_step_end
-        if self.params['motor_start'] > self.params['motor_end']:
-            print 'motor_start is greater than motor_end'
-            self.stop_keystroke_monitor('abort')
-            self._stop_measurement = True
-            return
-
-		#determine rough frequency range
-        if self.params['motor_array'][0] > 10000:
-			self._motdl.set_position(self.params['motor_array'][0]-10000)
-        else:
-			self._motdl.set_position(0)
-
-        self._motdl.set_position(self.params['motor_array'][0])
         self._toptica.set_piezo_voltage(self.params['piezo_array'][0])
 
         # Monitor laser frequency
@@ -402,16 +441,8 @@ class SiC_Toptica_Piezo_Sweep(m2.Measurement):
             if zz >=29:
                 print 'Laser frequency readout on wavemeter did not stabilize after 30 seconds!'
 
-		#This is the high end frequency limit, 100 GHz above the first wavemeter reading at motor_position_start we will limit our array of stored data to
-        frq2 = (299792458.0/self._wvm.get_wavelength()) + 100.0 #GHz
 
-        if self.params['motor_array'][0] > 10000:
-			self._motdl.set_position(self.params['motor_array'][self.params['motor_pts']-1]-10000)
-        else:
-			self._motdl.set_position(0)
-        self._motdl.set_position(self.params['motor_array'][self.params['motor_pts']-1])
 
-		#This is the reference frequency we will store in the data file, 100 GHz below the wavemeter reading at motor_position_end
         time.sleep(2.0)
         print 'Checking for laser stabilization...'
         # Monitor laser frequency
@@ -573,56 +604,7 @@ class SiC_Toptica_Piezo_Sweep(m2.Measurement):
                             print 'Measurement aborted.'
                             self._stop_measurement = True
                             break
-                # use a clustering scheme to adapt the measurement -- we don't want to sample the same frequency ranges
-                # multiple times within a run
-                #
-                #print 'Old filter set %s' % self.params['filter_set']
-                # first, check which frequencies in the frq_array have been seen
-                #frq_idx = total_hits_data > 0
-                # if np.any(frq_idx):
-                #     # select which ones we've seen, then scale them back to absolute frequency
-                #     frq_subset = frq_array[frq_idx] + frq1
-                #     # this array is already sorted from low to high by construction, so we can search for gaps easily
-                #     frq_diffs = np.diff(frq_subset)
-                #     # now lets segment the already swept frequency range into a list of boundaries
-                #     kk = 0
-                #     lb = 0
-                #     seen_freqs = []
-                #     while kk < np.size(frq_diffs):
-                #         if frq_diffs[kk] > 10*self.params['bin_size']:
-                #             # we have detected a gap
-                #             ub = kk
-                #             # if a single point is located between two gaps, we don't want to remove anything from
-                #             # the set of filter ranges; this condition means ub must be > lb
-                #             if ub > lb:
-                #                 seen_freqs.append((frq_subset[lb],frq_subset[ub]))
-                #             # the lower bound of the next gap (if it exists) is now one element after
-                #             # the upper bound of this gap
-                #             lb = kk+1
-                #         # if kk was at the upper end of the entire range, kk -> kk + 1 for the next
-                #         # iteration and the loop will not execute
-                #         kk = kk+1
-                #     # if we didn't find any gaps, we can just add the entire range to the "seen freqs" list
-                #     if len(seen_freqs) == 0 and np.size(frq_subset) > 1:
-                #         seen_freqs = [(frq_subset[0],frq_subset[-1])]
-                #     # we don't want to modify a list we're iterating over, so we'll construct a new filter set
-                #     # and append to it
-                #     new_filter_set = []
-                #     for l in range(len(self.params['filter_set'])):
-                #
-                # # finally, check for tuples whose total length is less than 3x the bin size and remove them
-                # print 'New filter set %s' % self.params['filter_set']
-                # rem_idx = []
-                # for k in self.params['filter_set']:
-                #     if (k[1]-k[0]) < 3.0*self.params['bin_size']:
-                #         rem_idx.append(k)
-                #
-                # for k in rem_idx:
-                #     del self.params['filter_set'][self.params['filter_set'].index(k)]
-                #
-                # print 'New filter set %s' % self.params['filter_set']
-                # if len(self.params['filter_set']) == 0 and self.params['filter']:
-                #     break
+
 
             # Check for a break, and break out of this loop as well.
             # It's important to check here, before we add the array to the total
@@ -707,9 +689,6 @@ xsettings = {
         'readout_length' : 1000.0, # ns
         'readout_buffer' : 10.0, # ns
         'ctr_term' : 'PFI2',
-        'motor_start' : 97100, # steps, should be lower than motor_end
-        'motor_end' : 99270, # steps
-        'motor_step_size' : 170, # steps
         'piezo_start' : 0, #volts
         'piezo_end' : 90, #volts
         'piezo_step_size' : 0.1, # volts (dispersion is roughly ~0.4 GHz/V)
@@ -723,9 +702,8 @@ xsettings = {
         'desired_power' : -9.0, # dBm
         'freq' : list([1.3160,1.3565,1.44]), #GHz
         'dwell_time' : 1000.0, # ms
-        'filter' : True,
         #'filter_set' : ( (270850, 270870), (270950, 270970)),
-        'filter_set' : [[270900, 270925],[270915,271010]],
+        'filter_set' : [(270900, 270925),(270915,271010)],
         'temperature_tolerance' : 4.0, # Kelvin
         'MeasCycles' : 1,
         'Imod' : 1.0,
@@ -746,7 +724,7 @@ def main():
             do_track = False
 
     name_string = 'randomdefect_nomw'
-    m = SiC_Toptica_Piezo_Sweep(name_string)
+    m = SiC_Toptica_Search_Piezo_Sweep(name_string)
     #xsettings['desired_power'] = -19.0
     #xsettings['frequency'] = 1.45
     #xsettings['microwaves'] = False
