@@ -100,10 +100,10 @@ class SiC_RamseyQ_Master(m2.Measurement):
                 e.add(pulse.cp(sq_pulsePC, amplitude=1.0, length=self.params['readout_length']*1.0e-9),
                 name='photoncountpulse', start=readout_start_time*1.0e-9)
                 # Here is where we determine the readout axis.
-                I_amplitude = 0.2977*np.cos(2*np.pi*self.params['fringe_frequency']*self.params['tau_delay'][i] + np.pi/180.0*phase_array[j])
-                Q_amplitude = 0.2977*np.sin(2*np.pi*self.params['fringe_frequency']*self.params['tau_delay'][i] + np.pi/180.0*phase_array[j])
+                I_amplitude = self.params['Imod']*np.cos(2*np.pi*self.params['fringe_frequency']*self.params['tau_delay'][i] + np.pi/180.0*phase_array[j])
+                Q_amplitude = self.params['Imod']*np.sin(2*np.pi*self.params['fringe_frequency']*self.params['tau_delay'][i] + np.pi/180.0*phase_array[j])
                 # For the first pulse, we just write I = 1, Q = 0, which is some phase in the lab frame.
-                e.add(pulse.cp(sq_pulseMW_Imod, amplitude=0.2977, length=(self.params['RF_delay'] + self.params['pi2_length'] + self.params['tau_delay'][i]/2.0)*1.0e-9),
+                e.add(pulse.cp(sq_pulseMW_Imod, amplitude=self.params['Imod'], length=(self.params['RF_delay'] + self.params['pi2_length'] + self.params['tau_delay'][i]/2.0)*1.0e-9),
                 name='MWimodpulse', start=0e-9)
 
                 e.add(pulse.cp(sq_pulseMW_Qmod, amplitude=0.0, length=(self.params['RF_delay'] + self.params['pi2_length'] + self.params['tau_delay'][i]/2.0)*1.0e-9),
@@ -458,9 +458,9 @@ class SiC_RamseyQ_Master(m2.Measurement):
 xsettings = {
         'focus_limit_displacement' : 20, # microns inward
         'fbl_time' : 180.0, # seconds
-        'AOM_length' : 1400.0, # ns
+        'AOM_length' : 900.0, # ns
         'AOM_light_delay' : 655.0, # ns
-        'AOM_end_buffer' : 1200.0, # ns
+        'AOM_end_buffer' : 2800.0, # ns
         'RF_delay' : 50.0, # ns
         'RF_buffer' : 150.0, # ns
         'readout_length' : 130.0, # ns
@@ -469,20 +469,21 @@ xsettings = {
         'constant_attenuation' : 14.0, # dB -- set by the fixed attenuators in setup
         'desired_power' : -9.0, # dBm
         'tau_length_start' : 0.0, # ns
-        'tau_length_end' : 1900.0, # ns
-        'tau_length_step' : 20.0, # ns
-        'fringe_frequency' : 0.0025, # GHz
+        'tau_length_end' : 300.0, # ns
+        'tau_length_step' : 5.0, # ns
+        'fringe_frequency' : 0.0010, # GHz
         'poisson_gap' : True,
-        'numpoints_poisson' : 55, # number of points
-        'freq' : 1.3106, #GHz
-        'pi2_length' : 125, # ns
+        'numpoints_poisson' : 40, # number of points
+        'freq' : 1.3151, #GHz
+        'pi2_length' : 72, # ns
         'dwell_time' : 1500.0, # ms
         'temperature_tolerance' : 2.0, # Kelvin
         'MeasCycles' : 1400,
-        'random' : 1
+        'random' : 1,
+        'Imod' : 1.0,
         }
 
-p_array = np.array([-19.0])
+p_array = np.array([-9.0])
 
 for rr in range(np.size(p_array)):
     # Create a measurement object m
