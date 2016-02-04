@@ -298,13 +298,13 @@ class SiC_Rabi_Master(m2.Measurement):
                     self.awg_confirm(seq_index[j]+2)
 
                 temp_count_data[j] = self._ni63.get('ctr1')
-                qt.msleep(0.004) # keeps GUI responsive and checks if plot needs updating.
-                self._keystroke_check('abort')
-                if self.keystroke('abort') in ['q','Q']:
+                qt.msleep(0.002) # keeps GUI responsive and checks if plot needs updating.
+            if msvcrt.kbhit() or scan_on == False or self._stop_measurement == True:
+                kb_char=msvcrt.getch()
+                self._stop_measurement = True
+                if kb_char == "q" or scan_on == False or self._stop_measurement == True:
                     print 'Measurement aborted.'
-                    self.stop_keystroke_monitor('abort')
                     self._stop_measurement = True
-                    scan_on = False
                     break
 
             # Check for a break, and break out of this loop as well.
@@ -389,27 +389,27 @@ xsettings = {
         'fbl_time' : 150.0, # seconds
         'AOM_length' : 1400.0, # ns
         'AOM_light_delay' : 655.0, # ns
-        'AOM_end_buffer' : 855.0, # ns
+        'AOM_end_buffer' : 1055.0, # ns
         'RF_delay' : 50.0, # ns
-        'RF_buffer' : 150.0, # ns
+        'RF_buffer' : 350.0, # ns
         'readout_length' : 130.0, # ns
         'ctr_term' : 'PFI2',
         'power' : 5.0, # dBm
         'constant_attenuation' : 14.0, # dBm -- set by the fixed attenuators in setup
         'desired_power' : -9.0, # dBm
         'RF_length_start' : 0.0, # ns
-        'RF_length_end' : 100.0, # ns
-        'RF_length_step' : 5.0, # ns
-        'freq' : 1.3195, #GHz
+        'RF_length_end' : 400.0, # ns
+        'RF_length_step' : 10.0, # ns
+        'freq' : 1.3565, #GHz
         'dwell_time' : 1000.0, # ms
         'temperature_tolerance' : 2.0, # Kelvin
         'MeasCycles' : 1200,
         'random' : 1,
-        'Imod' : 1
+        'Imod' : 1.0,
         }
 
-p_low = -9
-p_high = -9
+p_low = -16
+p_high = -16
 p_nstep = 1
 
 p_array = np.linspace(p_low,p_high,p_nstep)
