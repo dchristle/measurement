@@ -33,8 +33,8 @@ class SiC_Biexponential_Master(m2.Measurement):
 
         self.params['pts'] = np.uint32(1 + np.ceil(np.abs(self.params['RF_length_end'] - self.params['RF_length_start'])/self.params['RF_length_step']))
         self.params['MW_pulse_durations'] = 1.0e-9*np.linspace(self.params['RF_length_start'], self.params['RF_length_end'], self.params['pts'])
-        self.params['pts'] = 5
-        self.params['MW_pulse_durations'] = 1.0e-9*np.array((0, 25, 50, 75, 100))
+        self.params['pts'] = 2
+        self.params['MW_pulse_durations'] = 1.0e-9*np.array((0.0,54.0))
         self._awg = qt.instruments['awg']
         self._awg.stop()
         time.sleep(5.0)
@@ -231,7 +231,7 @@ class SiC_Biexponential_Master(m2.Measurement):
         self._ph.set_InputCFD0(self.params['CFDLevel0'],self.params['CFDZeroCross0'])
         self._ph.set_InputCFD1(self.params['CFDLevel1'],self.params['CFDZeroCross1'])
         self._ph.set_SyncOffset(self.params['SyncOffset'])
-        print 'PicoHarp settings configured.'
+        print 'PicoHarp settings configured - channels have %d / %d counts.' % (self._ph.get_CountRate0(), self._ph.get_CountRate1())
 
         # Reset the RFSG
         self._pxi.close()
@@ -461,20 +461,20 @@ class SiC_Biexponential_Master(m2.Measurement):
                     track_time = time.time() + self.params['fbl_time'] + 5.0*np.random.uniform()
                 qt.msleep(0.004) # keeps GUI responsive and checks if plot needs updating.
                 # only update the plots on the first and last waveforms, for clarity of presentation
-
-                if j == self.params['pts']-1:
-                    plot2dlog.clear()
-                    # Now just add those arrays to the now-cleared plot
-                    plot2dlog.add(np.log(1.0+np.double(total_s_data[0,:])))
-                    plot2dlog.add(np.log(1.0+np.double(total_s_data[2,:])))
-                    #plot2dlog.add(np.log(1.0+np.double(total_s_data[self.params['pts']-1,:])))
-                    if self.params['background']:
-                        plot2dlogbs.clear()
-                        plot2dlogbs.add(np.log(1.0+np.double(np.abs(total_s_data[0,:]-total_b_data[0,:]))))
-                        plot2dlogbs.add(np.log(1.0+np.double(np.abs(total_s_data[2,:]-total_b_data[2,:]))))
-                        #plot2dlogbs.add(np.log(1.0+np.double(np.abs(total_s_data[self.params['pts']-1,:]-total_b_data[self.params['pts']-1,:]))))
-                        sbd = np.sum(total_b_data[seq_index[j],:])
-                        print 'Background counts are approximately %.0f percent of the total signal counts.' % ( (sbd/sad*100.0) )
+                if i < 10 or np.mod(i,10) == 0:
+                    if j == self.params['pts']-1:
+                        plot2dlog.clear()
+                        # Now just add those arrays to the now-cleared plot
+                        plot2dlog.add(np.log(1.0+np.double(total_s_data[0,:])))
+                        #plot2dlog.add(np.log(1.0+np.double(total_s_data[2,:])))
+                        #plot2dlog.add(np.log(1.0+np.double(total_s_data[self.params['pts']-1,:])))
+                        if self.params['background']:
+                            plot2dlogbs.clear()
+                            plot2dlogbs.add(np.log(1.0+np.double(np.abs(total_s_data[0,:]-total_b_data[0,:]))))
+                            #plot2dlogbs.add(np.log(1.0+np.double(np.abs(total_s_data[2,:]-total_b_data[2,:]))))
+                            #plot2dlogbs.add(np.log(1.0+np.double(np.abs(total_s_data[self.params['pts']-1,:]-total_b_data[self.params['pts']-1,:]))))
+                            sbd = np.sum(total_b_data[seq_index[j],:])
+                            print 'Background counts are approximately %.0f percent of the total signal counts.' % ( (sbd/sad*100.0) )
 
                 qt.msleep(0.004) # keeps GUI responsive and checks if plot needs updating.
             # Check for a break, and break out of this loop as well.
@@ -550,7 +550,7 @@ xsettings = {
         'AOM_start_delay' : 00.0,
         'AOM_length' : 1000.0, # ns
         'AOM_light_delay' : 655.0, # ns
-        'AOM_end_buffer' : 1520.0, # ns
+        'AOM_end_buffer' : 1620.0, # ns
         'RF_delay' : 2925.0, # ns
         'RF_buffer' : 50.0, # ns
         'readout_length' : 130.0, # ns
@@ -559,11 +559,11 @@ xsettings = {
         'constant_attenuation' : 14.0, # dBm -- set by the fixed attenuators in setup
         'desired_power' : -9.0, # dBm
         'RF_length_start' : 0.0, # ns
-        'RF_length_end' : 504.0, # ns
-        'RF_length_step' : 168.0, # ns
+        'RF_length_end' : 0.0, # ns
+        'RF_length_step' : 1.0, # ns
         'freq' : 1.3195, #GHz
         'dwell_time' : 1000.0, # ms
-        'temperature_tolerance' : 0.6, # Kelvin
+        'temperature_tolerance' : 3.6, # Kelvin
         'MeasCycles' : 1200,
         'random' : 1,
         'CFDLevel0' : 320,
