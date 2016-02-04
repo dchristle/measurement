@@ -293,7 +293,7 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
     def filter_laser_frequencies(self, filter_set, frq_array, total_hits_data):
         print 'Old filter set %s' % filter_set
 
-        frq_idx = total_hits_data > 0
+        frq_idx = np.nonzero(total_hits_data[:,0]) > 0
         if np.any(frq_idx):
             # select which ones we've seen, then scale them back to absolute frequency
             frq_subset = frq_array[frq_idx] + frq1
@@ -424,13 +424,12 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
         else:
             print 'Temperature in reference (%.2f from setpoint), proceeding.' % (np.abs(self._ls332.get_kelvinA() - self._ls332.get_setpoint1()))
 
-        if self.params['motor_start'] > self.params['motor_end']:
-            logging.warning('Start motor position is greater than end motor position!!!!')
         # Set the DAQ counter dwell time, units milliseconds
         self._ni63.set_count_time(self.params['dwell_time']/1000.0)
         # Set the DAQ counter PFI channel (default is 'PFI0')
         self._ni63.set_ctr1_src(self.params['ctr_term'])
         print 'Counter prepared.'
+
         # Reset the RFSG
         self._pxi.close()
         self._pxi.init_device()
@@ -466,11 +465,12 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
 
         data = qt.Data(name='wavemotor_sweep')
 
-        data.add_coordinate('frq (GHz)')
-        for idx in range(np.size(self.params['freq'])):
-            data.add_value('counts')
+        data.add_coordinate('laser frequency (GHz)')
+        data.add_coordinate('microwave frequency (GHz)')
+        data.add_value('counts')
 
-        plot2d_0 = qt.Plot2D(data, name='piezoscan_single_sweep', clear=True)
+        plot2d_0 = qt.Plot2D(data, name='piezoscan_single_sweep', coorddim=0, valdim=1)
+        plot3d_0 = qt.Plot3D(data, name='piezoscan_microwave_full', coorddims=(0,1), valdim=2, style='image')
         data.create_file()
         # Populate some arrays
         self.params['piezo_pts'] = np.uint32(1 + np.ceil(np.abs(self.params['piezo_end']-self.params['piezo_start'])/self.params['piezo_step_size']))
@@ -527,7 +527,7 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
         self.laser_frequency_seek(first_range[0]-8.0)
         self.check_laser_stabilization()
 
-        frq1 = (299792458.0/self._wvm.get_wavelength()) - 100.0 #Ghz
+        frq1 = self._wvm.get_frequency() - 100.0 #Ghz
         print 'Start (reference) frequency %.2f GHz / %.2f nm -- End frequency %.2f GHz / %.2f nm' % (frq1 + 100.0,299792458.0/(frq1 + 100.0), frq2 - 100.0, 299792458.0/(frq2-100.0))
         self.params['bins'] = np.uint32(1 + np.ceil(np.absolute(frq2-frq1)/self.params['bin_size']))
         #column 1 of the data set, i.e. relative frequency
@@ -540,7 +540,7 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
         for i in range(self.params['MeasCycles']):
             # Enter the loop for measurement
             t1 = time.time()
-
+            seek_iterations = 0
             while not self.params['working_set']:
 
                 if self._stop_measurement == True:
@@ -548,12 +548,11 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
                     self._stop_measurement = True
                     break
 
-                # Set the new motor position
-                cur_frq = 299792458.0/self._wvm.get_wavelength()
+                cur_frq = self._wvm.get_frequency()
                 target_freq = self.params['working_set'][0]
                 if not (cur_frq > target_freq-20.0 and cur_frq < target_freq):
                     self.laser_frequency_seek(target_freq[0]-8.0+(np.random.uniform()-0.5)*3.0)
-                cur_frq = 299792458.0/self._wvm.get_wavelength()
+                cur_frq = self._wvm.get_frequency()
                 print 'Laser frequency set to %.2f GHz (target %.2f GHz/offset %.2f GHz)' % (target_freq, cur_frq,target_freq[0]-8.0)
                 self.check_laser_stabilization()
 
@@ -567,7 +566,7 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
                     time.sleep(0.05)
 
                     # Measure frequency and counts
-                    cur_frq = 299792458.0/self._wvm.get_wavelength()
+                    cur_frq = self._wvm.get_frequency()
                     offset_frq = cur_frq - frq1
 
                     # Check for superconductivity
@@ -586,11 +585,8 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
 
                         for idx in range(np.size(self.params['freq'])):
                             self._pxi.set_frequency(self.params['freq'][idx]*1.0e9)
-                            time.sleep(0.05)
+                            time.sleep(0.01)
                             cts = self._ni63.get('ctr1')
-                            cts_array_temp[idx] = cts
-
-
 
                             #find where in the 3 column data structure to add counts
                             index = np.searchsorted(frq_array, offset_frq)
@@ -599,11 +595,11 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
                             total_count_data[index,idx] = total_count_data[index,idx] + cts # temp_count_data[j]
                             total_hits_data[index,idx] = total_hits_data[index,idx] + 1
 
+                            # live plot -- unpack cts_list into args of add_data_point
+                            data.add_data_point(cur_frq,self.params['freq'][idx],cts)
 
                             qt.msleep(0.002) # keeps GUI responsive and checks if plot needs updating.
-                        cts_list = list(cts_array_temp)
-                        #Live Plot
-                        data.add_data_point(cur_frq,*cts_list)
+
                         # check snspd
                         self._snspd.check()
 
@@ -637,7 +633,7 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
                             print 'Measurement aborted.'
                             self._stop_measurement = True
                             break
-                filter_laser_frequencies
+                self.params['working_set'] = filter_laser_frequencies(self.params['working_set'], frq_array, total_hits_data)
 
             # Check for a break, and break out of this loop as well.
             # It's important to check here, before we add the array to the total
@@ -645,7 +641,7 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
             # total array.
             tt = time.time() - t1
 
-            print 'Cycle %d/%d total time is %.3f, efficiency of %.2f percent. Heater output is at %.1f. ' % (i+1, int(self.params['MeasCycles']), tt, (self.params['motor_pts'] *self.params['dwell_time']/1000.0)/tt*100.0, self._ls332.get_heater_output())
+            print 'Cycle %d/%d total time is %.3f. Heater output is at %.1f. ' % (i+1, int(self.params['MeasCycles']), tt, self._ls332.get_heater_output())
 
             # Sum along all sweeps so far for the y values, and just use the last frequency displacement measurement
             # for the x-axis. This is an approximation assuming the repeatability is good.
@@ -681,6 +677,7 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
                 print 'SNSPD went normal and could not restore, breaking.'
                 break
             # Checks have all passed, so proceed...
+            seek_iterations += 1
 
 
 
