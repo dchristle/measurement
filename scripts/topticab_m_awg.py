@@ -320,23 +320,23 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
             # if we didn't find any gaps, we can just add the entire range to the "seen freqs" list
             if len(seen_freqs) == 0 and np.size(frq_subset) > 1:
                 seen_freqs = [(frq_subset[0], frq_subset[-1])]
-        # now that we've computed what intervals we've observed, find the difference of the sets, and return it.
-        return self.difference_ranges(self.flatten_ranges(filter_set),self.flatten_ranges(seen_freqs))
 
+        # now that we've computed what intervals we've observed, find the difference of the sets, and return it.
+        new_filter_set = self.difference_ranges(self.flatten_ranges(filter_set),self.flatten_ranges(seen_freqs))
 
         # finally, check for tuples whose total length is less than 3x the bin size and remove them
-        print 'New filter set %s' % self.params['filter_set']
+        print 'New filter set %s' % new_filter_set
         rem_idx = []
-        for k in self.params['filter_set']:
+        for k in new_filter_set:
             if (k[1] - k[0]) < 3.0 * self.params['bin_size']:
                 rem_idx.append(k)
 
         for k in rem_idx:
-            del self.params['filter_set'][self.params['filter_set'].index(k)]
+            del new_filter_set[new_filter_set.index(k)]
 
-        print 'New filter set %s' % self.params['filter_set']
-        if len(self.params['filter_set']) == 0 and self.params['filter']:
-            break
+        print 'New filter (small sets removed) is %s' % new_filter_set
+
+        return new_filter_set
 
 
     def awg_confirm(self, seq_el):
