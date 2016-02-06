@@ -307,7 +307,7 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
             lb = 0
             seen_freqs = []
             while kk < np.size(frq_diffs):
-                if frq_diffs[kk] > 3 * self.params['bin_size']:
+                if frq_diffs[kk] > 6 * self.params['bin_size']:
                     # we have detected a gap
                     ub = kk
                     # if a single point is located between two gaps, we don't want to remove anything from
