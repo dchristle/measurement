@@ -147,6 +147,7 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
         return freq
 
     def laser_frequency_seek(self, frequency):
+        bracket_init = 50.0
         f_low = frequency - bracket_init
         f_high = frequency + bracket_init
         m_low, its = self.brent_search(lambda x: -1.024636527e-01*x + 2.809789e+05 - f_low, 60000, 120000, 2, 30)
@@ -158,6 +159,7 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
         m_target, its = self.brent_search((lambda mot_pos: self.set_motor_and_measure(int(np.round(mot_pos))) - frequency), m_low, m_high, 100, 10)
         #found_frequency = self.set_motor_and_measure(m_target)
         found_frequency = 299792458.0/self._wvm.get_wavelength()
+        print('f_delta = {:.1f}'.format(found_frequency-frequency))
         return found_frequency
 
     def flatten_ranges(self, range_list):
@@ -173,7 +175,7 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
                 saved[1] = en
         yield tuple(saved)
 
-    def difference_ranges(a_range, b_range):
+    def difference_ranges(self, a_range, b_range):
         # subtract the elements one by one
         a_saved = a_range
 
@@ -182,7 +184,7 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
 
         return a_saved
 
-    def difference_single_element(a_list, b):
+    def difference_single_element(self, a_list, b):
         true_list = []
         for i in range(len(a_list)):
             # pick out one tuple from a_list and save it
@@ -290,13 +292,14 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
                 return False
 
         return True
-    def filter_laser_frequencies(self, filter_set, frq_array, total_hits_data):
+    def filter_laser_frequencies(self, filter_set, frq_array, total_hits_data, frq1):
         print 'Old filter set %s' % filter_set
 
-        frq_idx = np.nonzero(total_hits_data[:,0]) > 0
+        frq_idx = np.nonzero(total_hits_data[:,0])
         if np.any(frq_idx):
             # select which ones we've seen, then scale them back to absolute frequency
             frq_subset = frq_array[frq_idx] + frq1
+            print 'Frq subset shape %s' % (frq_subset.shape)
             # this array is already sorted from low to high by construction, so we can search for gaps easily
             frq_diffs = np.diff(frq_subset)
             # now lets segment the already swept frequency range into a list of boundaries
@@ -322,7 +325,7 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
                 seen_freqs = [(frq_subset[0], frq_subset[-1])]
 
         # now that we've computed what intervals we've observed, find the difference of the sets, and return it.
-        new_filter_set = self.difference_ranges(self.flatten_ranges(filter_set),self.flatten_ranges(seen_freqs))
+        new_filter_set = self.difference_ranges(list(filter_set),list(seen_freqs))
 
         # finally, check for tuples whose total length is less than 3x the bin size and remove them
         print 'New filter set %s' % new_filter_set
@@ -469,16 +472,16 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
         data.add_coordinate('microwave frequency (GHz)')
         data.add_value('counts')
 
-        plot2d_0 = qt.Plot2D(data, name='piezoscan_single_sweep', coorddim=0, valdim=1)
+        plot2d_0 = qt.Plot2D(data, name='piezoscan_single_sweep', coorddim=0, valdim=2)
         plot3d_0 = qt.Plot3D(data, name='piezoscan_microwave_full', coorddims=(0,1), valdim=2, style='image')
         data.create_file()
         # Populate some arrays
         self.params['piezo_pts'] = np.uint32(1 + np.ceil(np.abs(self.params['piezo_end']-self.params['piezo_start'])/self.params['piezo_step_size']))
         self.params['piezo_array'] = np.linspace(self.params['piezo_start'],self.params['piezo_end'], self.params['piezo_pts'])
         self.params['filter_set'].sort()
-        self.params['filter_set'] = self.flatten_ranges(self.params['filter_set'])
+        self.params['filter_set'] = list(self.flatten_ranges(self.params['filter_set']))
         self.params['filter_set'].sort()
-        self.params['working_set'] = np.copy(self.params['filter_set'])
+        self.params['working_set'] = self.params['filter_set']
 
 
         time.sleep(1.0)
@@ -522,14 +525,20 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
 
         self._toptica.set_piezo_voltage(self.params['piezo_array'][0])
 
+        # locate the second frequency to seek to
+        self.laser_frequency_seek(self.params['working_set'][-1][1]+8.0)
+        self.check_laser_stabilization()
+        frq2 = self._wvm.get_frequency() + 100.0 #Ghz
+
         # locate the first frequency to seek to
-        first_range = self.params['working_set'][0]
-        self.laser_frequency_seek(first_range[0]-8.0)
+        self.laser_frequency_seek(self.params['working_set'][0][0]-8.0)
         self.check_laser_stabilization()
 
         frq1 = self._wvm.get_frequency() - 100.0 #Ghz
-        print 'Start (reference) frequency %.2f GHz / %.2f nm -- End frequency %.2f GHz / %.2f nm' % (frq1 + 100.0,299792458.0/(frq1 + 100.0), frq2 - 100.0, 299792458.0/(frq2-100.0))
-        self.params['bins'] = np.uint32(1 + np.ceil(np.absolute(frq2-frq1)/self.params['bin_size']))
+
+
+        print 'Start (reference) frequency %.2f GHz / %.2f nm -- End frequency %.2f GHz / %.2f nm' % (frq1 + 100.0, 299792458.0/(frq1 + 100.0), frq2 - 100.0, 299792458.0/(frq2-100.0))
+        self.params['bins'] = np.uint32(1 + np.ceil((100.0+np.absolute(frq2-frq1))/self.params['bin_size']))
         #column 1 of the data set, i.e. relative frequency
         frq_array = np.linspace(-100.0, np.absolute(frq2-frq1), self.params['bins'])
         #column 2, number of counts
@@ -541,7 +550,7 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
             # Enter the loop for measurement
             t1 = time.time()
             seek_iterations = 0
-            while not self.params['working_set']:
+            while np.size(self.params['working_set']) != 0:
 
                 if self._stop_measurement == True:
                     print 'Measurement aborted.'
@@ -549,11 +558,12 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
                     break
 
                 cur_frq = self._wvm.get_frequency()
-                target_freq = self.params['working_set'][0]
+                target_freq = self.params['working_set'][0][0]
                 if not (cur_frq > target_freq-20.0 and cur_frq < target_freq):
-                    self.laser_frequency_seek(target_freq[0]-8.0+(np.random.uniform()-0.5)*3.0)
+                    print 'Current frequency is %.2f GHz, versus desired %.2f GHz. Re-scanning.' % (cur_frq, target_freq)
+                    self.laser_frequency_seek(target_freq-8.0+(np.random.uniform()-0.5)*3.0)
                 cur_frq = self._wvm.get_frequency()
-                print 'Laser frequency set to %.2f GHz (target %.2f GHz/offset %.2f GHz)' % (target_freq, cur_frq,target_freq[0]-8.0)
+                print 'Laser frequency set to %.2f GHz (target %.2f GHz/offset %.2f GHz)' % (target_freq, cur_frq,target_freq-8.0)
                 self.check_laser_stabilization()
 
                 temp_count_data = np.zeros(self.params['piezo_pts'] , dtype='uint32')
@@ -580,7 +590,8 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
                             filter_inc = True
                     # Determine if we should measure in the logic statement here
                     # find all nonzero frequencies
-                    if cur_frq > frq1 and cur_frq < frq2 and (np.sum(total_hits_data) < 10 or np.min(np.abs( offset_frq - frq_array[np.nonzero(total_hits_data[:,0])])) > self.params['bin_size']) and filter_inc:
+                    #(np.sum(total_hits_data) < 10 or np.min(np.abs( offset_frq - frq_array[np.nonzero(total_hits_data[:,0])])) > self.params['bin_size']
+                    if (cur_frq > frq1 and cur_frq < frq2) and filter_inc:
                         cts_array_temp = np.zeros(np.size(self.params['freq']))
 
                         for idx in range(np.size(self.params['freq'])):
@@ -633,7 +644,7 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
                             print 'Measurement aborted.'
                             self._stop_measurement = True
                             break
-                self.params['working_set'] = filter_laser_frequencies(self.params['working_set'], frq_array, total_hits_data)
+                self.params['working_set'] = self.filter_laser_frequencies(self.params['working_set'], frq_array, total_hits_data, frq1)
 
             # Check for a break, and break out of this loop as well.
             # It's important to check here, before we add the array to the total
@@ -730,13 +741,13 @@ xsettings = {
         'power' : 5.0, # dBm
         'constant_attenuation' : 14.0, # dBm -- set by the fixed attenuators in setup
         'desired_power' : -9.0, # dBm
-        'freq' : list([1.3160,1.3565,1.44]), #GHz
+        'freq' : list([1.3160,]), #GHz
         'dwell_time' : 1000.0, # ms
-        #'filter_set' : ( (270850, 270870), (270950, 270970)),
-        'filter_set' : [(270900, 270925),(270915,271010)],
+        #'filter_set' : ( (270850, 270870), (270950, 270970)),(270810, 270940),
+        'filter_set' : [(270950,271030)],
         'temperature_tolerance' : 4.0, # Kelvin
         'MeasCycles' : 1,
-        'Imod' : 1.0,
+        'Imod' : 0.1,
         }
 def main():
     p_low = -16
@@ -761,7 +772,7 @@ def main():
 
 
     m.params.from_dict(xsettings)
-    do_awg_stuff = True
+    do_awg_stuff = False
     m.sequence(upload=do_awg_stuff, program=do_awg_stuff, clear=do_awg_stuff)
 
     m.prepare()
