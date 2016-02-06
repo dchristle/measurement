@@ -323,7 +323,7 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
             # if we didn't find any gaps, we can just add the entire range to the "seen freqs" list
             if len(seen_freqs) == 0 and np.size(frq_subset) > 1:
                 seen_freqs = [(frq_subset[0], frq_subset[-1])]
-
+        print 'Frequencies seen: %s' % seen_freqs
         # now that we've computed what intervals we've observed, find the difference of the sets, and return it.
         new_filter_set = self.difference_ranges(list(filter_set),list(seen_freqs))
 
@@ -551,19 +551,22 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
             t1 = time.time()
             seek_iterations = 0
             while np.size(self.params['working_set']) != 0:
-
+                self._toptica.set_piezo_voltage(self.params['piezo_array'][0])
                 if self._stop_measurement == True:
                     print 'Measurement aborted.'
                     self._stop_measurement = True
                     break
 
+
+                target_freq = self.params['working_set'][0][0]-1.8
+                self.laser_frequency_seek(target_freq)
                 cur_frq = self._wvm.get_frequency()
-                target_freq = self.params['working_set'][0][0]
+
                 if not (cur_frq > target_freq-20.0 and cur_frq < target_freq):
                     print 'Current frequency is %.2f GHz, versus desired %.2f GHz. Re-scanning.' % (cur_frq, target_freq)
-                    self.laser_frequency_seek(target_freq-8.0+(np.random.uniform()-0.5)*3.0)
+                    self.laser_frequency_seek(target_freq-7.0+(np.random.uniform()-0.5)*3.0)
                 cur_frq = self._wvm.get_frequency()
-                print 'Laser frequency set to %.2f GHz (target %.2f GHz/offset %.2f GHz)' % (target_freq, cur_frq,target_freq-8.0)
+                print 'Laser frequency set to %.2f GHz (target %.2f GHz)' % (target_freq, cur_frq)
                 self.check_laser_stabilization()
 
                 temp_count_data = np.zeros(self.params['piezo_pts'] , dtype='uint32')
@@ -582,6 +585,8 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
                     # Check for superconductivity
                     self._snspd.check()
 
+
+
                     # use filter logic
                     filter_inc = False
                     for i, elem in enumerate(self.params['filter_set']):
@@ -591,7 +596,7 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
                     # Determine if we should measure in the logic statement here
                     # find all nonzero frequencies
                     #(np.sum(total_hits_data) < 10 or np.min(np.abs( offset_frq - frq_array[np.nonzero(total_hits_data[:,0])])) > self.params['bin_size']
-                    if (cur_frq > frq1 and cur_frq < frq2) and filter_inc:
+                    if (cur_frq > self.params['working_set'][0][0] and cur_frq < self.params['working_set'][0][1]) and not np.any(self.params['bin_size'] > np.abs(offset_frq - frq_array[np.nonzero(total_hits_data[:,0])])):
                         cts_array_temp = np.zeros(np.size(self.params['freq']))
 
                         for idx in range(np.size(self.params['freq'])):
@@ -644,6 +649,10 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
                             print 'Measurement aborted.'
                             self._stop_measurement = True
                             break
+
+                    # determine if we are beyond the endpoint of the current desired sweep range
+                    if cur_frq > 3.0 + self.params['working_set'][0][1]:
+                        break
                 self.params['working_set'] = self.filter_laser_frequencies(self.params['working_set'], frq_array, total_hits_data, frq1)
 
             # Check for a break, and break out of this loop as well.
@@ -733,7 +742,7 @@ xsettings = {
         'piezo_start' : 0, #volts
         'piezo_end' : 90, #volts
         'piezo_step_size' : 0.1, # volts (dispersion is roughly ~0.4 GHz/V)
-        'bin_size' : 0.05, # GHz, should be same order of magnitude as (step_size * .1 GHz)
+        'bin_size' : 0.4, # GHz, should be same order of magnitude as (step_size * .1 GHz)
         'microwaves' : True, # modulate with microwaves on or off
         'microwaves_CW' : True, # are the microwaves CW? i.e. ignore pi pulse length
         'pi_length' : 180.0, # ns
@@ -744,8 +753,8 @@ xsettings = {
         'freq' : list([1.3160,]), #GHz
         'dwell_time' : 1000.0, # ms
         #'filter_set' : ( (270850, 270870), (270950, 270970)),(270810, 270940),
-        'filter_set' : [(270950,271030)],
-        'temperature_tolerance' : 4.0, # Kelvin
+        'filter_set' : [(270770,271000)],
+        'temperature_tolerance' : 7.0, # Kelvin
         'MeasCycles' : 1,
         'Imod' : 0.1,
         }
