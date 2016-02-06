@@ -307,7 +307,7 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
             lb = 0
             seen_freqs = []
             while kk < np.size(frq_diffs):
-                if frq_diffs[kk] > 10 * self.params['bin_size']:
+                if frq_diffs[kk] > 3 * self.params['bin_size']:
                     # we have detected a gap
                     ub = kk
                     # if a single point is located between two gaps, we don't want to remove anything from
@@ -460,6 +460,7 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
         return
 
     def measure(self):
+        qt.mstart()
         # Start keystroke monitor
         self.start_keystroke_monitor('abort')
         self._stop_measurement = False
@@ -467,14 +468,21 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
         t0 = time.time()
 
         data = qt.Data(name='wavemotor_sweep')
-
         data.add_coordinate('laser frequency (GHz)')
         data.add_coordinate('microwave frequency (GHz)')
         data.add_value('counts')
-
-        plot2d_0 = qt.Plot2D(data, name='piezoscan_single_sweep', coorddim=0, valdim=2)
-        plot3d_0 = qt.Plot3D(data, name='piezoscan_microwave_full', coorddims=(0,1), valdim=2, style='image')
         data.create_file()
+
+        data2d = qt.Data(name='wavemotor_2d')
+        data2d.add_coordinate('laser frequency (GHz)')
+        data2d.add_value('counts')
+
+
+
+
+        plot2d_0 = qt.Plot2D(data2d, name='piezoscan_single_sweep', coorddim=0, valdim=1)
+        plot3d_0 = qt.Plot3D(data, name='piezoscan_full', coorddims=(0,1), valdim=2, style='image')
+
         # Populate some arrays
         self.params['piezo_pts'] = np.uint32(1 + np.ceil(np.abs(self.params['piezo_end']-self.params['piezo_start'])/self.params['piezo_step_size']))
         self.params['piezo_array'] = np.linspace(self.params['piezo_start'],self.params['piezo_end'], self.params['piezo_pts'])
@@ -523,7 +531,7 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
         self._awg.sq_forced_jump(2)
         self.awg_confirm(2)
 
-        self._toptica.set_piezo_voltage(self.params['piezo_array'][0])
+        self._toptica.set_piezo_voltage(0.0)
 
         # locate the second frequency to seek to
         self.laser_frequency_seek(self.params['working_set'][-1][1]+8.0)
@@ -576,7 +584,7 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
 
                     #Set the new piezo voltage
                     self._toptica.set_piezo_voltage(self.params['piezo_array'][k])
-                    time.sleep(0.05)
+                    qt.msleep(0.05)
 
                     # Measure frequency and counts
                     cur_frq = self._wvm.get_frequency()
@@ -613,9 +621,22 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
 
                             # live plot -- unpack cts_list into args of add_data_point
                             data.add_data_point(cur_frq,self.params['freq'][idx],cts)
+                            if idx == 0:
+                                data2d.add_data_point(cur_frq, cts)
+                                plot2d_0.update()
+
+                            if self.keystroke('abort') in ['q','Q'] or scan_on == False:
+                                print 'Measurement aborted.'
+                                self.stop_keystroke_monitor('abort')
+                                self._stop_measurement = True
+                                scan_on = False
+                                break
 
                             qt.msleep(0.002) # keeps GUI responsive and checks if plot needs updating.
 
+                        data.new_block()
+                        plot3d_0.update()
+                        qt.msleep(0.002)
                         # check snspd
                         self._snspd.check()
 
@@ -717,7 +738,7 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
         grp.add('initial_measured_frequency', data=frq1, unit='hits', note='base frequency')
         grp.add('power', data=power_meas, unit='W', note='total power array')
 
-
+        qt.mend()
         return
 
 
@@ -742,7 +763,7 @@ xsettings = {
         'piezo_start' : 0, #volts
         'piezo_end' : 90, #volts
         'piezo_step_size' : 0.1, # volts (dispersion is roughly ~0.4 GHz/V)
-        'bin_size' : 0.4, # GHz, should be same order of magnitude as (step_size * .1 GHz)
+        'bin_size' : 0.35, # GHz, should be same order of magnitude as (step_size * .1 GHz)
         'microwaves' : True, # modulate with microwaves on or off
         'microwaves_CW' : True, # are the microwaves CW? i.e. ignore pi pulse length
         'pi_length' : 180.0, # ns
@@ -750,13 +771,13 @@ xsettings = {
         'power' : 5.0, # dBm
         'constant_attenuation' : 14.0, # dBm -- set by the fixed attenuators in setup
         'desired_power' : -9.0, # dBm
-        'freq' : list([1.3160,]), #GHz
+        'freq' : [1.30], #GHz
         'dwell_time' : 1000.0, # ms
         #'filter_set' : ( (270850, 270870), (270950, 270970)),(270810, 270940),
-        'filter_set' : [(270770,271000)],
-        'temperature_tolerance' : 7.0, # Kelvin
+        'filter_set' : [(270949,271000)],
+        'temperature_tolerance' : 12.0, # Kelvin
         'MeasCycles' : 1,
-        'Imod' : 0.1,
+        'Imod' : 0.3,
         }
 def main():
     p_low = -16
@@ -781,7 +802,7 @@ def main():
 
 
     m.params.from_dict(xsettings)
-    do_awg_stuff = False
+    do_awg_stuff = True
     m.sequence(upload=do_awg_stuff, program=do_awg_stuff, clear=do_awg_stuff)
 
     m.prepare()
