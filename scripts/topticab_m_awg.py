@@ -147,7 +147,7 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
         return freq
 
     def laser_frequency_seek(self, frequency):
-        bracket_init = 50.0
+        bracket_init = 60.0
         f_low = frequency - bracket_init
         f_high = frequency + bracket_init
         m_low, its = self.brent_search(lambda x: -1.024636527e-01*x + 2.809789e+05 - f_low, 60000, 120000, 2, 30)
@@ -531,8 +531,8 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
         self._awg.sq_forced_jump(2)
         self.awg_confirm(2)
 
-        self._toptica.set_piezo_voltage(0.0)
 
+        self._toptica.set_piezo_voltage(self.params['piezo_array'][0])
         # locate the second frequency to seek to
         self.laser_frequency_seek(self.params['working_set'][-1][1]+8.0)
         self.check_laser_stabilization()
@@ -566,15 +566,15 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
                     break
 
 
-                target_freq = self.params['working_set'][0][0]-1.8
+                target_freq = self.params['working_set'][0][0]-4.0
                 self.laser_frequency_seek(target_freq)
                 cur_frq = self._wvm.get_frequency()
 
-                if not (cur_frq > target_freq-20.0 and cur_frq < target_freq):
+                if not (cur_frq > self.params['working_set'][0][0]-20.0 and cur_frq < self.params['working_set'][0][0]):
                     print 'Current frequency is %.2f GHz, versus desired %.2f GHz. Re-scanning.' % (cur_frq, target_freq)
-                    self.laser_frequency_seek(target_freq-7.0+(np.random.uniform()-0.5)*3.0)
+                    self.laser_frequency_seek(self.params['working_set'][0][0]-7.0+(np.random.uniform()-0.5)*3.0)
                 cur_frq = self._wvm.get_frequency()
-                print 'Laser frequency set to %.2f GHz (target %.2f GHz)' % (target_freq, cur_frq)
+                print 'Laser frequency set to %.2f GHz (target %.2f GHz)' % (cur_frq, self.params['working_set'][0][0])
                 self.check_laser_stabilization()
 
                 temp_count_data = np.zeros(self.params['piezo_pts'] , dtype='uint32')
@@ -763,18 +763,18 @@ xsettings = {
         'piezo_start' : 0, #volts
         'piezo_end' : 90, #volts
         'piezo_step_size' : 0.1, # volts (dispersion is roughly ~0.4 GHz/V)
-        'bin_size' : 0.35, # GHz, should be same order of magnitude as (step_size * .1 GHz)
+        'bin_size' : 0.08, # GHz, should be same order of magnitude as (step_size * .1 GHz)
         'microwaves' : True, # modulate with microwaves on or off
         'microwaves_CW' : True, # are the microwaves CW? i.e. ignore pi pulse length
         'pi_length' : 180.0, # ns
-        'off_resonant_laser' : True, # cycle between resonant and off-resonant
+        'off_resonant_laser' : False, # cycle between resonant and off-resonant
         'power' : 5.0, # dBm
         'constant_attenuation' : 14.0, # dBm -- set by the fixed attenuators in setup
         'desired_power' : -9.0, # dBm
-        'freq' : [1.30], #GHz
+        'freq' : linspace(1.30,1.40,40), #GHz
         'dwell_time' : 1000.0, # ms
         #'filter_set' : ( (270850, 270870), (270950, 270970)),(270810, 270940),
-        'filter_set' : [(270949,271000)],
+        'filter_set' : [(270971,270996)],
         'temperature_tolerance' : 12.0, # Kelvin
         'MeasCycles' : 1,
         'Imod' : 0.3,
