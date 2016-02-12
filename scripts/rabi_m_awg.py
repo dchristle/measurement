@@ -276,6 +276,13 @@ class SiC_Rabi_Master(m2.Measurement):
                     scan_on = False
                     self._stop_measurement = True
                     break
+                if msvcrt.kbhit() or scan_on == False or self._stop_measurement == True:
+                    kb_char=msvcrt.getch()
+                    self._stop_measurement = True
+                    if kb_char == "q" or scan_on == False or self._stop_measurement == True:
+                        print 'Measurement aborted.'
+                        self._stop_measurement = True
+                        break
                 # Check if a track should occur. If so, track.
                 if time.time() > track_time:
 
@@ -398,9 +405,9 @@ xsettings = {
         'constant_attenuation' : 14.0, # dBm -- set by the fixed attenuators in setup
         'desired_power' : -9.0, # dBm
         'RF_length_start' : 0.0, # ns
-        'RF_length_end' : 400.0, # ns
-        'RF_length_step' : 10.0, # ns
-        'freq' : 1.3565, #GHz
+        'RF_length_end' : 700.0, # ns
+        'RF_length_step' : 20.0, # ns
+        'freq' : 1.3358, #GHz
         'dwell_time' : 1000.0, # ms
         'temperature_tolerance' : 2.0, # Kelvin
         'MeasCycles' : 1200,
@@ -408,8 +415,8 @@ xsettings = {
         'Imod' : 1.0,
         }
 
-p_low = -16
-p_high = -16
+p_low = -15
+p_high = -15
 p_nstep = 1
 
 p_array = np.linspace(p_low,p_high,p_nstep)
