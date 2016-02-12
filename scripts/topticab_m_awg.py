@@ -247,17 +247,17 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
             # pick out one tuple from a_list and save it
             st, en = list(a_list[i]) # also unpack the tuple into start and end
 
-            if b[0] > st and en > b[0] and en < b[1]:
+            if b[0] > st and en > b[0] and en <= b[1]:
                 #   |st---------------------en|
                 #       |b0---------------------b1|
                 true_list.append((st,b[0]))
 
-            elif b[0] < st and b[1] < en and b[1] > st:
+            elif b[0] <= st and b[1] < en and b[1] > st:
                 #     |st-----------------------en|
                 # |b0---------------------b1|
-                true_list.append((b[0],en))
+                true_list.append((b[1],en))
 
-            elif b[0] < st and b[1] > en:
+            elif b[0] <= st and b[1] >= en:
                 #     |st-----------------------en|
                 # |b0-------------------------------b1|
                 # the range a is completely contained within the range of b
@@ -891,7 +891,7 @@ xsettings = {
         'freq' : [1.45], #GHz
         'dwell_time' : 10000.0, # ms
         #'filter_set' : ( (270850, 270870), (270950, 270970)),(270810, 270940),
-        'filter_set' : [(270841,270875),(270965,270990)],
+        'filter_set' : [(270948,271030)],
         'temperature_tolerance' : 12.0, # Kelvin
         'MeasCycles' : 1,
         'Imod' : 0.5,
