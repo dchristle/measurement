@@ -208,13 +208,15 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
         # linear
         m_low, its = self.brent_search(lambda x: self._b*x + self._c - f_low, 60000, 120000, 2, 60)
         m_high, its = self.brent_search(lambda x: self._b*x + self._c - f_high, 60000, 120000, 2, 60)
-        #if m_low > m_high:  ## I think this swapping might not serve a function; should be removed if the program
-        ## still works.
-        #    m_low, m_high = m_high, m_low
-        #freq_discrep = lambda mot_pos: set_motor_and_measure(int(np.round(mot_pos))) - frequency
-        #print 'Going to try to get to %.2f GHz...' % dfreq
+
         m_target, its = self.brent_search((lambda mot_pos: self.set_motor_and_measure(int(np.round(mot_pos))) - frequency), m_low, m_high, 20, 14)
-        #found_frequency = self.set_motor_and_measure(m_target)
+        if its == -1:
+            print 'Since root was not bracketed, recalibrating the laser and trying again...'
+            self.calibrate_laser()
+            m_low, its = self.brent_search(lambda x: self._b*x + self._c - f_low, 60000, 120000, 2, 60)
+            m_high, its = self.brent_search(lambda x: self._b*x + self._c - f_high, 60000, 120000, 2, 60)
+            m_target, its = self.brent_search((lambda mot_pos: self.set_motor_and_measure(int(np.round(mot_pos))) - frequency), m_low, m_high, 20, 14)
+
         found_frequency = 299792458.0/self._wvm.get_wavelength()
         print('f_delta = {:.1f}'.format(found_frequency-frequency))
         return found_frequency
@@ -287,7 +289,10 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
         fb = f(b)
         if fa*fb >= 0:
             print('Root is not bracketed -- exiting root search. a(%d) = %.2f, b(%d) = %.2f.' % (a, fa, b, fb))
-            return (a+b)/2.0, -1
+            # find the closest non-root, assuming the function is smooth
+            r_idx = np.argmin(np.array(fa,fb))
+            r = np.array((a,b))
+            return r[r_idx], -1
         if (np.abs(a) < np.abs(b)):
             # swap a and b
             a, b = b, a
@@ -490,8 +495,8 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
         self._pm = qt.instruments['pm']
         # Set laser calibration constants here
         self._a = 2.424e-7
-        self._b = -0.104258
-        self._c = 281167.0
+        self._b = -0.1029344
+        self._c = 280979.983
         # Prepare instruments for measurement and verify FBL output
         # Set the trigger source to internal
 
@@ -860,43 +865,44 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
 
 
 
-# measurement parameters
 
-xsettings = {
-        'focus_limit_displacement' : 20, # microns inward
-        'fbl_time' : 180.0, # seconds
-        'AOM_start_buffer' : 50.0, # ns
-        'AOM_length' : 1600.0, # ns
-        'AOM_light_delay' : 655.0, # ns
-        'AOM_end_buffer' : 1155.0, # ns
-        'Sacher_AOM_start_buffer' : 150.0, #ns
-        'Sacher_AOM_length' : 1000.0, # ns
-        'Sacher_AOM_light_delay' : 960.0, # ns
-        'Sacher_AOM_end_buffer' : 1155.0, # ns
-        'RF_start_buffer' : 300.0, # ns
-        'readout_length' : 1000.0, # ns
-        'readout_buffer' : 10.0, # ns
-        'ctr_term' : 'PFI2',
-        'piezo_start' : 0, #volts
-        'piezo_end' : 90, #volts
-        'piezo_step_size' : 0.12, # volts (dispersion is roughly ~0.4 GHz/V)
-        'bin_size' : 0.12, # GHz, should be same order of magnitude as (step_size * .1 GHz)
-        'microwaves' : False, # modulate with microwaves on or off
-        'microwaves_CW' : True, # are the microwaves CW? i.e. ignore pi pulse length
-        'pi_length' : 180.0, # ns
-        'off_resonant_laser' : False, # cycle between resonant and off-resonant
-        'power' : 5.0, # dBm
-        'constant_attenuation' : 14.0, # dBm -- set by the fixed attenuators in setup
-        'desired_power' : -9.0, # dBm
-        'freq' : [1.45], #GHz
-        'dwell_time' : 10000.0, # ms
-        #'filter_set' : ( (270850, 270870), (270950, 270970)),(270810, 270940),
-        'filter_set' : [(270948,271030)],
-        'temperature_tolerance' : 12.0, # Kelvin
-        'MeasCycles' : 1,
-        'Imod' : 0.5,
-        }
 def main():
+    # measurement parameters
+
+    xsettings = {
+            'focus_limit_displacement' : 15, # microns inward
+            'fbl_time' : 180.0, # seconds
+            'AOM_start_buffer' : 50.0, # ns
+            'AOM_length' : 1600.0, # ns
+            'AOM_light_delay' : 655.0, # ns
+            'AOM_end_buffer' : 1155.0, # ns
+            'Sacher_AOM_start_buffer' : 150.0, #ns
+            'Sacher_AOM_length' : 1000.0, # ns
+            'Sacher_AOM_light_delay' : 960.0, # ns
+            'Sacher_AOM_end_buffer' : 1155.0, # ns
+            'RF_start_buffer' : 300.0, # ns
+            'readout_length' : 1000.0, # ns
+            'readout_buffer' : 10.0, # ns
+            'ctr_term' : 'PFI2',
+            'piezo_start' : 0, #volts
+            'piezo_end' : 90, #volts
+            'piezo_step_size' : 0.2, # volts (dispersion is roughly ~0.4 GHz/V)
+            'bin_size' : 0.32, # GHz, should be same order of magnitude as (step_size * .1 GHz)
+            'microwaves' : True, # modulate with microwaves on or off
+            'microwaves_CW' : True, # are the microwaves CW? i.e. ignore pi pulse length
+            'pi_length' : 180.0, # ns
+            'off_resonant_laser' : True, # cycle between resonant and off-resonant
+            'power' : 5.0, # dBm
+            'constant_attenuation' : 14.0, # dBm -- set by the fixed attenuators in setup
+            'desired_power' : -9.0, # dBm
+            'freq' : [1.336], #GHz
+            'dwell_time' : 1000.0, # ms
+            #'filter_set' : ( (270850, 270870), (270950, 270970)),(270810, 270940),
+            'filter_set' : [(270750,271065)],
+            'temperature_tolerance' : 12.0, # Kelvin
+            'MeasCycles' : 1,
+            'Imod' : 0.5,
+            }
     #p_low = -19
     #p_high = -19
     #p_nstep = 1
