@@ -2,18 +2,27 @@
 import time
 import numpy as np
 import topticab_m_awg
+from topticab_m_awg import SiC_Toptica_Search_Piezo_Sweep
 import qt
+import msvcrt
 reload(topticab_m_awg)
 
-reference_defect = [11.579922617935665, 0.06059983259280415, 0.9107]
-defect_list = [[11.579922617935665, 0.06059983259280415, 0.9107],
-               [11.289768171772273, -2.771898443487904, 0.909725],
-               [11.390012459711714, -5.923566976180897, 0.910465],
-               [13.377004986426906, -12.819587094486005, 0.91054],
-               [7.357160576167902, -13.232466733888975, 0.9109],
-               [8.017023328134888, 5.580759710229266, 0.91188],
-               [3.28937076423348, -12.379105106503692, 0.91141],
-               [4.470624677355713, -10.583827836702731, 0.91055]]
+
+fbl = qt.instruments['fbl']
+fsm = qt.instruments['fsm']
+xps = qt.instruments['xps']
+awg = qt.instruments['awg']
+reference_defect = [11.501953306181669, -0.5241993237070317, 0.9115]
+defect_list = [[7.253176343561596, -0.7637003620202452, 0.913425],
+               [3.175042527348811, -12.989455308869934, 0.91207],
+               [4.288815677621219, -11.175531099750394, 0.911295],
+               [3.0075476079999373, -5.629977213453592, 0.912605],
+               [-4.274150483002216, -2.1571366809596637, 0.9121],
+               [-5.867956866564423, -3.953027018230962, 0.911305],
+               [-5.484955768981131, 4.651952274168486, 0.9119],
+               [-5.281175700009079, 10.054927742893181, 0.91136],
+               [-0.6067575861894013, 10.738420593014405, 0.912175],
+               [-2.5662912369540685, 13.633409610753695, 0.91305]]
 
 fsm.move(reference_defect[0],reference_defect[1])
 xps.set_abs_positionZ(reference_defect[2])
@@ -33,6 +42,11 @@ drift_vector = [0, 0, 0]
 reference_defect = [fsm.get_abs_positionX(), fsm.get_abs_positionY(), xps.get_abs_positionZ()]
 for i, defect in enumerate(defect_list):
     print 'Starting new defect %d in 5s...' % i
+    try:
+        msg_string = [__name__ + ': starting defect index %d, cryostat temperature %.2f K, heater power %.1f percent.' % (i, qt.instruments['ls332'].get_kelvinA(), qt.instruments['ls332'].get_heater_output() ) ]
+        slack.chat.post_message('#singledefectlab', msg_string, as_user=True)
+    except:
+        pass
     time.sleep(5.0)
     if msvcrt.kbhit():
         kb_char=msvcrt.getch()
@@ -45,6 +59,7 @@ for i, defect in enumerate(defect_list):
     print 'Do a measurement at %.2f %.2f %.2f' % (begin_vector[0], begin_vector[1], begin_vector[2])
     ##########################
     #
+    qt.instruments['motdl'].reference_search()
     data.add_data_point(i, drift_vector[0], drift_vector[1], drift_vector[2], begin_vector[0], begin_vector[1], begin_vector[2])
     xsettings = {
             'focus_limit_displacement' : 15, # microns inward
@@ -121,6 +136,13 @@ for i, defect in enumerate(defect_list):
                     new_reference_position[2] - reference_defect[2]]
     data.add_data_point(i, drift_vector[0], drift_vector[1], drift_vector[2], end_vector[0], end_vector[1], end_vector[2])
     print 'Drift vector is now %.2f %.2f %.2f' % (drift_vector[0], drift_vector[1], drift_vector[2])
+    try:
+        msg_string = [__name__ + ': finished index %d, cryostat temperature %.2f K, heater power %.1f percent.' % (i, qt.instruments['ls332'].get_kelvinA(), qt.instruments['ls332'].get_heater_output() ) ]
+        slack.chat.post_message('#singledefectlab', msg_string, as_user=True)
+        msg_string = [__name__ + ': drift vector is %.2f um %.2f um %.2f um' % (drift_vector[0], drift_vector[1], 1000.0*drift_vector[2]) ]
+        slack.chat.post_message('#singledefectlab', msg_string, as_user=True)
+    except:
+        pass
 
 
 data.close_file()
