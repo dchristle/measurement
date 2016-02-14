@@ -212,6 +212,13 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
         m_target, its = self.brent_search((lambda mot_pos: self.set_motor_and_measure(int(np.round(mot_pos))) - frequency), m_low, m_high, 20, 14)
         if its == -1:
             print 'Since root was not bracketed, recalibrating the laser and trying again...'
+            self._motdl.reference_search()
+            try:
+                msg_string = [__name__ + ': root not bracketed for brents search in laser_frequency seek. re-referenced laser and recalibrating.']
+                slack.chat.post_message('#singledefectlab', msg_string, as_user=True)
+            except:
+                pass
+
             self.calibrate_laser()
             m_low, its = self.brent_search(lambda x: self._b*x + self._c - f_low, 60000, 120000, 2, 60)
             m_high, its = self.brent_search(lambda x: self._b*x + self._c - f_high, 60000, 120000, 2, 60)
@@ -682,6 +689,8 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
                     cur_frq = self._wvm.get_frequency()
                     if ik == 5 and not (cur_frq > self.params['working_set'][0][0]-20.0 and cur_frq < self.params['working_set'][0][0]):
                         # if we've failed to home in by stepping the motor in one direction, just try to seek again and hope it works.
+                        self._motdl.reference_search()
+                        self.calibrate_laser()
                         self.laser_frequency_seek(self.params['working_set'][0][0]-10.0)
                         cur_frq = self._wvm.get_frequency()
                     ik = ik + 1
@@ -770,7 +779,7 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
 
                         time.sleep(0.1)
                         # Re-optimize
-                        fbl.optimize()
+                        self._fbl.optimize()
 
                         # Set new track time
                         track_time = time.time() + self.params['fbl_time'] + 5.0*np.random.uniform()
@@ -949,7 +958,6 @@ def main():
 
     ##ps = qt.instruments['xps']
     ##ps.set_abs_positionZ(12.0)
-
     track_on = True
     fbl_t = qt.instruments['fbl']
     track_iter = 0
