@@ -13,19 +13,22 @@ fsm = qt.instruments['fsm']
 xps = qt.instruments['xps']
 awg = qt.instruments['awg']
 reference_defect = [11.501953306181669, -0.5241993237070317, 0.9115]
-defect_list = [[7.253176343561596, -0.7637003620202452, 0.913425],
-               [3.175042527348811, -12.989455308869934, 0.91207],
-               [4.288815677621219, -11.175531099750394, 0.911295],
-               [3.0075476079999373, -5.629977213453592, 0.912605],
-               [-4.274150483002216, -2.1571366809596637, 0.9121],
+updated_reference_defect = [11.59795023862097, -1.5360404856020338, 0.912185]
+defect_list = [[-4.274150483002216, -2.1571366809596637, 0.9121],
                [-5.867956866564423, -3.953027018230962, 0.911305],
                [-5.484955768981131, 4.651952274168486, 0.9119],
                [-5.281175700009079, 10.054927742893181, 0.91136],
                [-0.6067575861894013, 10.738420593014405, 0.912175],
                [-2.5662912369540685, 13.633409610753695, 0.91305]]
 
-fsm.move(reference_defect[0],reference_defect[1])
-xps.set_abs_positionZ(reference_defect[2])
+
+if updated_reference_defect != []:
+    drift_vector = [updated_reference_defect[0] - reference_defect[0], updated_reference_defect[1] - reference_defect[1], updated_reference_defect[2] - reference_defect[2]]
+else:
+    drift_vector = [0, 0, 0]
+
+fsm.move(reference_defect[0] + drift_vector[0],reference_defect[1] + drift_vector[1])
+xps.set_abs_positionZ(reference_defect[2] + drift_vector[2])
 fbl.optimize()
 
 data = qt.Data(name='automated_position_data')
@@ -38,8 +41,11 @@ data.add_value('FSM Y')
 data.add_value('XPS Z')
 data.create_file()
 
-drift_vector = [0, 0, 0]
-reference_defect = [fsm.get_abs_positionX(), fsm.get_abs_positionY(), xps.get_abs_positionZ()]
+new_reference_position = [fsm.get_abs_positionX(), fsm.get_abs_positionY(), xps.get_abs_positionZ()]
+drift_vector = [new_reference_position[0] - reference_defect[0],
+                    new_reference_position[1] - reference_defect[1],
+                    new_reference_position[2] - reference_defect[2]]
+
 for i, defect in enumerate(defect_list):
     print 'Starting new defect %d in 5s...' % i
     try:
