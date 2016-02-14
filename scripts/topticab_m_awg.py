@@ -176,10 +176,11 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
             print 'motor %d, freq %.0f' % (pos, y[idx])
 
         # we have two allocated arrays of data, so regress them with a simple quadratic
-        # preprocess the data for better fitting/robustness -- commented out
-        motor_array_norm = motor_array # (motor_array-np.mean(motor_array))/np.std(motor_array)
-        motor_array_mean = np.mean(motor_array)
-        motor_array_std = np.std(motor_array)
+        # shifting and scaling the motor positions to have a mean of 0 and std = 1 eliminates problems
+        # with the condition number of the OLS regression being large, i.e. it's more numerically stable
+        motor_array_norm = (motor_array-np.mean(motor_array))/np.std(motor_array)
+        self._motor_array_mean = np.mean(motor_array)
+        self._motor_array_std = np.std(motor_array)
         ## quadratic
         #X = np.column_stack((motor_array_norm*motor_array_norm, motor_array_norm, np.ones(np.size(motor_array))))
         # linear
@@ -194,10 +195,10 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
         self._b = res.params[0]
         self._c = res.params[1]
         #self._c = res.params[2]
-        print 'Toptica laser calibration took %.0f seconds. Updated calibration constants to b = %.8f c = %.8f' % (t1-t0, self._b, self._c)
+        print 'Toptica laser calibration took %.0f seconds. Updated calibration constants to b = %.8f c = %.8f, motor_array_mean = %.2f, motor_array_std = %.2f' % (t1-t0, self._b, self._c, self._motor_array_mean, self._motor_array_std)
         return
     def laser_frequency_seek(self, frequency):
-        bracket_init = 60.0
+        bracket_init = 90.0
         f_low = frequency - bracket_init
         f_high = frequency + bracket_init
 
@@ -206,8 +207,8 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
         #m_high, its = self.brent_search(lambda x: self._a*x*x + self._b*x + self._c - f_high, 60000, 120000, 2, 60)
 
         # linear
-        m_low, its = self.brent_search(lambda x: self._b*x + self._c - f_low, 60000, 120000, 2, 60)
-        m_high, its = self.brent_search(lambda x: self._b*x + self._c - f_high, 60000, 120000, 2, 60)
+        m_low, its = self.brent_search(lambda x: self._b*(x - self._motor_array_mean)/self._motor_array_std + self._c - f_low, 60000, 120000, 2, 60)
+        m_high, its = self.brent_search(lambda x: self._b*(x - self._motor_array_mean)/self._motor_array_std + self._c - f_high, 60000, 120000, 2, 60)
 
         m_target, its = self.brent_search((lambda mot_pos: self.set_motor_and_measure(int(np.round(mot_pos))) - frequency), m_low, m_high, 20, 14)
         if its == -1:
@@ -220,8 +221,8 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
                 pass
 
             self.calibrate_laser()
-            m_low, its = self.brent_search(lambda x: self._b*x + self._c - f_low, 60000, 120000, 2, 60)
-            m_high, its = self.brent_search(lambda x: self._b*x + self._c - f_high, 60000, 120000, 2, 60)
+            m_low, its = self.brent_search(lambda x: self._b*(x - self._motor_array_mean)/self._motor_array_std + self._c - f_low, 60000, 120000, 2, 60)
+            m_high, its = self.brent_search(lambda x: self._b*(x - self._motor_array_mean)/self._motor_array_std + self._c - f_high, 60000, 120000, 2, 60)
             m_target, its = self.brent_search((lambda mot_pos: self.set_motor_and_measure(int(np.round(mot_pos))) - frequency), m_low, m_high, 20, 14)
 
         found_frequency = 299792458.0/self._wvm.get_wavelength()
@@ -297,7 +298,7 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
         if fa*fb >= 0:
             print('Root is not bracketed -- exiting root search. a(%d) = %.2f, b(%d) = %.2f.' % (a, fa, b, fb))
             # find the closest non-root, assuming the function is smooth
-            r_idx = np.argmin(np.array(fa,fb))
+            r_idx = np.argmin(np.array((fa,fb)))
             r = np.array((a,b))
             return r[r_idx], -1
         if (np.abs(a) < np.abs(b)):
@@ -359,7 +360,7 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
         frq_recent = np.zeros(3)
         for zz in range(3):
             time.sleep(1.0)
-            frq_recent[zz] = 299792458.0/self._wvm.get_wavelength()
+            frq_recent[zz] = self._wvm.get_frequency()
         # Check if laser is stable, if not, wait
         for zz in range(30):
             if (np.max(frq_recent) - np.min(frq_recent)) < 1.0:
@@ -367,7 +368,7 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
                 break
             time.sleep(1.0)
             np.roll(frq_recent,1)
-            frq_recent[0] = 299792458.0/self._wvm.get_wavelength()
+            frq_recent[0] = self._wvm.get_frequency()
             if zz >=29:
                 print 'Laser frequency readout on wavemeter did not stabilize after 30 seconds. Dispersion %.2f MHz, range %.2f MHz.' % (np.std(frq_recent)*1000.0, 1000.0*(np.max(frq_recent)-np.min(frq_recent)))
                 return False
@@ -504,6 +505,8 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
         self._a = 2.424e-7
         self._b = -0.1029344
         self._c = 280979.983
+        self._motor_array_mean = 280940.0
+        self._motor_array_std = 100.0
         # Prepare instruments for measurement and verify FBL output
         # Set the trigger source to internal
 
@@ -820,7 +823,7 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
             frq_array_non0 = frq_array[np.nonzero(total_hits_data[:,0])]
             cts_array_non0 = total_count_data[np.nonzero(total_hits_data[:,0]),:]
             hits_array_non0 = total_hits_data[np.nonzero(total_hits_data[:,0]),:]
-            avg_cts_array_non0 = np.divide(cts_array_non0.astype(float64),hits_array_non0.astype(float64))
+            avg_cts_array_non0 = np.divide(cts_array_non0.astype(np.float64),hits_array_non0.astype(np.float64))
 
             #plot2d_1 = qt.Plot2D(frq_array_non0,avg_cts_array_non0, name='topticap_avg', clear=True)
             N_cmeas = N_cmeas + 1
