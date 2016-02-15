@@ -503,10 +503,10 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
         self._pm = qt.instruments['pm']
         # Set laser calibration constants here
         self._a = 2.424e-7
-        self._b = -0.1029344
-        self._c = 280979.983
-        self._motor_array_mean = 280940.0
-        self._motor_array_std = 100.0
+        self._b = -638.3169
+        self._c = 270893.9
+        self._motor_array_mean = 98080.00
+        self._motor_array_std = 6090.52
         # Prepare instruments for measurement and verify FBL output
         # Set the trigger source to internal
 
