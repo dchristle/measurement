@@ -598,6 +598,8 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
         data.add_coordinate('laser frequency (GHz)')
         data.add_coordinate('microwave frequency (GHz)')
         data.add_value('counts')
+        data.add_value('wavelength dispersion (GHz)')
+        data.add_value('wavemeter power (W)')
         data.create_file()
 
         data2d = qt.Data(name='wavemotor_2d')
@@ -649,6 +651,7 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
         self.check_laser_stabilization()
         frq2 = self._wvm.get_frequency() + 100.0 #Ghz
         power_meas = self.measure_cw_power()
+
         # locate the first frequency to seek to
         self.laser_frequency_seek(self.params['working_set'][0][0]-8.0)
         self.check_laser_stabilization()
@@ -684,6 +687,7 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
                 ik = 0
                 while not (cur_frq > self.params['working_set'][0][0]-20.0 and cur_frq < self.params['working_set'][0][0]) and ik < 6:
                     print 'Current frequency is %.2f GHz, versus desired %.2f GHz. Re-scanning.' % (cur_frq, target_freq)
+
                     # keep decrementing the target frequency by 1 GHz until we get strictly below but not less than 20 GHz away
                     # dispersion is approximately -0.104 GHz/step, so move by about 10 steps upward to decrease by about 1 GHz.
                     current_motor_position = self._motdl.get_position()
@@ -691,7 +695,8 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
                     time.sleep(2.0)
                     cur_frq = self._wvm.get_frequency()
                     if ik == 5 and not (cur_frq > self.params['working_set'][0][0]-20.0 and cur_frq < self.params['working_set'][0][0]):
-                        # if we've failed to home in by stepping the motor in one direction, just try to seek again and hope it works.
+                        # if we've failed to home in by stepping the motor in one direction, just try to seek again after
+                        # doing a motor reference search and then re-calibration (time intensive).
                         self._motdl.reference_search()
                         self.calibrate_laser()
                         self.laser_frequency_seek(self.params['working_set'][0][0]-10.0)
@@ -719,15 +724,16 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
                     wm_disp = np.zeros(4)
                     for i in range(4):
                         wm_disp[i] = self._wvm.get_frequency()
-
+                        time.sleep(0.1)
+                    # additionally, get the laser power measured in the wavemeter -- this could also be correlated to
+                    # instability in the laser cavity mode
+                    cur_power = self._wvm.get_power()
                     cur_frq = np.mean(wm_disp) #self._wvm.get_frequency()
                     cur_disp = np.std(wm_disp)*3.182 # t-distribution, two-sided, at the 95% level, 4-1 = 3 d.o.f.
                     offset_frq = cur_frq - frq1
 
                     # Check for superconductivity
                     self._snspd.check()
-
-
 
                     # use filter logic
                     filter_inc = False
@@ -737,8 +743,9 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
                             filter_inc = True
                     # Determine if we should measure in the logic statement here
                     # find all nonzero frequencies
-                    #(np.sum(total_hits_data) < 10 or np.min(np.abs( offset_frq - frq_array[np.nonzero(total_hits_data[:,0])])) > self.params['bin_size']
-                    if (cur_frq > self.params['working_set'][0][0] and cur_frq < self.params['working_set'][0][1]) and not np.any(self.params['bin_size']*0.51 > np.abs(offset_frq - frq_array[np.nonzero(total_hits_data[:,0])])):
+
+                    # Dispersion check of 60 MHz, added 2016-03-23. This ensures anything near a mode hop is rejected.
+                    if (cur_frq > self.params['working_set'][0][0] and cur_frq < self.params['working_set'][0][1] and cur_disp < 0.06 ) and not np.any(self.params['bin_size']*0.51 > np.abs(offset_frq - frq_array[np.nonzero(total_hits_data[:,0])])):
                         cts_array_temp = np.zeros(np.size(self.params['freq']))
 
                         for idx in range(np.size(self.params['freq'])):
@@ -754,7 +761,7 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
                             total_hits_data[index,idx] = total_hits_data[index,idx] + 1
 
                             # live plot -- unpack cts_list into args of add_data_point
-                            data.add_data_point(cur_frq,self.params['freq'][idx],cts)
+                            data.add_data_point(cur_frq,self.params['freq'][idx],cts,cur_disp,cur_power)
                             if idx == 0:
                                 data2d.add_data_point(cur_frq, cts)
                                 plot2d_0.update()
@@ -916,7 +923,7 @@ def main():
             'constant_attenuation' : 14.0, # dBm -- set by the fixed attenuators in setup
             'desired_power' : -19.0, # dBm
             'freq' : [1.2826, ], #GHz
-            'dwell_time' : 32000.0, # ms
+            'dwell_time' : 13200.0, # ms
             #'filter_set' : ( (270850, 270870), (270950, 270970)),(270810, 270940),
             'filter_set' : [(270815,270832), (270942,270964)],#, (270951,270974)],
             'temperature_tolerance' : 2.0, # Kelvin
@@ -938,7 +945,7 @@ def main():
 
 
     m.params.from_dict(xsettings)
-    do_awg_stuff = True
+    do_awg_stuff = False
     m.sequence(upload=do_awg_stuff, program=do_awg_stuff, clear=do_awg_stuff)
 
     m.prepare()
