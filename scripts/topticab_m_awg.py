@@ -378,7 +378,7 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
         print 'Old filter set %s' % filter_set
 
         frq_idx = np.nonzero(total_hits_data[:,0])
-        threshold = 6.0*self.params['bin_size']
+        threshold = 4.0*self.params['bin_size']
         seen_freqs = []
         if np.any(frq_idx):
             # select which ones we've seen, then scale them back to absolute frequency
@@ -503,8 +503,8 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
         self._pm = qt.instruments['pm']
         # Set laser calibration constants here
         self._a = 2.424e-7
-        self._b = -638.3169
-        self._c = 270893.9
+        self._b = -648.279
+        self._c = 270882.003
         self._motor_array_mean = 98080.00
         self._motor_array_std = 6090.52
         # Prepare instruments for measurement and verify FBL output
@@ -713,7 +713,15 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
                     qt.msleep(0.05)
 
                     # Measure frequency and counts
-                    cur_frq = self._wvm.get_frequency()
+                    #
+                    # The laser can become unstable, so we want to measure the dispersion of its readout; an increase
+                    # in the dispersion will tell us when we're near a mode hop in the cavity and should skip measurement.
+                    wm_disp = np.zeros(4)
+                    for i in range(4):
+                        wm_disp[i] = self._wvm.get_frequency()
+
+                    cur_frq = np.mean(wm_disp) #self._wvm.get_frequency()
+                    cur_disp = np.std(wm_disp)*3.182 # t-distribution, two-sided, at the 95% level, 4-1 = 3 d.o.f.
                     offset_frq = cur_frq - frq1
 
                     # Check for superconductivity
@@ -883,7 +891,7 @@ def main():
 
     xsettings = {
             'focus_limit_displacement' : 15, # microns inward
-            'fbl_time' : 180.0, # seconds
+            'fbl_time' : 150.0, # seconds
             'AOM_start_buffer' : 50.0, # ns
             'AOM_length' : 1600.0, # ns
             'AOM_light_delay' : 655.0, # ns
@@ -898,38 +906,33 @@ def main():
             'ctr_term' : 'PFI2',
             'piezo_start' : 0, #volts
             'piezo_end' : 90, #volts
-            'piezo_step_size' : 0.2, # volts (dispersion is roughly ~0.4 GHz/V)
-            'bin_size' : 0.32, # GHz, should be same order of magnitude as (step_size * .1 GHz)
-            'microwaves' : True, # modulate with microwaves on or off
+            'piezo_step_size' : 0.1, # volts (dispersion is roughly ~0.4 GHz/V)
+            'bin_size' : 0.05, # GHz, should be same order of magnitude as (step_size * .1 GHz)
+            'microwaves' : False, # modulate with microwaves on or off
             'microwaves_CW' : True, # are the microwaves CW? i.e. ignore pi pulse length
             'pi_length' : 180.0, # ns
-            'off_resonant_laser' : True, # cycle between resonant and off-resonant
+            'off_resonant_laser' : False, # cycle between resonant and off-resonant
             'power' : 5.0, # dBm
             'constant_attenuation' : 14.0, # dBm -- set by the fixed attenuators in setup
-            'desired_power' : -9.0, # dBm
-            'freq' : [1.336], #GHz
-            'dwell_time' : 1000.0, # ms
+            'desired_power' : -19.0, # dBm
+            'freq' : [1.2826, ], #GHz
+            'dwell_time' : 32000.0, # ms
             #'filter_set' : ( (270850, 270870), (270950, 270970)),(270810, 270940),
-            'filter_set' : [(270750,271065)],
-            'temperature_tolerance' : 12.0, # Kelvin
+            'filter_set' : [(270815,270832), (270942,270964)],#, (270951,270974)],
+            'temperature_tolerance' : 2.0, # Kelvin
             'MeasCycles' : 1,
             'Imod' : 0.5,
             }
-    #p_low = -19
-    #p_high = -19
-    #p_nstep = 1
 
-    #p_array = np.linspace(p_low,p_high,p_nstep)
 
     # Create a measurement object m
-
     time.sleep(2.0)
     if msvcrt.kbhit():
         kb_char=msvcrt.getch()
         if kb_char == "q":
             do_track = False
 
-    name_string = 'randomdefect'
+    name_string = 'defectB_microwaves'
     m = SiC_Toptica_Search_Piezo_Sweep(name_string)
     xsettings['desired_power'] = -19.0
 
@@ -945,12 +948,16 @@ def main():
         if kb_char == "q":
             return
     print 'Proceeding with measurement ...'
+    try:
+        msg_string = [__name__ + ': Toptica (Brent search) %s started. Cryostat temperature %.2f K, heater power %.1f percent.' % (name_string, qt.instruments['ls332'].get_kelvinA(), qt.instruments['ls332'].get_heater_output() ) ]
+        slack.chat.post_message('#singledefectlab', msg_string, as_user=True)
+    except:
+        pass
     #m.calibrate_laser()
     m.measure()
     m.save_params()
     m.save_stack()
     m.finish()
-
 
     # Alert that measurement has finished
     ea_t = qt.instruments['ea']
@@ -958,6 +965,12 @@ def main():
     cur_temp = ls332_t.get_kelvinA()
     msg_string = 'Toptica piezo measurement stopped at %s, temperature is %.2f K' % (time.strftime('%c'), cur_temp)
     ea_t.email_alert(msg_string)
+
+    try:
+        msg_string = [__name__ + ': Toptica (Brent search) %s stopped. Cryostat temperature %.2f K, heater power %.1f percent.' % (name_string, qt.instruments['ls332'].get_kelvinA(), qt.instruments['ls332'].get_heater_output() ) ]
+        slack.chat.post_message('#singledefectlab', msg_string, as_user=True)
+    except:
+        pass
 
     ##ps = qt.instruments['xps']
     ##ps.set_abs_positionZ(12.0)
