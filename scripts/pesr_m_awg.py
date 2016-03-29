@@ -270,7 +270,7 @@ class SiC_PESR_Master(m2.Measurement):
         time.sleep(5.0)
 
 
-        if self.params['desired_power'] >= -9.0:
+        if self.params['desired_power'] >= -8.0:
             print 'Final power is high -- going to ramp slowly.'
             print 'Waiting 2 s for temperature stabilization, power to %.2f dBm' % (self.params['power']-5.0)
             self._pxi.set_power(self.params['power']-3.0)
@@ -381,6 +381,13 @@ class SiC_PESR_Master(m2.Measurement):
                     scan_on = False
                     self._pxi.set_status('off')
                     break
+                if msvcrt.kbhit():
+                    kb_char=msvcrt.getch()
+                    self._stop_measurement = True
+                    if kb_char == "q":
+                        print 'Measurement aborted.'
+                        self._stop_measurement = True
+                        break
                 # Check if a track should occur. If so, track.
                 if time.time() > track_time:
                     print 'Tracking!'
@@ -492,7 +499,7 @@ class SiC_PESR_Master(m2.Measurement):
 
 xsettings = {
         'focus_limit_displacement' : 20, # microns inward
-        'fbl_time' : 75.0, # seconds
+        'fbl_time' : 155.0, # seconds
         'ctr_term' : 'PFI2',
         'AOM_length' : 1200.0, # ns
         'AOM_light_delay' : 655.0, # ns
@@ -500,21 +507,21 @@ xsettings = {
         'power' : 5.0, # dBm
         'constant_attenuation' : 14.0, # dB -- set by the fixed attenuators in setup
         'desired_power' : -7.0, # dBm
-        'f_low' : 1.3194-10e-3, # GHz
-        'f_high' : 1.3194+10e-3, # GHz
+        'f_low' : 1.271, # GHz
+        'f_high' : 1.405, # GHz
         'f_step' : 1.0e-3, # GHz
         'RF_delay' : 0.0, # ns
-        'RF_buffer' : 50.0, # ns
-        'pi_length' : 147, # ns
+        'RF_buffer' : 200.0, # ns
+        'pi_length' : 140, # ns
         'dwell_time' : 1500.0, # ms
         'temperature_tolerance' : 3, # Kelvin
         'MeasCycles' : 1000,
         'trigger_period' : 100000.0, #ns
         'dropout' : True,
-        'dropout_low' : 1.353, # GHz
-        'dropout_high' : 1.38, # GHz
+        'dropout_low' : 1.298, # GHz
+        'dropout_high' : 1.37, # GHz
         'readout_length' : 130.0,
-        'Imod' : 0.2511
+        'Imod' : 1.0,
         }
 
 
@@ -522,8 +529,8 @@ xsettings = {
 
 # Generate array of powers -- in this case, just one power.
 
-p_low = -15
-p_high = -15
+p_low = -17
+p_high = -17
 p_nstep = 1
 
 p_array = np.linspace(p_low,p_high,p_nstep)
@@ -554,7 +561,11 @@ for rr in range(p_nstep):
     # always True, it will always execute.
     if True:
         print 'Proceeding with measurement ...'
-
+        try:
+            msg_string = [__name__ + ': Pulsed ESR measurement %s started. Cryostat temperature %.2f K, heater power %.1f percent.' % (name_string, qt.instruments['ls332'].get_kelvinA(), qt.instruments['ls332'].get_heater_output() ) ]
+            slack.chat.post_message('#singledefectlab', msg_string, as_user=True)
+        except:
+            pass
 
         m.prepare()
         m.measure()
@@ -571,6 +582,11 @@ for rr in range(p_nstep):
     # (can also be done by hand, of course)
     # m.finish() will close the HDF5 and end the measurement.
     m.finish()
+    try:
+        msg_string = [__name__ + ': Pulsed ESR measurement %s stopped. Cryostat temperature %.2f K, heater power %.1f percent.' % (name_string, qt.instruments['ls332'].get_kelvinA(), qt.instruments['ls332'].get_heater_output() ) ]
+        slack.chat.post_message('#singledefectlab', msg_string, as_user=True)
+    except:
+        pass
     # I think that save_params, save_stack, and finish are all methods that are
     # inherited from the measurement class m2.Measurement done at the beginning
     # of the class definition.
