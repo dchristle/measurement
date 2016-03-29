@@ -136,6 +136,7 @@ class SiCPH_Master(m2.Measurement):
             cur_Y = self._fsm.get_abs_positionY()
             bg_cts = 0.0
             self._ni63.set_count_time(1.0)
+            self._snspd.check()
             self._fsm.set_abs_positionX(cur_X + self.params['pos_displacement'])
             bg_cts = bg_cts + float(self._ni63.get_ctr0())
             self._fsm.set_abs_positionX(cur_X - self.params['pos_displacement'])
@@ -153,6 +154,7 @@ class SiCPH_Master(m2.Measurement):
 
             background_0_data_daq[i] = bg_cts/2.0
             #background_0_data_daq[i] = bg_cts/4.0
+            self._snspd.check()
             background_0_data[i] = int(self._ph.get_CountRate0())
             background_1_data[i] = int(self._ph.get_CountRate1())
             avg_bck = float(background_0_data[i]) + float(background_1_data[i])
@@ -224,73 +226,92 @@ class SiCPH_Master(m2.Measurement):
 
         return
 
-##    def rebin(self, data, binsize):
-##        Nbin = np.size(data)/binsize
-##        data_reb = np.zeros(Nbin,dtype='uint32')
-##        for i in range(Nbin):
-##            for j in range(binsize):
-##                data_reb[i] = data_reb[i] + data[i*binsize + j]
 
 
-# measurement parameters
+def main():
+    # measurement parameters
 
-xsettings = {
-        'focus_limit_displacement' : 20, # microns inward
-        'temperature_tolerance' : 2,
-        'pos_displacement' : -1.0,
-        'fbl_time' : 55.0,
-        'CFDLevel0' : 125,
-        'CFDZeroCross0' : 10,
-        'CFDLevel1' : 400,
-        'CFDZeroCross1' : 10,
-        'Binning' : 0,
-        'Offset' : 0,
-        'SyncDiv' : 1,
-        'SyncOffset' : -84000,
-        'AcqTime' : 55,
-        'BackTime' : 15,
-        'MeasCycles' : 1000
-        }
-
-
-# Create a measurement object m
-m = SiCPH_Master('3C_1e13_A')
-
-# since params is not just a dictionary, it's easy to incrementally load
-# parameters from multiple dictionaries
-# this could be very helpful to load various sets of settings from a global
-# configuration manager!
-m.params.from_dict(xsettings)
+    xsettings = {
+            'focus_limit_displacement' : 20, # microns inward
+            'temperature_tolerance' : 2,
+            'pos_displacement' : 1.3,
+            'fbl_time' : 55.0,
+            'CFDLevel0' : 150,
+            'CFDZeroCross0' : 10,
+            'CFDLevel1' : 110,
+            'CFDZeroCross1' : 10,
+            'Binning' : 0,
+            'Offset' : 0,
+            'SyncDiv' : 1,
+            'SyncOffset' : -84000,
+            'AcqTime' : 80,
+            'BackTime' : 15,
+            'MeasCycles' : 1000
+            }
 
 
-if m.review_params():
-    print 'Proceeding with measurement ...'
-    m.prepare()
-    m.measure()
-    m.save_params()
-    m.save_stack()
-else:
-    print 'Measurement aborted!'
 
-# important! hdf5 data must be closed, otherwise will not be readable!
-# (can also be done by hand, of course)
-m.finish()
-ea_t = qt.instruments['ea']
-ls332_t = qt.instruments['ls332']
-cur_temp = ls332_t.get_kelvinA()
-msg_string = 'Antibunching PL4 measurement stopped %s, temperature is %.2f K' % (time.strftime('%c'), cur_temp)
-ea_t.email_alert(msg_string)
-##xps = qt.instruments['xps']
-##xps.set_abs_positionZ(12.0) # move the objective away.
-# Now enter a holding pattern of continuous tracking.
-track_on = True
-fbl_t = qt.instruments['fbl']
-track_iter = 0
-while track_on == True:
-    track_iter = track_iter + 1
-    print 'Tracking for %d iteration.' % track_iter
-    fbl_t.optimize()
-    time.sleep(5.0)
-    if msvcrt.kbhit() or track_on == False:
-                kb_char=msvcrt.getch()
-                if kb_char == "q" or track_on == False: break
+
+    # Create a measurement object m
+    object_name = '3C_defectU'
+    m = SiCPH_Master(object_name)
+
+    # since params is not just a dictionary, it's easy to incrementally load
+    # parameters from multiple dictionaries
+    # this could be very helpful to load various sets of settings from a global
+    # configuration manager!
+    m.params.from_dict(xsettings)
+
+
+    if m.review_params():
+        print 'Proceeding with measurement ...'
+        try:
+            msg_string = [__name__ + ': antibunching measurement "%s" started, cryostat temperature %.2f K, heater power %.1f percent.' % (object_name, qt.instruments['ls332'].get_kelvinA(), qt.instruments['ls332'].get_heater_output() ) ]
+            slack.chat.post_message('#singledefectlab', msg_string, as_user=True)
+            msg_string = [__name__ + ': current position is is %.2f um %.2f um %.2f um' % (fsm.get_abs_positionX(), fsm.get_abs_positionY(), 1000.0*xps.get_abs_positionZ()) ]
+            slack.chat.post_message('#singledefectlab', msg_string, as_user=True)
+        except:
+            pass
+        m.prepare()
+        m.measure()
+        m.save_params()
+        m.save_stack()
+    else:
+        print 'Measurement aborted!'
+
+    # important! hdf5 data must be closed, otherwise will not be readable!
+    # (can also be done by hand, of course)
+    m.finish()
+    ea_t = qt.instruments['ea']
+    ls332_t = qt.instruments['ls332']
+    cur_temp = ls332_t.get_kelvinA()
+    msg_string = 'Antibunching measurement "%s" stopped %s, temperature is %.2f K' % (object_name, time.strftime('%c'), cur_temp)
+    #ea_t.email_alert(msg_string)
+
+    try:
+        msg_string = [__name__ + ': antibunching finished "%s", cryostat temperature %.2f K, heater power %.1f percent.' % (object_name, qt.instruments['ls332'].get_kelvinA(), qt.instruments['ls332'].get_heater_output() ) ]
+        slack.chat.post_message('#singledefectlab', msg_string, as_user=True)
+        msg_string = [__name__ + ': current position is is %.2f um %.2f um %.2f um' % (fsm.get_abs_positionX(), fsm.get_abs_positionY(), 1000.0*xps.get_abs_positionZ()) ]
+        slack.chat.post_message('#singledefectlab', msg_string, as_user=True)
+    except:
+        pass
+
+    ##xps = qt.instruments['xps']
+    ##xps.set_abs_positionZ(12.0) # move the objective away.
+    # Now enter a holding pattern of continuous tracking.
+    track_on = True
+    fbl_t = qt.instruments['fbl']
+    track_iter = 0
+    while track_on == True:
+        track_iter = track_iter + 1
+        print 'Tracking for %d iteration.' % track_iter
+        fbl_t.optimize()
+        time.sleep(5.0)
+        if msvcrt.kbhit() or track_on == False:
+                    kb_char=msvcrt.getch()
+                    if kb_char == "q" or track_on == False: break
+
+
+if __name__ == "__main__":
+    #Run as main program
+    main()
