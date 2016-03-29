@@ -721,16 +721,23 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
                     #
                     # The laser can become unstable, so we want to measure the dispersion of its readout; an increase
                     # in the dispersion will tell us when we're near a mode hop in the cavity and should skip measurement.
-                    wm_disp = np.zeros(4)
-                    for i in range(4):
-                        wm_disp[i] = self._wvm.get_frequency()
-                        time.sleep(0.1)
-                    # additionally, get the laser power measured in the wavemeter -- this could also be correlated to
-                    # instability in the laser cavity mode
-                    cur_power = self._wvm.get_power()
-                    cur_frq = np.mean(wm_disp) #self._wvm.get_frequency()
-                    cur_disp = np.std(wm_disp)*3.182 # t-distribution, two-sided, at the 95% level, 4-1 = 3 d.o.f.
-                    offset_frq = cur_frq - frq1
+                    if self.params['stabilize_laser']:
+                        wm_disp = np.zeros(2)
+                        for i in range(2):
+                            wm_disp[i] = self._wvm.get_frequency()
+                            time.sleep(0.41)
+                        # additionally, get the laser power measured in the wavemeter -- this could also be correlated to
+                        # instability in the laser cavity mode
+                        cur_power = self._wvm.get_power()
+                        cur_frq = np.mean(wm_disp) #self._wvm.get_frequency()
+                        cur_disp = np.std(wm_disp)*12.7065 # t-distribution, two-sided, at the 95% level, 2-1 = 1 d.o.f.
+                        offset_frq = cur_frq - frq1
+                    else:
+                        cur_disp = -1.0
+                        cur_frq = self._wvm.get_frequency()
+                        offset_frq = cur_frq - frq1
+                        cur_power = -1.0
+
 
                     # Check for superconductivity
                     self._snspd.check()
@@ -744,13 +751,15 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
                     # Determine if we should measure in the logic statement here
                     # find all nonzero frequencies
 
-                    # Dispersion check of 60 MHz, added 2016-03-23. This ensures anything near a mode hop is rejected.
-                    if (cur_frq > self.params['working_set'][0][0] and cur_frq < self.params['working_set'][0][1] and cur_disp < 0.06 ) and not np.any(self.params['bin_size']*0.51 > np.abs(offset_frq - frq_array[np.nonzero(total_hits_data[:,0])])):
+                    # Dispersion check of 300 MHz, added 2016-03-23. This ensures anything near a mode hop is rejected.
+                    if (cur_frq > self.params['working_set'][0][0] and cur_frq < self.params['working_set'][0][1] and cur_disp < 0.3 ) and not np.any(self.params['bin_size']*0.51 > np.abs(offset_frq - frq_array[np.nonzero(total_hits_data[:,0])])):
                         cts_array_temp = np.zeros(np.size(self.params['freq']))
 
                         for idx in range(np.size(self.params['freq'])):
                             self._pxi.set_frequency(self.params['freq'][idx]*1.0e9)
-                            time.sleep(0.01)
+                            # use explicit settle method instead of a fixed time delay
+                            self._pxi.wait_until_settled(50.0) # argument is maximum time in milliseconds
+
                             cts = self._ni63.get('ctr1')
 
                             #find where in the 3 column data structure to add counts
@@ -878,6 +887,7 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
         # Set AWG to CW mode
         self._awg.sq_forced_jump(1)
         print 'Size of freq is %d, counts is %d, avg is %d, init is %d' % (np.size(frq_array), np.size(total_count_data), np.size(total_hits_data), np.size(frq1))
+        qt.plots['piezoscan_single_sweep'].save_png()
         data.close_file()
         # Measurement has ended, so start saving data
         grp = h5.DataGroup('SiC_Resonant_data', self.h5data, base=self.h5base)
@@ -898,7 +908,7 @@ def main():
 
     xsettings = {
             'focus_limit_displacement' : 15, # microns inward
-            'fbl_time' : 150.0, # seconds
+            'fbl_time' : 180.0, # seconds
             'AOM_start_buffer' : 50.0, # ns
             'AOM_length' : 1600.0, # ns
             'AOM_light_delay' : 655.0, # ns
@@ -914,24 +924,29 @@ def main():
             'piezo_start' : 0, #volts
             'piezo_end' : 90, #volts
             'piezo_step_size' : 0.1, # volts (dispersion is roughly ~0.4 GHz/V)
-            'bin_size' : 0.05, # GHz, should be same order of magnitude as (step_size * .1 GHz)
-            'microwaves' : False, # modulate with microwaves on or off
+            'bin_size' : 0.1, # GHz, should be same order of magnitude as (step_size * .1 GHz)
+            'microwaves' : True, # modulate with microwaves on or off
             'microwaves_CW' : True, # are the microwaves CW? i.e. ignore pi pulse length
             'pi_length' : 180.0, # ns
-            'off_resonant_laser' : False, # cycle between resonant and off-resonant
+            'off_resonant_laser' : True, # cycle between resonant and off-resonant
             'power' : 5.0, # dBm
             'constant_attenuation' : 14.0, # dBm -- set by the fixed attenuators in setup
             'desired_power' : -19.0, # dBm
-            'freq' : [1.2826, ], #GHz
-            'dwell_time' : 13200.0, # ms
+            'freq' : [1.2821, 1.3887,], #GHz
+            'dwell_time' : 4000.0, # ms
             #'filter_set' : ( (270850, 270870), (270950, 270970)),(270810, 270940),
-            'filter_set' : [(270815,270832), (270942,270964)],#, (270951,270974)],
+            'filter_set' : [(270851.8,270875),(270952,270975)],#, (270951,270974)],
             'temperature_tolerance' : 2.0, # Kelvin
             'MeasCycles' : 1,
-            'Imod' : 0.5,
+            'Imod' : 1.0,
+            'stabilize_laser' : True,
             }
+    atten_array = [0, 3, 4.5, 6, 7]
+    ab = lambda x: 0.02483 + 0.289*np.exp(-x/4.067)
+    base_dwell = 1000
 
 
+    # for i in range(len(atten_array)):
     # Create a measurement object m
     time.sleep(2.0)
     if msvcrt.kbhit():
@@ -939,13 +954,18 @@ def main():
         if kb_char == "q":
             do_track = False
 
-    name_string = 'defectB_microwaves'
+    #topt.set_current(ab(atten_array[i]))
+    name_string = 'defectA_offres_mw'
     m = SiC_Toptica_Search_Piezo_Sweep(name_string)
     xsettings['desired_power'] = -19.0
+    #xsettings['dwell_time'] = base_dwell*np.power(10.0,atten_array[i]/10.0)
 
 
     m.params.from_dict(xsettings)
-    do_awg_stuff = False
+
+    do_awg_stuff = True
+
+
     m.sequence(upload=do_awg_stuff, program=do_awg_stuff, clear=do_awg_stuff)
 
     m.prepare()
