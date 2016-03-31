@@ -119,7 +119,7 @@ class SiC_ESR_Master(m2.Measurement):
         else:
             self._va.set_attenuation(desired_atten)
         print 'Variable attenuator set to %.1f dB attenuation.' % desired_atten
-        full_attenuation = self.params['power'] - self.params['constant_attenuation'] - np.max((0,np.min((desired_atten,15.5)))) + np.log(self.params['Imod'])/np.log(10.0)*10
+        full_attenuation = self.params['power'] - self.params['constant_attenuation'] - np.max((0,np.min((desired_atten,15.5)))) + np.log(self.params['Imod'])/np.log(10.0)*20
         print 'Fully attenuated power is %.2f dBm' % full_attenuation
         # Check if the SNSPD is still superconducting
         if self._snspd.check() == False:
@@ -458,101 +458,116 @@ xsettings = {
         'power' : 5.0, # dBm
         'constant_attenuation' : 14.0, # dBm -- set by the fixed attenuators in setup
         'desired_power' : -7.0, # dBm
-        'f_low' : 1.29, #GHz
-        'f_high' : 1.381, #Ghz
-        'f_step' : 2.0e-3, #Ghz
+        'f_low' : 1.31, #GHz
+        'f_high' : 1.37, #Ghz
+        'f_step' : 2e-3, #Ghz
         'dwell_time' : 1550.0, # ms
-        'temperature_tolerance' : 3.0, # Kelvin
+        'temperature_tolerance' : 5.0, # Kelvin
         'MeasCycles' : 800,
         'trigger_period' : 100000.0, #ns
         'dropout' : False,
-        'dropout_low' : 1.23, # GHz
-        'dropout_high' : 1.56, # GHz
-        'Imod' : 0.2511
-        }
+        'dropout_low' : 1.305, # GHz
+        'dropout_high' : 1.36, # GHz
+        'Imod' : 0.5019
+}
+
+
+def main():
+
+    # Generate array of powers -- in this case, just one power.
+
+    p_low = -19
+    p_high = -19
+    p_nstep = 1
+
+    p_array = np.linspace(p_low,p_high,p_nstep)
 
 
 
+    for rr in range(p_nstep):
 
-# Generate array of powers -- in this case, just one power.
-
-p_low = -19
-p_high = -19
-p_nstep = 1
-
-p_array = np.linspace(p_low,p_high,p_nstep)
-
-
-
-for rr in range(p_nstep):
-
-    print 'About to proceed -- waiting 5 s for quit (press q to quit)'
-    time.sleep(5.0)
-    if msvcrt.kbhit():
-                kb_char=msvcrt.getch()
-                if kb_char == "q": break
-    name_string = 'power %.2f dBm' % (p_array[rr])
-    # Create a measurement object m with a name we just made indicating the
-    # power it's taken at.
-    m = SiC_ESR_Master(name_string)
-    # Change the xsettings dictionary above's entry for 'power' to the desired
-    # power.
-    xsettings['desired_power'] = p_array[rr]
+        print 'About to proceed -- waiting 5 s for quit (press q to quit)'
+        time.sleep(5.0)
+        if msvcrt.kbhit():
+                    kb_char=msvcrt.getch()
+                    if kb_char == "q": break
+        name_string = 'power %.2f dBm' % (p_array[rr])
+        # Create a measurement object m with a name we just made indicating the
+        # power it's taken at.
+        m = SiC_ESR_Master(name_string)
+        # Change the xsettings dictionary above's entry for 'power' to the desired
+        # power.
+        xsettings['desired_power'] = p_array[rr]
 
 
-    # Load all the parameters in the slightly modified xsettings dictionary
-    # into the measurement object 'm' that we just made, which will now have
-    # the new power
-    m.params.from_dict(xsettings)
+        # Load all the parameters in the slightly modified xsettings dictionary
+        # into the measurement object 'm' that we just made, which will now have
+        # the new power
+        m.params.from_dict(xsettings)
 
-    # The if/then here is just leftover from previous code -- since True is
-    # always True, it will always execute.
-    if True:
-        print 'Proceeding with measurement ...'
-        do_awg_stuff =True
-        m.sequence(upload=do_awg_stuff, program=do_awg_stuff, clear=do_awg_stuff)
-        m.prepare()
-        m.measure()
-        # Save params and save stack I think just save the entire set of parameters
-        # in the entire setup somewhere and also save a copy of this file every
-        # time a measurement executes alongside the data, so that if it gets
-        # modified, we can still go back and look at the original one.
-        m.save_params()
-        m.save_stack()
-    else:
-        print 'Measurement aborted!'
+        # The if/then here is just leftover from previous code -- since True is
+        # always True, it will always execute.
+        if True:
+            print 'Proceeding with measurement ...'
+            try:
+                msg_string = [__name__ + ': CW ESR measurement %s started. Cryostat temperature %.2f K, heater power %.1f percent.' % (name_string, qt.instruments['ls332'].get_kelvinA(), qt.instruments['ls332'].get_heater_output() ) ]
+                slack.chat.post_message('#singledefectlab', msg_string, as_user=True)
+            except:
+                pass
+            do_awg_stuff =True
+            m.sequence(upload=do_awg_stuff, program=do_awg_stuff, clear=do_awg_stuff)
+            m.prepare()
+            m.measure()
+            # Save params and save stack I think just save the entire set of parameters
+            # in the entire setup somewhere and also save a copy of this file every
+            # time a measurement executes alongside the data, so that if it gets
+            # modified, we can still go back and look at the original one.
+            m.save_params()
+            m.save_stack()
+        else:
+            print 'Measurement aborted!'
 
-    # important! hdf5 data must be closed, otherwise will not be readable!
-    # (can also be done by hand, of course)
-    # m.finish() will close the HDF5 and end the measurement.
-    m.finish()
-    # I think that save_params, save_stack, and finish are all methods that are
-    # inherited from the measurement class m2.Measurement done at the beginning
-    # of the class definition.
+        # important! hdf5 data must be closed, otherwise will not be readable!
+        # (can also be done by hand, of course)
+        # m.finish() will close the HDF5 and end the measurement.
+        try:
+            msg_string = [__name__ + ': CW ESR measurement %s stopped. Cryostat temperature %.2f K, heater power %.1f percent.' % (name_string, qt.instruments['ls332'].get_kelvinA(), qt.instruments['ls332'].get_heater_output() ) ]
+            slack.chat.post_message('#singledefectlab', msg_string, as_user=True)
+        except:
+            pass
+        m.finish()
+        # I think that save_params, save_stack, and finish are all methods that are
+        # inherited from the measurement class m2.Measurement done at the beginning
+        # of the class definition.
 
-# Alert that measurement has finished
-ea_t = qt.instruments['ea']
-ls332_t = qt.instruments['ls332']
-cur_temp = ls332_t.get_kelvinA()
-msg_string = 'ESR measurement stopped at %s, temperature is %.2f K' % (time.strftime('%c'), cur_temp)
-ea_t.email_alert(msg_string)
-##
-### Now just keep tracking until 'q' is pressed
-##track_on = True
-##fbl_t = qt.instruments['fbl']
-##track_iter = 0
-##print 'About to track...'
-##do_track = True
-##time.sleep(2.0)
-##if msvcrt.kbhit():
-##                kb_char=msvcrt.getch()
-##                if kb_char == "q":
-##                    do_track = False
-##while track_on == True and track_iter < 50 and do_track == True:
-##    track_iter = track_iter + 1
-##    print 'Tracking for %d iteration.' % track_iter
-##    fbl_t.optimize()
-##    time.sleep(5.0)
-##    if msvcrt.kbhit() or track_on == False:
-##                kb_char=msvcrt.getch()
-##                if kb_char == "q" or track_on == False: break
+    # Alert that measurement has finished
+    ea_t = qt.instruments['ea']
+    ls332_t = qt.instruments['ls332']
+    cur_temp = ls332_t.get_kelvinA()
+    msg_string = 'ESR measurement stopped at %s, temperature is %.2f K' % (time.strftime('%c'), cur_temp)
+    ea_t.email_alert(msg_string)
+    ##
+    ### Now just keep tracking until 'q' is pressed
+    ##track_on = True
+    ##fbl_t = qt.instruments['fbl']
+    ##track_iter = 0
+    ##print 'About to track...'
+    ##do_track = True
+    ##time.sleep(2.0)
+    ##if msvcrt.kbhit():
+    ##                kb_char=msvcrt.getch()
+    ##                if kb_char == "q":
+    ##                    do_track = False
+    ##while track_on == True and track_iter < 50 and do_track == True:
+    ##    track_iter = track_iter + 1
+    ##    print 'Tracking for %d iteration.' % track_iter
+    ##    fbl_t.optimize()
+    ##    time.sleep(5.0)
+    ##    if msvcrt.kbhit() or track_on == False:
+    ##                kb_char=msvcrt.getch()
+    ##                if kb_char == "q" or track_on == False: break
+    return
+
+if __name__ == "__main__":
+    #Run as main program
+    main()

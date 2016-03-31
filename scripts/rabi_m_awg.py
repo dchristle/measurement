@@ -213,7 +213,7 @@ class SiC_Rabi_Master(m2.Measurement):
         desired_atten = self.params['power'] - self.params['constant_attenuation'] - self.params['desired_power']
         self._va.set_attenuation(desired_atten)
         print 'Variable attenuator set to %.1f dB attenuation.' % desired_atten
-        full_attenuation = self.params['power'] - self.params['constant_attenuation'] - np.max((0,np.min((desired_atten,15.5)))) + np.log(self.params['Imod'])/np.log(10.0)*10
+        full_attenuation = self.params['power'] - self.params['constant_attenuation'] - np.max((0,np.min((desired_atten,15.5)))) + np.log(self.params['Imod'])/np.log(10.0)*20
         print 'Fully attenuated power is %.2f dBm' % full_attenuation
 
 
@@ -407,7 +407,7 @@ xsettings = {
         'RF_length_start' : 0.0, # ns
         'RF_length_end' : 700.0, # ns
         'RF_length_step' : 20.0, # ns
-        'freq' : 1.3358, #GHz
+        'freq' : 1.283, #GHz
         'dwell_time' : 1000.0, # ms
         'temperature_tolerance' : 2.0, # Kelvin
         'MeasCycles' : 1200,
@@ -415,8 +415,8 @@ xsettings = {
         'Imod' : 1.0,
         }
 
-p_low = -15
-p_high = -15
+p_low = -17
+p_high = -17
 p_nstep = 1
 
 p_array = np.linspace(p_low,p_high,p_nstep)
@@ -445,6 +445,11 @@ for rr in range(np.size(p_array)):
 
     if True:
         print 'Proceeding with measurement ...'
+        try:
+            msg_string = [__name__ + ': Rabi measurement %s started. Cryostat temperature %.2f K, heater power %.1f percent.' % (name_string, qt.instruments['ls332'].get_kelvinA(), qt.instruments['ls332'].get_heater_output() ) ]
+            slack.chat.post_message('#singledefectlab', msg_string, as_user=True)
+        except:
+            pass
         m.prepare()
         m.measure()
         m.save_params()
@@ -454,6 +459,11 @@ for rr in range(np.size(p_array)):
 
     # important! hdf5 data must be closed, otherwise will not be readable!
     # (can also be done by hand, of course)
+    try:
+        msg_string = [__name__ + ': Rabi measurement %s finished. Cryostat temperature %.2f K, heater power %.1f percent.' % (name_string, qt.instruments['ls332'].get_kelvinA(), qt.instruments['ls332'].get_heater_output() ) ]
+        slack.chat.post_message('#singledefectlab', msg_string, as_user=True)
+    except:
+        pass
     m.finish()
 
 # Alert that measurement has finished
@@ -462,6 +472,9 @@ ls332_t = qt.instruments['ls332']
 cur_temp = ls332_t.get_kelvinA()
 msg_string = 'Rabi measurement stopped at %s, temperature is %.2f K' % (time.strftime('%c'), cur_temp)
 ea_t.email_alert(msg_string)
+
+
+
 
 ##ps = qt.instruments['xps']
 ##ps.set_abs_positionZ(12.0)

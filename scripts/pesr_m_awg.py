@@ -178,7 +178,7 @@ class SiC_PESR_Master(m2.Measurement):
             self._va.set_attenuation(desired_atten)
         print 'Variable attenuator set to %.1f dB attenuation.' % desired_atten
         # Convert all attenuation to the same scale
-        full_attenuation = self.params['power'] - self.params['constant_attenuation'] - np.max((0,np.min((desired_atten,15.5)))) + np.log(self.params['Imod'])/np.log(10.0)*10
+        full_attenuation = self.params['power'] - self.params['constant_attenuation'] - np.max((0,np.min((desired_atten,15.5)))) + np.log(self.params['Imod'])/np.log(10.0)*20
         print 'Fully attenuated power is %.2f dBm' % full_attenuation
         # Check if the SNSPD is still superconducting
         if self._snspd.check() == False:

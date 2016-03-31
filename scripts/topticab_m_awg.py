@@ -575,7 +575,7 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
         desired_atten = self.params['power'] - self.params['constant_attenuation'] - self.params['desired_power']
         self._va.set_attenuation(desired_atten)
         print 'Variable attenuator set to %.1f dB attenuation.' % desired_atten
-        full_attenuation = self.params['power'] - self.params['constant_attenuation'] - np.max((0,np.min((desired_atten,15.5)))) + np.log(self.params['Imod'])/np.log(10.0)*10.0
+        full_attenuation = self.params['power'] - self.params['constant_attenuation'] - np.max((0,np.min((desired_atten,15.5)))) + np.log(self.params['Imod'])/np.log(10.0)*20.0
         print 'Fully attenuated power is %.2f dBm' % full_attenuation
 
         # Check if wavemeter returns a valid wavelength
@@ -758,8 +758,8 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
                         for idx in range(np.size(self.params['freq'])):
                             self._pxi.set_frequency(self.params['freq'][idx]*1.0e9)
                             # use explicit settle method instead of a fixed time delay
-                            self._pxi.wait_until_settled(50.0) # argument is maximum time in milliseconds
-
+                            #self._pxi.wait_until_settled(50.0) # argument is maximum time in milliseconds
+                            time.sleep(0.01)
                             cts = self._ni63.get('ctr1')
 
                             #find where in the 3 column data structure to add counts
@@ -924,21 +924,21 @@ def main():
             'piezo_start' : 0, #volts
             'piezo_end' : 90, #volts
             'piezo_step_size' : 0.1, # volts (dispersion is roughly ~0.4 GHz/V)
-            'bin_size' : 0.1, # GHz, should be same order of magnitude as (step_size * .1 GHz)
+            'bin_size' : 0.12, # GHz, should be same order of magnitude as (step_size * .1 GHz)
             'microwaves' : True, # modulate with microwaves on or off
             'microwaves_CW' : True, # are the microwaves CW? i.e. ignore pi pulse length
             'pi_length' : 180.0, # ns
             'off_resonant_laser' : True, # cycle between resonant and off-resonant
             'power' : 5.0, # dBm
             'constant_attenuation' : 14.0, # dBm -- set by the fixed attenuators in setup
-            'desired_power' : -19.0, # dBm
-            'freq' : [1.2821, 1.3887,], #GHz
-            'dwell_time' : 4000.0, # ms
+            'desired_power' : -23.0, # dBm
+            'freq' : [1.2825,], #GHz
+            'dwell_time' : 3000.0, # ms
             #'filter_set' : ( (270850, 270870), (270950, 270970)),(270810, 270940),
-            'filter_set' : [(270851.8,270875),(270952,270975)],#, (270951,270974)],
+            'filter_set' : [(270970,270990),(271012,271036),],#, (270951,270974)],
             'temperature_tolerance' : 2.0, # Kelvin
             'MeasCycles' : 1,
-            'Imod' : 1.0,
+            'Imod' : 0*0.35,
             'stabilize_laser' : True,
             }
     atten_array = [0, 3, 4.5, 6, 7]
@@ -955,7 +955,7 @@ def main():
             do_track = False
 
     #topt.set_current(ab(atten_array[i]))
-    name_string = 'defectA_offres_mw'
+    name_string = 'defectO_res_nomw'
     m = SiC_Toptica_Search_Piezo_Sweep(name_string)
     xsettings['desired_power'] = -19.0
     #xsettings['dwell_time'] = base_dwell*np.power(10.0,atten_array[i]/10.0)
