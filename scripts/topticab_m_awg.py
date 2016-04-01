@@ -225,7 +225,7 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
             m_high, its = self.brent_search(lambda x: self._b*(x - self._motor_array_mean)/self._motor_array_std + self._c - f_high, 60000, 120000, 2, 60)
             m_target, its = self.brent_search((lambda mot_pos: self.set_motor_and_measure(int(np.round(mot_pos))) - frequency), m_low, m_high, 20, 14)
 
-        found_frequency = 299792458.0/self._wvm.get_wavelength()
+        found_frequency = self._wvm.get_frequency()
         print('f_delta = {:.1f}'.format(found_frequency-frequency))
         return found_frequency
 
@@ -679,24 +679,36 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
                     self._stop_measurement = True
                     break
 
-
-                target_freq = self.params['working_set'][0][0]-6.0
-                remedial_target_freq = target_freq
+                # get the desired target frequency
+                target_freq = self.params['working_set'][0][0]
+                # use the search based on root finding to adjust the cavity grating to get as close as possible
                 self.laser_frequency_seek(target_freq)
                 cur_frq = self._wvm.get_frequency()
+                # now check if we are strictly lower but not more than 20 GHz lower than the target frequency
                 ik = 0
-                while not (cur_frq > self.params['working_set'][0][0]-20.0 and cur_frq < self.params['working_set'][0][0]) and ik < 6:
-                    print 'Current frequency is %.2f GHz, versus desired %.2f GHz. Re-scanning.' % (cur_frq, target_freq)
-
-                    # keep decrementing the target frequency by 1 GHz until we get strictly below but not less than 20 GHz away
+                while not (cur_frq > self.params['working_set'][0][0]-20.0 and cur_frq < self.params['working_set'][0][0]) and ik < 8:
+                    # determine the discrepancy between the current and target frequencies
+                    df = target_freq-cur_frq
+                    if ik == 0:
+                        initial_df = df
+                    # keep decrementing/incrementing the target frequency by 1 GHz until we get strictly below but not less than 20 GHz away
                     # dispersion is approximately -0.104 GHz/step, so move by about 10 steps upward to decrease by about 1 GHz.
                     current_motor_position = self._motdl.get_position()
-                    self._motdl.high_precision_move(current_motor_position+10)
-                    time.sleep(2.0)
-                    cur_frq = self._wvm.get_frequency()
-                    if ik == 5 and not (cur_frq > self.params['working_set'][0][0]-20.0 and cur_frq < self.params['working_set'][0][0]):
+                    if df > 0:
+                        # decrement by ~1.5 GHz. don't go smaller than about 10-15 steps because the motor's control
+                        # circuitry won't always respond to small moves (c.f. "deadband").
+                        self._motdl.high_precision_move(current_motor_position+15)
+                        time.sleep(2.0)
+                        cur_frq = self._wvm.get_frequency()
+                    else:
+                        # increment by ~1.5 GHz
+                        self._motdl.high_precision_move(current_motor_position-15)
+                        time.sleep(2.0)
+                        cur_frq = self._wvm.get_frequency()
+                    if ik == 7 and not (cur_frq > self.params['working_set'][0][0]-20.0 and cur_frq < self.params['working_set'][0][0]):
                         # if we've failed to home in by stepping the motor in one direction, just try to seek again after
-                        # doing a motor reference search and then re-calibration (time intensive).
+                        # doing a motor reference search and then re-calibration (time intensive - ~4 minutes).
+                        print 'Could not reduce frequency delta to within the desired range -- initial df %.2f GHz, final df %.2f GHz. Doing a reference search, calibration, and re-seek.' % (initial_df, df)
                         self._motdl.reference_search()
                         self.calibrate_laser()
                         self.laser_frequency_seek(self.params['working_set'][0][0]-10.0)
@@ -924,22 +936,22 @@ def main():
             'piezo_start' : 0, #volts
             'piezo_end' : 90, #volts
             'piezo_step_size' : 0.1, # volts (dispersion is roughly ~0.4 GHz/V)
-            'bin_size' : 0.12, # GHz, should be same order of magnitude as (step_size * .1 GHz)
+            'bin_size' : 0.1, # GHz, should be same order of magnitude as (step_size * .1 GHz)
             'microwaves' : True, # modulate with microwaves on or off
             'microwaves_CW' : True, # are the microwaves CW? i.e. ignore pi pulse length
             'pi_length' : 180.0, # ns
             'off_resonant_laser' : True, # cycle between resonant and off-resonant
             'power' : 5.0, # dBm
             'constant_attenuation' : 14.0, # dBm -- set by the fixed attenuators in setup
-            'desired_power' : -23.0, # dBm
-            'freq' : [1.2825,], #GHz
-            'dwell_time' : 3000.0, # ms
+            'desired_power' : -19.0, # dBm
+            'freq' : [1.28,], #GHz
+            'dwell_time' : 4000.0, # ms
             #'filter_set' : ( (270850, 270870), (270950, 270970)),(270810, 270940),
-            'filter_set' : [(270970,270990),(271012,271036),],#, (270951,270974)],
+            'filter_set' : [(271000,271120),],#, (270951,270974)],
             'temperature_tolerance' : 2.0, # Kelvin
             'MeasCycles' : 1,
-            'Imod' : 0*0.35,
-            'stabilize_laser' : True,
+            'Imod' : 0.0,
+            'stabilize_laser' : False,
             }
     atten_array = [0, 3, 4.5, 6, 7]
     ab = lambda x: 0.02483 + 0.289*np.exp(-x/4.067)
@@ -955,7 +967,7 @@ def main():
             do_track = False
 
     #topt.set_current(ab(atten_array[i]))
-    name_string = 'defectO_res_nomw'
+    name_string = 'defectS_offres_nomw'
     m = SiC_Toptica_Search_Piezo_Sweep(name_string)
     xsettings['desired_power'] = -19.0
     #xsettings['dwell_time'] = base_dwell*np.power(10.0,atten_array[i]/10.0)

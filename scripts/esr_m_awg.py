@@ -468,7 +468,7 @@ xsettings = {
         'dropout' : False,
         'dropout_low' : 1.305, # GHz
         'dropout_high' : 1.36, # GHz
-        'Imod' : 0.5019
+        'Imod' : 0.39811
 }
 
 
