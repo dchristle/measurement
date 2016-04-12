@@ -503,8 +503,8 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
         self._pm = qt.instruments['pm']
         # Set laser calibration constants here
         self._a = 2.424e-7
-        self._b = -648.279
-        self._c = 270882.003
+        self._b = -647.92
+        self._c = 270892.46
         self._motor_array_mean = 98080.00
         self._motor_array_std = 6090.52
         # Prepare instruments for measurement and verify FBL output
@@ -686,9 +686,11 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
                 cur_frq = self._wvm.get_frequency()
                 # now check if we are strictly lower but not more than 20 GHz lower than the target frequency
                 ik = 0
-                while not (cur_frq > self.params['working_set'][0][0]-20.0 and cur_frq < self.params['working_set'][0][0]) and ik < 8:
+                df = cur_frq-target_freq
+                while (not (df > -20.0 and df < 0.0)) and (ik < 11):
                     # determine the discrepancy between the current and target frequencies
-                    df = target_freq-cur_frq
+                    df = cur_frq-target_freq
+                    print 'df is %.2f GHz...' % (df)
                     if ik == 0:
                         initial_df = df
                     # keep decrementing/incrementing the target frequency by 1 GHz until we get strictly below but not less than 20 GHz away
@@ -697,15 +699,15 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
                     if df > 0:
                         # decrement by ~1.5 GHz. don't go smaller than about 10-15 steps because the motor's control
                         # circuitry won't always respond to small moves (c.f. "deadband").
-                        self._motdl.high_precision_move(current_motor_position+15)
+                        self._motdl.high_precision_move(current_motor_position-20)
                         time.sleep(2.0)
                         cur_frq = self._wvm.get_frequency()
                     else:
                         # increment by ~1.5 GHz
-                        self._motdl.high_precision_move(current_motor_position-15)
+                        self._motdl.high_precision_move(current_motor_position+20)
                         time.sleep(2.0)
                         cur_frq = self._wvm.get_frequency()
-                    if ik == 7 and not (cur_frq > self.params['working_set'][0][0]-20.0 and cur_frq < self.params['working_set'][0][0]):
+                    if ik == 10 and not (cur_frq > self.params['working_set'][0][0]-20.0 and cur_frq < self.params['working_set'][0][0]):
                         # if we've failed to home in by stepping the motor in one direction, just try to seek again after
                         # doing a motor reference search and then re-calibration (time intensive - ~4 minutes).
                         print 'Could not reduce frequency delta to within the desired range -- initial df %.2f GHz, final df %.2f GHz. Doing a reference search, calibration, and re-seek.' % (initial_df, df)
@@ -935,9 +937,9 @@ def main():
             'ctr_term' : 'PFI2',
             'piezo_start' : 0, #volts
             'piezo_end' : 90, #volts
-            'piezo_step_size' : 0.1, # volts (dispersion is roughly ~0.4 GHz/V)
-            'bin_size' : 0.1, # GHz, should be same order of magnitude as (step_size * .1 GHz)
-            'microwaves' : True, # modulate with microwaves on or off
+            'piezo_step_size' : 0.3, # volts (dispersion is roughly ~0.4 GHz/V)
+            'bin_size' : 0.3, # GHz, should be same order of magnitude as (step_size * .1 GHz)
+            'microwaves' : False, # modulate with microwaves on or off
             'microwaves_CW' : True, # are the microwaves CW? i.e. ignore pi pulse length
             'pi_length' : 180.0, # ns
             'off_resonant_laser' : True, # cycle between resonant and off-resonant
@@ -945,9 +947,9 @@ def main():
             'constant_attenuation' : 14.0, # dBm -- set by the fixed attenuators in setup
             'desired_power' : -19.0, # dBm
             'freq' : [1.28,], #GHz
-            'dwell_time' : 4000.0, # ms
+            'dwell_time' : 1000.0, # ms
             #'filter_set' : ( (270850, 270870), (270950, 270970)),(270810, 270940),
-            'filter_set' : [(271000,271120),],#, (270951,270974)],
+            'filter_set' : [(270940,271040),],#, (270951,270974)],
             'temperature_tolerance' : 2.0, # Kelvin
             'MeasCycles' : 1,
             'Imod' : 0.0,
@@ -967,7 +969,7 @@ def main():
             do_track = False
 
     #topt.set_current(ab(atten_array[i]))
-    name_string = 'defectS_offres_nomw'
+    name_string = 'defectO_offres_nomw'
     m = SiC_Toptica_Search_Piezo_Sweep(name_string)
     xsettings['desired_power'] = -19.0
     #xsettings['dwell_time'] = base_dwell*np.power(10.0,atten_array[i]/10.0)
