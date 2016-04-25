@@ -137,6 +137,7 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
         return
     def set_motor_and_measure(self, motor_pos):
         self._motdl.high_precision_move(motor_pos)
+        self.find_stable_frequency()
         self.check_laser_stabilization()
         wl = self._wvm.get_wavelength()
 
@@ -147,7 +148,7 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
             freq = 0.0
 
         return freq
-    def calibrate_laser(self, motor_low = 88000, motor_high = 108000):
+    def calibrate_laser(self, motor_low = 145000, motor_high = 165000):
         # purpose of this method is to do a regression of the wavelength versus motor step.
         # the usefulness of this is to allow the laser frequency seek to be recalibrated on the fly.
         # the necessity of recalibration was evident when even using large bracket widths of 100 GHz
@@ -156,7 +157,7 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
         t0 = time.time()
         print 'Running laser calibration from motor %d to %d.' % (motor_low, motor_high)
         # estimate a step size so that we take about 12 steps across the entire range, max.
-        n_desired = 22
+        n_desired = 5
         # assume we have about 12 steps, come up with a step size, and then round it to the nearest multiple
         # of 20.
         step_guess = np.round((float(motor_high)-float(motor_low))/(n_desired-1) * 1.0/20.0)*20.0
@@ -207,8 +208,8 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
         #m_high, its = self.brent_search(lambda x: self._a*x*x + self._b*x + self._c - f_high, 60000, 120000, 2, 60)
 
         # linear
-        m_low, its = self.brent_search(lambda x: self._b*(x - self._motor_array_mean)/self._motor_array_std + self._c - f_low, 60000, 120000, 2, 60)
-        m_high, its = self.brent_search(lambda x: self._b*(x - self._motor_array_mean)/self._motor_array_std + self._c - f_high, 60000, 120000, 2, 60)
+        m_low, its = self.brent_search(lambda x: self._b*(x - self._motor_array_mean)/self._motor_array_std + self._c - f_low, 120000, 190000, 2, 60)
+        m_high, its = self.brent_search(lambda x: self._b*(x - self._motor_array_mean)/self._motor_array_std + self._c - f_high, 120000, 190000, 2, 60)
 
         m_target, its = self.brent_search((lambda mot_pos: self.set_motor_and_measure(int(np.round(mot_pos))) - frequency), m_low, m_high, 20, 14)
         if its == -1:
@@ -221,8 +222,8 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
                 pass
 
             self.calibrate_laser()
-            m_low, its = self.brent_search(lambda x: self._b*(x - self._motor_array_mean)/self._motor_array_std + self._c - f_low, 60000, 120000, 2, 60)
-            m_high, its = self.brent_search(lambda x: self._b*(x - self._motor_array_mean)/self._motor_array_std + self._c - f_high, 60000, 120000, 2, 60)
+            m_low, its = self.brent_search(lambda x: self._b*(x - self._motor_array_mean)/self._motor_array_std + self._c - f_low, 120000, 190000, 2, 60)
+            m_high, its = self.brent_search(lambda x: self._b*(x - self._motor_array_mean)/self._motor_array_std + self._c - f_high, 120000, 190000, 2, 60)
             m_target, its = self.brent_search((lambda mot_pos: self.set_motor_and_measure(int(np.round(mot_pos))) - frequency), m_low, m_high, 20, 14)
 
         found_frequency = self._wvm.get_frequency()
@@ -354,12 +355,59 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
             i = i+1
 
         return b, i
+    def find_stable_frequency(self):
+        # purpose of this algorithm is to locate a stable frequency nearest to the current motor and voltage settings
+        #
+        # the algorithm proceeds as:
+        # 1) measure the current dispersion using a 3 point measurement
+        # 2) if the laser is not stable, increment the voltage by 1 V units; make sure to bound check
+        # 3) repeat the dispersion measurement
+        # 4) loop through until the laser is stable. if bound of 90 V has been achieved without stability being found,
+        # we decrement the motor position by ~10 GHz. In motor terms, it's about -0.104 GHz per step, so we take about
+        # 100 steps in the positive direction after resetting the voltage to 0. If this second sweep doesn't work,
+        # set the voltage to 0, print a warning, and return.
+        disp_max = 0.3 # GHz
+        cur_disp = self.measure_laser_dispersion()
+        motor_changes = 0
+        while cur_disp > disp_max:
+            cur_voltage = self._toptica.get_piezo_voltage()
+            proposed_voltage = cur_voltage + 1.0
+            if proposed_voltage >= 0.0 and proposed_voltage < 90.0:
+                # proposed voltage is OK, so move there.
+                self._toptica.set_piezo_voltage(proposed_voltage)
+                time.sleep(0.2)
+                cur_disp = self.measure_laser_dispersion()
+            elif proposed_voltage > 90 and motor_changes == 0:
+                self._toptica.set_piezo_voltage(0.0)
+                # increment the motor by 100 steps
+                self._motdl.high_precision_move(self._motdl.get_position() + 100)
+                motor_changes = motor_changes +  1
+                time.sleep(0.2)
+                cur_disp = self.measure_laser_dispersion()
+                print 'Executing motor shift to find stable frequency -- found %.2f MHz disp and %.1f GHz frequency. ' % (cur_disp*1000.0, self._wvm.get_frequency())
+            elif proposed_voltage > 90 and motor_changes > 0:
+                cur_disp = self.measure_laser_dispersion()
+                print 'Voltage and motor changes failed to locate a stable frequency. Dispersion: %.2f MHz' % (cur_disp*1000.00)
+            else:
+                print 'Voltage proposal out of bounds'
+                # this case should never happen. voltage proposal will always be greater than or equal to 0.
+        print 'Laser dispersion is now %.2f MHz' % (cur_disp*1000.0)
+        return
+
+    def measure_laser_dispersion(self):
+        # Monitor laser frequency
+        frq_recent = np.zeros(3)
+        for zz in range(3):
+            time.sleep(0.5)
+            frq_recent[zz] = self._wvm.get_frequency()
+        cur_disp = np.std(frq_recent)*2.920
+        return cur_disp
 
     def check_laser_stabilization(self):
         # Monitor laser frequency
         frq_recent = np.zeros(3)
         for zz in range(3):
-            time.sleep(1.0)
+            time.sleep(0.5)
             frq_recent[zz] = self._wvm.get_frequency()
         # Check if laser is stable, if not, wait
         for zz in range(30):
@@ -378,7 +426,7 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
         print 'Old filter set %s' % filter_set
 
         frq_idx = np.nonzero(total_hits_data[:,0])
-        threshold = 4.0*self.params['bin_size']
+        threshold = self.params['filter_threshold']
         seen_freqs = []
         if np.any(frq_idx):
             # select which ones we've seen, then scale them back to absolute frequency
@@ -503,10 +551,10 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
         self._pm = qt.instruments['pm']
         # Set laser calibration constants here
         self._a = 2.424e-7
-        self._b = -647.92
-        self._c = 270892.46
-        self._motor_array_mean = 98080.00
-        self._motor_array_std = 6090.52
+        self._b = -704.649
+        self._c = 264812.77
+        self._motor_array_mean = 155000.0
+        self._motor_array_std = 7071.07
         # Prepare instruments for measurement and verify FBL output
         # Set the trigger source to internal
 
@@ -648,12 +696,14 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
         self._toptica.set_piezo_voltage(self.params['piezo_array'][0])
         # locate the second frequency to seek to
         self.laser_frequency_seek(self.params['working_set'][-1][1]+8.0)
+        self.find_stable_frequency()
         self.check_laser_stabilization()
         frq2 = self._wvm.get_frequency() + 100.0 #Ghz
         power_meas = self.measure_cw_power()
 
         # locate the first frequency to seek to
         self.laser_frequency_seek(self.params['working_set'][0][0]-8.0)
+        self.find_stable_frequency()
         self.check_laser_stabilization()
 
         frq1 = self._wvm.get_frequency() - 100.0 #Ghz
@@ -682,13 +732,16 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
                 # get the desired target frequency
                 target_freq = self.params['working_set'][0][0]
                 # use the search based on root finding to adjust the cavity grating to get as close as possible
-                self.laser_frequency_seek(target_freq)
+                # use the search based on root finding to adjust the cavity grating to get as close as possible
+                self.laser_frequency_seek(target_freq-np.random.uniform())
                 cur_frq = self._wvm.get_frequency()
+
                 # now check if we are strictly lower but not more than 20 GHz lower than the target frequency
                 ik = 0
                 df = cur_frq-target_freq
-                while (not (df > -20.0 and df < 0.0)) and (ik < 11):
+                while (not (df > -20.0 and df < -3.0)) and (ik < 11):
                     # determine the discrepancy between the current and target frequencies
+                    cur_frq = self._wvm.get_frequency()
                     df = cur_frq-target_freq
                     print 'df is %.2f GHz...' % (df)
                     if ik == 0:
@@ -696,29 +749,31 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
                     # keep decrementing/incrementing the target frequency by 1 GHz until we get strictly below but not less than 20 GHz away
                     # dispersion is approximately -0.104 GHz/step, so move by about 10 steps upward to decrease by about 1 GHz.
                     current_motor_position = self._motdl.get_position()
-                    if df > 0:
+                    if df > -3.0:
                         # decrement by ~1.5 GHz. don't go smaller than about 10-15 steps because the motor's control
                         # circuitry won't always respond to small moves (c.f. "deadband").
-                        self._motdl.high_precision_move(current_motor_position-20)
-                        time.sleep(2.0)
-                        cur_frq = self._wvm.get_frequency()
-                    else:
+                        print 'df > -3.0... moving motor to %d' % (current_motor_position+40)
+                        self._motdl.high_precision_move(current_motor_position+40)
+                        time.sleep(1.0)
+
+                    elif df < -20.0:
                         # increment by ~1.5 GHz
-                        self._motdl.high_precision_move(current_motor_position+20)
-                        time.sleep(2.0)
-                        cur_frq = self._wvm.get_frequency()
-                    if ik == 10 and not (cur_frq > self.params['working_set'][0][0]-20.0 and cur_frq < self.params['working_set'][0][0]):
+                        print 'df < -20.0... moving motor to %d' % (current_motor_position-40)
+                        self._motdl.high_precision_move(current_motor_position-40)
+                        time.sleep(1.0)
+
+                    if ik == 10 and not (cur_frq > target_freq-20.0 and cur_frq < target_freq-3.0):
                         # if we've failed to home in by stepping the motor in one direction, just try to seek again after
                         # doing a motor reference search and then re-calibration (time intensive - ~4 minutes).
                         print 'Could not reduce frequency delta to within the desired range -- initial df %.2f GHz, final df %.2f GHz. Doing a reference search, calibration, and re-seek.' % (initial_df, df)
                         self._motdl.reference_search()
-                        self.calibrate_laser()
+                        #self.calibrate_laser()
                         self.laser_frequency_seek(self.params['working_set'][0][0]-10.0)
-                        cur_frq = self._wvm.get_frequency()
+
                     ik = ik + 1
 
-                #self.measure_cw_power()
-                print 'Laser frequency set to %.2f GHz (target %.2f GHz)' % (cur_frq, self.params['working_set'][0][0])
+                cur_frq = self._wvm.get_frequency()
+                print 'Laser frequency set to %.2f GHz (target %.2f GHz)' % (cur_frq, target_freq)
                 # Laser frequency seek already checks the stabilization, so this isn't necessary.
                 # self.check_laser_stabilization()
 
@@ -731,20 +786,18 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
                     self._toptica.set_piezo_voltage(self.params['piezo_array'][k])
                     qt.msleep(0.05)
 
-                    # Measure frequency and counts
-                    #
                     # The laser can become unstable, so we want to measure the dispersion of its readout; an increase
                     # in the dispersion will tell us when we're near a mode hop in the cavity and should skip measurement.
                     if self.params['stabilize_laser']:
-                        wm_disp = np.zeros(2)
-                        for i in range(2):
+                        wm_disp = np.zeros(3)
+                        for i in range(3):
                             wm_disp[i] = self._wvm.get_frequency()
-                            time.sleep(0.41)
+                            time.sleep(0.45)
                         # additionally, get the laser power measured in the wavemeter -- this could also be correlated to
                         # instability in the laser cavity mode
                         cur_power = self._wvm.get_power()
                         cur_frq = np.mean(wm_disp) #self._wvm.get_frequency()
-                        cur_disp = np.std(wm_disp)*12.7065 # t-distribution, two-sided, at the 95% level, 2-1 = 1 d.o.f.
+                        cur_disp = np.std(wm_disp)*2.920 # t-distribution, one-sided, at the 95% level, 3-1 = 2 d.o.f.
                         offset_frq = cur_frq - frq1
                     else:
                         cur_disp = -1.0
@@ -939,6 +992,7 @@ def main():
             'piezo_end' : 90, #volts
             'piezo_step_size' : 0.3, # volts (dispersion is roughly ~0.4 GHz/V)
             'bin_size' : 0.3, # GHz, should be same order of magnitude as (step_size * .1 GHz)
+            'filter_threshold' : 2.5, # GHz
             'microwaves' : False, # modulate with microwaves on or off
             'microwaves_CW' : True, # are the microwaves CW? i.e. ignore pi pulse length
             'pi_length' : 180.0, # ns
@@ -947,29 +1001,26 @@ def main():
             'constant_attenuation' : 14.0, # dBm -- set by the fixed attenuators in setup
             'desired_power' : -19.0, # dBm
             'freq' : [1.28,], #GHz
-            'dwell_time' : 1000.0, # ms
+            'dwell_time' : 700.0, # ms
             #'filter_set' : ( (270850, 270870), (270950, 270970)),(270810, 270940),
-            'filter_set' : [(270940,271040),],#, (270951,270974)],
+            'filter_set' : [(264245,265545)],#, (270951,270974)],
             'temperature_tolerance' : 2.0, # Kelvin
             'MeasCycles' : 1,
             'Imod' : 0.0,
-            'stabilize_laser' : False,
+            'stabilize_laser' : True,
             }
-    atten_array = [0, 3, 4.5, 6, 7]
-    ab = lambda x: 0.02483 + 0.289*np.exp(-x/4.067)
-    base_dwell = 1000
 
 
-    # for i in range(len(atten_array)):
-    # Create a measurement object m
-    time.sleep(2.0)
+
+
+
     if msvcrt.kbhit():
         kb_char=msvcrt.getch()
         if kb_char == "q":
             do_track = False
 
     #topt.set_current(ab(atten_array[i]))
-    name_string = 'defectO_offres_nomw'
+    name_string = 'defect_PL2_nomw_%.2f K' % (ls332.get_kelvinA())
     m = SiC_Toptica_Search_Piezo_Sweep(name_string)
     xsettings['desired_power'] = -19.0
     #xsettings['dwell_time'] = base_dwell*np.power(10.0,atten_array[i]/10.0)
@@ -977,12 +1028,13 @@ def main():
 
     m.params.from_dict(xsettings)
 
-    do_awg_stuff = True
+    do_awg_stuff = False
 
 
     m.sequence(upload=do_awg_stuff, program=do_awg_stuff, clear=do_awg_stuff)
 
     m.prepare()
+    print('Press q to quit...')
     time.sleep(2.0)
     if msvcrt.kbhit():
         kb_char=msvcrt.getch()
