@@ -251,7 +251,7 @@ class SiC_Toptica_Piezo_Sweep(m2.Measurement):
         desired_atten = self.params['power'] - self.params['constant_attenuation'] - self.params['desired_power']
         self._va.set_attenuation(desired_atten)
         print 'Variable attenuator set to %.1f dB attenuation.' % desired_atten
-        full_attenuation = self.params['power'] - self.params['constant_attenuation'] - np.max((0,np.min((desired_atten,15.5)))) + np.log(self.params['Imod'])/np.log(10.0)*10
+        full_attenuation = self.params['power'] - self.params['constant_attenuation'] - np.max((0,np.min((desired_atten,15.5)))) + np.log(self.params['Imod'])/np.log(10.0)*20.0
         print 'Fully attenuated power is %.2f dBm' % full_attenuation
 
         # Check if wavemeter returns a valid wavelength
@@ -474,7 +474,7 @@ class SiC_Toptica_Piezo_Sweep(m2.Measurement):
                 # Monitor laser frequency
                 frq_recent = np.zeros(5)
                 for zz in range(5):
-                    time.sleep(1.0)
+                    time.sleep(0.4)
                     frq_recent[zz] = 299792458/self._wvm.get_wavelength()
                 # Check if laser is stable, if not, wait
                 for zz in range(30):
@@ -519,27 +519,45 @@ class SiC_Toptica_Piezo_Sweep(m2.Measurement):
                     # find all nonzero frequencies
                     if cur_frq > frq1 and cur_frq < frq2 and (np.sum(total_hits_data) < 10 or np.min(np.abs( offset_frq - frq_array[np.nonzero(total_hits_data[:,0])])) > self.params['bin_size']) and filter_inc:
                         cts_array_temp = np.zeros(np.size(self.params['freq']))
+                        if self.params['stabilize_laser']:
+                            wm_disp = np.zeros(3)
+                            for i in range(3):
+                                wm_disp[i] = self._wvm.get_frequency()
+                                qt.msleep(0.45)
+                            # additionally, get the laser power measured in the wavemeter -- this could also be correlated to
+                            # instability in the laser cavity mode
+                            cur_power = self._wvm.get_power()
+                            cur_frq = np.mean(wm_disp) #self._wvm.get_frequency()
+                            cur_disp = np.std(wm_disp)*2.920 # t-distribution, one-sided, at the 95% level, 3-1 = 2 d.o.f.
+                            offset_frq = cur_frq - frq1
+                        else:
+                            cur_disp = -1.0
+                            cur_frq = self._wvm.get_frequency()
+                            offset_frq = cur_frq - frq1
+                            cur_power = -1.0
 
-                        for idx in range(np.size(self.params['freq'])):
-                            self._pxi.set_frequency(self.params['freq'][idx]*1.0e9)
-                            time.sleep(0.05)
-                            cts = self._ni63.get('ctr1')
-                            cts_array_temp[idx] = cts
+                        if (self.params['stabilize_laser'] and cur_disp < 0.2) or not self.params['stabilize_laser']:
+                            for idx in range(np.size(self.params['freq'])):
+                                self._pxi.set_frequency(self.params['freq'][idx]*1.0e9)
+                                time.sleep(0.05)
+                                cts = self._ni63.get('ctr1')
+                                cts_array_temp[idx] = cts
 
 
 
-                            #find where in the 3 column data structure to add counts
-                            index = np.searchsorted(frq_array, offset_frq)
+                                #find where in the 3 column data structure to add counts
+                                index = np.searchsorted(frq_array, offset_frq)
 
-                            #update the appropriate two columns keeping track of total counts and total hits
-                            total_count_data[index,idx] = total_count_data[index,idx] + cts # temp_count_data[j]
-                            total_hits_data[index,idx] = total_hits_data[index,idx] + 1
+                                #update the appropriate two columns keeping track of total counts and total hits
+                                total_count_data[index,idx] = total_count_data[index,idx] + cts # temp_count_data[j]
+                                total_hits_data[index,idx] = total_hits_data[index,idx] + 1
 
 
-                            qt.msleep(0.002) # keeps GUI responsive and checks if plot needs updating.
-                        cts_list = list(cts_array_temp)
-                        #Live Plot
-                        data.add_data_point(cur_frq,*cts_list)
+                                qt.msleep(0.002) # keeps GUI responsive and checks if plot needs updating.
+                            cts_list = list(cts_array_temp)
+                            #Live Plot
+                            data.add_data_point(cur_frq,*cts_list)
+
                         # check snspd
                         self._snspd.check()
 
@@ -700,20 +718,20 @@ xsettings = {
         'AOM_light_delay' : 655.0, # ns
         'AOM_end_buffer' : 1155.0, # ns
         'Sacher_AOM_start_buffer' : 150.0, #ns
-        'Sacher_AOM_length' : 1000.0, # ns
+        'Sacher_AOM_length' : 3000.0, # ns
         'Sacher_AOM_light_delay' : 960.0, # ns
         'Sacher_AOM_end_buffer' : 1155.0, # ns
         'RF_start_buffer' : 300.0, # ns
-        'readout_length' : 1000.0, # ns
+        'readout_length' : 3000.0, # ns
         'readout_buffer' : 10.0, # ns
         'ctr_term' : 'PFI2',
-        'motor_start' : 97100, # steps, should be lower than motor_end
-        'motor_end' : 99270, # steps
-        'motor_step_size' : 170, # steps
+        'motor_start' : 154350, # steps, should be lower than motor_end
+        'motor_end' : 154950, # steps
+        'motor_step_size' : 50, # steps
         'piezo_start' : 0, #volts
         'piezo_end' : 90, #volts
         'piezo_step_size' : 0.1, # volts (dispersion is roughly ~0.4 GHz/V)
-        'bin_size' : 0.05, # GHz, should be same order of magnitude as (step_size * .1 GHz)
+        'bin_size' : 0.15, # GHz, should be same order of magnitude as (step_size * .1 GHz)
         'microwaves' : True, # modulate with microwaves on or off
         'microwaves_CW' : True, # are the microwaves CW? i.e. ignore pi pulse length
         'pi_length' : 180.0, # ns
@@ -721,23 +739,24 @@ xsettings = {
         'power' : 5.0, # dBm
         'constant_attenuation' : 14.0, # dBm -- set by the fixed attenuators in setup
         'desired_power' : -9.0, # dBm
-        'freq' : list([1.3160,1.3565,1.44]), #GHz
+        'freq' : list([1.3357,]), #GHz
         'dwell_time' : 1000.0, # ms
         'filter' : True,
         #'filter_set' : ( (270850, 270870), (270950, 270970)),
-        'filter_set' : [[270900, 270925],[270915,271010]],
+        'filter_set' : [[264850,264960]],
         'temperature_tolerance' : 4.0, # Kelvin
         'MeasCycles' : 1,
-        'Imod' : 1.0,
+        'Imod' : 0.2778,
+        'stabilize_laser' : True
         }
 def main():
-    p_low = -16
-    p_high = -16
+    p_low = -19
+    p_high = -19
     p_nstep = 1
 
     p_array = np.linspace(p_low,p_high,p_nstep)
 
-    # Create a measurement object m
+    # Create a measurement object mqqq
 
     time.sleep(2.0)
     if msvcrt.kbhit():
@@ -745,7 +764,7 @@ def main():
         if kb_char == "q":
             do_track = False
 
-    name_string = 'randomdefect_nomw'
+    name_string = 'PL1_nomw'
     m = SiC_Toptica_Piezo_Sweep(name_string)
     #xsettings['desired_power'] = -19.0
     #xsettings['frequency'] = 1.45
