@@ -18,6 +18,7 @@ import scipy.cluster
 import msvcrt
 import lib.math.peakfind as pf
 import scipy as scp
+import pandas as pd
 
 
 
@@ -27,6 +28,7 @@ class FabryPerot(Instrument):
         Instrument.__init__(self, name, tags=['positioner'])
         # Import the DAQ as an instrument object to write to.
         self._ni63 = qt.instruments['NIDAQ6363']
+
         # Store related constants for the interferometer here.
 
         self.FP_params = {
@@ -305,6 +307,49 @@ class FabryPerot(Instrument):
         # Return this sum of squared errors
         return mse
 
+    def check_stabilization(self):
+        raw_sweep = self.read_sweep(490,10000,'ai1')
+        t_axis = np.linspace(1,490,490)
+
+        # use a threshold to filter out only points where the photodiode records signal
+        v_pd_thresh = 0.005
+        filt_idx = raw_sweep > v_pd_thresh
+
+        # create a pandas dataframe
+        sweep_frame = pd.DataFrame({'time':t_axis[filt_idx], 'voltage':raw_sweep[filt_idx]})
+        # now return the classification
+        return self.classify_fabry_perot(sweep_frame)
+
+    def classify_fabry_perot(self, dat):
+        # classify the no signal condition
+
+        if np.max(dat['voltage'])-np.min(dat['voltage']) < 0.02:
+            # no signal case is triggered, return 3
+            return 3
+
+        threshold_pct = 0.15
+
+        peakidxs = dat['voltage'].values > (threshold_pct*(np.max(dat['voltage'])-np.min(dat['voltage'])) + np.min(dat['voltage']))
+        if np.size(peakidxs) == 0:
+            peak_counter = 0
+            return 3
+        else:
+            peak_counter = 1
+            times = dat['time'].values
+            times = times[peakidxs]
+            #print(times)
+            for i in range(np.size(times)-1):
+                # count the number of gaps
+
+                if times[i+1] - times[i] > 10:
+                    peak_counter = peak_counter + 1
+
+        if peak_counter > 5:
+            #print('peaks are {:d}'.format(peak_counter))
+            return 2
+        else:
+            #print('peaks are {:d}'.format(peak_counter))
+            return 1
 
 
 
