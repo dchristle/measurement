@@ -1072,17 +1072,33 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
                         fp_out = self._fp.check_stabilization()
 
                         if fp_out == 1:
-                            # Fabry Perot check passed, but there can still be some instabilitiy.
-                            wm_disp = np.zeros(3)
-                            for i in range(3):
-                               wm_disp[i] = self._wvm.get_frequency()
-                               qt.msleep(0.45)
-                            # additionally, get the laser power measured in the wavemeter -- this could also be correlated to
-                            # instability in the laser cavity mode
-                            cur_power = self._wvm.get_power()
-                            cur_frq = np.mean(wm_disp) # self._wvm.get_frequency()
-                            cur_disp = np.std(wm_disp)*2.920
-                            offset_frq = cur_frq - frq1
+                            # Fabry Perot check passed, but the wavelength might be wrong.
+                            cur_frq = self._wvm.get_frequency()
+                            if (cur_frq > self.params['working_set'][0][0] and cur_frq < self.params['working_set'][0][1]):
+                                # Fabry Perot check and frequency check passed, but the final check is whether the dispersion
+                                # is low enough. The final dispersion check occurs in a logic statement below.
+                                qt.msleep(0.45)
+                                wm_disp = np.zeros(3)
+                                wm_disp[0] = cur_frq # re-use the value we already measured
+                                for i in range(2):
+                                   wm_disp[i+1] = self._wvm.get_frequency()
+                                   if i != 1:
+                                       # don't wait if this is the last measurement
+                                       qt.msleep(0.45)
+                                # additionally, get the laser power measured in the wavemeter -- this could also be
+                                # correlated to instability in the laser cavity mode
+                                cur_power = self._wvm.get_power()
+                                cur_frq = np.mean(wm_disp) # self._wvm.get_frequency()
+                                cur_disp = np.std(wm_disp)*2.920
+                                offset_frq = cur_frq - frq1
+                            else:
+                                # Frequency is not in bounds, so set the values to nonsense ones and the logical
+                                # statement below will cause this point to be skipped
+                                cur_power = -1.0
+                                offset_frq = cur_frq - frq1
+                                # the dispersion being reported as "10" will trigger the logic statement not to measure
+                                # here, as well.
+                                cur_disp = 10.0
                         else:
                             cur_power = -1.0
                             offset_frq = cur_frq - frq1
@@ -1095,8 +1111,9 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
                         cur_power = -1.0
 
 
-                    # Check for superconductivity
-                    self._snspd.check()
+                    # Check for superconductivity every 10 points
+                    if np.mod(k,10) == 0:
+                        self._snspd.check()
 
                     # use filter logic
                     filter_inc = False
@@ -1108,7 +1125,7 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
                     # find all nonzero frequencies
 
                     # Dispersion check of 300 MHz, added 2016-03-23. This ensures anything near a mode hop is rejected.
-                    if (cur_frq > self.params['working_set'][0][0] and cur_frq < self.params['working_set'][-1][1] and cur_disp < 0.3 ) and not np.any(self.params['bin_size']*0.51 > np.abs(offset_frq - frq_array[np.nonzero(total_hits_data[:,0])])):
+                    if (cur_frq > self.params['working_set'][0][0] and cur_frq < self.params['working_set'][0][1] and cur_disp < 0.3 ) and not np.any(self.params['bin_size']*0.51 > np.abs(offset_frq - frq_array[np.nonzero(total_hits_data[:,0])])):
                         cts_array_temp = np.zeros(np.size(self.params['freq']))
 
                         for idx in range(np.size(self.params['freq'])):
@@ -1185,9 +1202,9 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
                             break
 
                     # determine if we are beyond the endpoint of the current desired sweep range
-                    #if cur_frq > 1.0 + self.params['working_set'][0][1]:
-                    #    print 'Current frequency %.1f too far beyond end of working set (%.2f, %.2f); breaking' % (cur_frq, self.params['working_set'][0][0], self.params['working_set'][0][1])
-                    #    break
+                    if cur_frq > 1.0 + self.params['working_set'][0][1]:
+                        print 'Current frequency %.2f too far beyond end of working set (%.2f, %.2f); breaking' % (cur_frq, self.params['working_set'][0][0], self.params['working_set'][0][1])
+                        break
                 data.new_block()
                 self.params['working_set'] = self.filter_laser_frequencies(self.params['working_set'], frq_array, total_hits_data, frq1)
 
@@ -1280,7 +1297,7 @@ def main():
             'ctr_term' : 'PFI2',
             'piezo_start' : 0, #volts
             'piezo_end' : 90, #volts
-            'piezo_step_size' : 0.10, # volts (dispersion is roughly ~0.4 GHz/V)
+            'piezo_step_size' : 0.20, # volts (dispersion is roughly ~0.4 GHz/V)
             'bin_size' : 0.1, # GHz, should be same order of magnitude as (step_size * .1 GHz)
             'filter_threshold' : 2.5, # GHz
             'microwaves' : True, # modulate with microwaves on or off
@@ -1293,7 +1310,7 @@ def main():
             'freq' : [1.3357,], #GHz
             'dwell_time' : 700.0, # ms
             #'filter_set' : ( (270850, 270870), (270950, 270970)),(270810, 270940),
-            'filter_set' : [(264895,264950)],#, (270951,270974)],
+            'filter_set' : [(264885,264950)],#, (270951,270974)],
             'temperature_tolerance' : 2.0, # Kelvin
             'MeasCycles' : 1,
             'Imod' : 0.2778,
