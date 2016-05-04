@@ -327,7 +327,7 @@ class FabryPerot(Instrument):
             # no signal case is triggered, return 3
             return 3
 
-        threshold_pct = 0.15
+        threshold_pct = 0.06
 
         peakidxs = dat['voltage'].values > (threshold_pct*(np.max(dat['voltage'])-np.min(dat['voltage'])) + np.min(dat['voltage']))
         if np.size(peakidxs) == 0:

@@ -380,7 +380,7 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
                 fp_out = self._fp.check_stabilization()
                 if fp_out == 1:
                     current_frequency = self._wvm.get_frequency()
-                    bar.update(np.abs(1.0-np.abs((current_frequency-frequency)/(initial_discrepancy+10.0))))
+                    bar.update(np.clip(np.abs(1.0-np.abs((current_frequency-frequency)/(initial_discrepancy))),0,1))
                     #print 'Motor set to %d, frequency is now %.2f GHz' % (current_motor_position+dm, current_frequency)
                 elif fp_out == 2:
                     pass
@@ -390,9 +390,6 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
                     return False
 
                 its = its + 1
-
-
-
 
         return True
     def laser_frequency_seek_new(self, frequency):
@@ -1009,7 +1006,7 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
                 #
                 target_freq = self.params['working_set'][0][0]
                 # add a uniform unit random variable to the frequency, for jitter purposes.
-                seek_freq = target_freq-3.0-np.random.uniform()
+                seek_freq = target_freq-4.0*np.random.uniform()
                 print 'Seeking to %.2f GHz.' % seek_freq
                 self.laser_frequency_seek(seek_freq)
                 # keep track of this position, in case we need to return to it after a reference search
@@ -1067,7 +1064,7 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
 
                     #Set the new piezo voltage
                     self._toptica.set_piezo_voltage(self.params['piezo_array'][k])
-                    qt.msleep(0.05)
+                    qt.msleep(1.0)
 
                     # The laser can become unstable, so we want to measure the dispersion of its readout; an increase
                     # in the dispersion will tell us when we're near a mode hop in the cavity and should skip measurement.
@@ -1075,15 +1072,16 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
                         fp_out = self._fp.check_stabilization()
 
                         if fp_out == 1:
-                            #wm_disp = np.zeros(3)
-                            #for i in range(3):
-                            #    wm_disp[i] = self._wvm.get_frequency()
-                            #    qt.msleep(0.45)
+                            # Fabry Perot check passed, but there can still be some instabilitiy.
+                            wm_disp = np.zeros(3)
+                            for i in range(3):
+                               wm_disp[i] = self._wvm.get_frequency()
+                               qt.msleep(0.45)
                             # additionally, get the laser power measured in the wavemeter -- this could also be correlated to
                             # instability in the laser cavity mode
                             cur_power = self._wvm.get_power()
-                            cur_frq = self._wvm.get_frequency()
-                            cur_disp = 0.1 # np.std(wm_disp)*2.920 # t-distribution, one-sided, at the 95% level, 3-1 = 2 d.o.f.
+                            cur_frq = np.mean(wm_disp) # self._wvm.get_frequency()
+                            cur_disp = np.std(wm_disp)*2.920
                             offset_frq = cur_frq - frq1
                         else:
                             cur_power = -1.0
@@ -1282,23 +1280,23 @@ def main():
             'ctr_term' : 'PFI2',
             'piezo_start' : 0, #volts
             'piezo_end' : 90, #volts
-            'piezo_step_size' : 0.1, # volts (dispersion is roughly ~0.4 GHz/V)
+            'piezo_step_size' : 0.10, # volts (dispersion is roughly ~0.4 GHz/V)
             'bin_size' : 0.1, # GHz, should be same order of magnitude as (step_size * .1 GHz)
             'filter_threshold' : 2.5, # GHz
-            'microwaves' : False, # modulate with microwaves on or off
+            'microwaves' : True, # modulate with microwaves on or off
             'microwaves_CW' : True, # are the microwaves CW? i.e. ignore pi pulse length
             'pi_length' : 180.0, # ns
-            'off_resonant_laser' : True, # cycle between resonant and off-resonant
+            'off_resonant_laser' : False, # cycle between resonant and off-resonant
             'power' : 5.0, # dBm
             'constant_attenuation' : 14.0, # dBm -- set by the fixed attenuators in setup
             'desired_power' : -19.0, # dBm
-            'freq' : [1.28,], #GHz
+            'freq' : [1.3357,], #GHz
             'dwell_time' : 700.0, # ms
             #'filter_set' : ( (270850, 270870), (270950, 270970)),(270810, 270940),
             'filter_set' : [(264895,264950)],#, (270951,270974)],
             'temperature_tolerance' : 2.0, # Kelvin
             'MeasCycles' : 1,
-            'Imod' : 0.0,
+            'Imod' : 0.2778,
             'stabilize_laser' : True,
             }
 
@@ -1320,7 +1318,7 @@ def main():
 
     m.params.from_dict(xsettings)
 
-    do_awg_stuff = False
+    do_awg_stuff = True
 
 
     m.sequence(upload=do_awg_stuff, program=do_awg_stuff, clear=do_awg_stuff)
