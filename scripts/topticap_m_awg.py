@@ -183,6 +183,7 @@ class SiC_Toptica_Piezo_Sweep(m2.Measurement):
         self._wvm = qt.instruments['bristol']
         self._flip = qt.instruments['flip']
         self._pm = qt.instruments['pm']
+        self._fp = qt.instruments['fp']
 
         # Prepare instruments for measurement and verify FBL output
         # Set the trigger source to internal
@@ -300,6 +301,41 @@ class SiC_Toptica_Piezo_Sweep(m2.Measurement):
                     # filter range already
                     self.params['filter_set'][l] = []
         return
+    def seek_frequency(self, frequency, step_low, step_high, motor_step = 50):
+        fp = qt.instruments['fp']
+        motdl = qt.instruments['motdl']
+        wvm = qt.instruments['bristol']
+        # this is a replacement for the root-finding based algorithm for coarse frequency tuning, e.g. to within
+        # a few GHz. The idea here is to replace that algorithm with a simpler 1D line search that steeps from
+        # low to high and then moves to the frequency closest to the desired one (stored in frequency).
+        #
+        print 'Seeking to %.2f GHz with 1D line search...' % frequency
+        init_motor_position = motdl.get_position()
+        motor_array = np.arange(step_low, step_high, np.round(motor_step))
+        motor_freq_list = []
+        for mot_pos in motor_array:
+            motdl.high_precision_move(mot_pos)
+            time.sleep(0.5)
+            fp_out = fp.check_stabilization()
+            if fp_out == 1:
+                # laser is stable at this motor position, so get the frequency
+                motor_freq_list.append((mot_pos, wvm.get_frequency()))
+                print 'Pos: %d , Freq: %.2f GHz' % (motor_freq_list[-1][0], motor_freq_list[-1][1])
+        if not motor_freq_list:
+            logging.error(__name__ + '1D line search failed -- no frequencies were stable. Returning to original frequency.')
+            motdl.high_precision_move(init_motor_position)
+        # find the motor position nearest to the desired frequency
+        nearest_pos = motor_freq_list[0][0]
+        nearest_dist = motor_freq_list[0][1] - frequency
+        for elem in motor_freq_list:
+            if np.abs(elem[1] - frequency) < np.abs(nearest_dist):
+                nearest_pos = elem[0]
+                nearest_dist = elem[1] - frequency
+        print 'Found motor step %d to be %.2f GHz away -- seeking.' % (nearest_pos, nearest_dist)
+        motdl.high_precision_move(nearest_pos)
+        print 'Distance is now %.2f GHz away from %.2f GHz.' % (wvm.get_frequency() - frequency, frequency)
+        return
+
     def measure(self):
         # Start keystroke monitor
         self.start_keystroke_monitor('abort')
@@ -391,16 +427,17 @@ class SiC_Toptica_Piezo_Sweep(m2.Measurement):
         for zz in range(3):
             time.sleep(1.0)
             frq_recent[zz] = 299792458/self._wvm.get_wavelength()
-        # Check if laser is stable, if not, wait
-        for zz in range(30):
-            if (np.max(frq_recent) - np.min(frq_recent)) < 1.0:
-                print 'Laser stabilized. Dispersion %.2f MHz, range %.2f MHz' % (np.std(frq_recent)*1000.0, 1000.0*(np.max(frq_recent)-np.min(frq_recent)))
-                break
-            time.sleep(1.0)
-            np.roll(frq_recent,1)
-            frq_recent[0] = 299792458/self._wvm.get_wavelength()
-            if zz >=29:
-                print 'Laser frequency readout on wavemeter did not stabilize after 30 seconds!'
+        # Check if laser is stable
+        fp_out = self._fp.check_stabilization()
+        if fp_out == 1:
+            print 'Laser stable according to FP.'
+        elif fp_out == 2:
+            print 'Laser multimode according to FP.'
+        elif fp_out == 3:
+            print 'No signal recorded on the FP.'
+        else:
+            print 'Unknown output from FP.'
+
 
 		#This is the high end frequency limit, 100 GHz above the first wavemeter reading at motor_position_start we will limit our array of stored data to
         frq2 = (299792458.0/self._wvm.get_wavelength()) + 100.0 #GHz
@@ -413,22 +450,16 @@ class SiC_Toptica_Piezo_Sweep(m2.Measurement):
 
 		#This is the reference frequency we will store in the data file, 100 GHz below the wavemeter reading at motor_position_end
         time.sleep(2.0)
-        print 'Checking for laser stabilization...'
-        # Monitor laser frequency
-        frq_recent = np.zeros(5)
-        for zz in range(5):
-            time.sleep(1.0)
-            frq_recent[zz] = 299792458.0/self._wvm.get_wavelength()
-        # Check if laser is stable, if not, wait
-        for zz in range(30):
-            if (np.max(frq_recent) - np.min(frq_recent)) < 1.0:
-                print 'Laser stabilized. Dispersion %.2f MHz, range %.2f MHz' % (np.std(frq_recent)*1000.0, 1000.0*(np.max(frq_recent)-np.min(frq_recent)))
-                break
-            time.sleep(1.0)
-            np.roll(frq_recent,1)
-            frq_recent[0] = 299792458.0/self._wvm.get_wavelength()
-            if zz >=29:
-                print 'Laser frequency readout on wavemeter did not stabilize after 30 seconds! Dispersion %.2f GHz, range %.2f GHz.' % (np.std(frq_recent), np.max(frq_recent)-np.min(frq_recent))
+        # Check if laser is stable
+        fp_out = self._fp.check_stabilization()
+        if fp_out == 1:
+            print 'Laser stable according to FP.'
+        elif fp_out == 2:
+            print 'Laser multimode according to FP.'
+        elif fp_out == 3:
+            print 'No signal recorded on the FP.'
+        else:
+            print 'Unknown output from FP.'
 
         frq1 = (299792458.0/self._wvm.get_wavelength()) - 100.0 #Ghz
         print 'Start (reference) frequency %.2f GHz / %.2f nm -- End frequency %.2f GHz / %.2f nm' % (frq1 + 100.0,299792458.0/(frq1 + 100.0), frq2 - 100.0, 299792458.0/(frq2-100.0))
@@ -470,22 +501,8 @@ class SiC_Toptica_Piezo_Sweep(m2.Measurement):
                 time.sleep(0.2)
                 print 'Motor position set to %d' % (self.params['motor_array'][j])
                 self._motdl.set_position(self.params['motor_array'][j])
-                time.sleep(2)
-                # Monitor laser frequency
-                frq_recent = np.zeros(5)
-                for zz in range(5):
-                    time.sleep(0.4)
-                    frq_recent[zz] = 299792458/self._wvm.get_wavelength()
-                # Check if laser is stable, if not, wait
-                for zz in range(30):
-                    if (np.max(frq_recent) - np.min(frq_recent)) < 1.0:
-                        print 'Laser stabilized. Dispersion %.2f MHz, range %.2f MHz' % (np.std(frq_recent)*1000.0, 1000.0*(np.max(frq_recent)-np.min(frq_recent)))
-                        break
-                    time.sleep(1.0)
-                    np.roll(frq_recent,1)
-                    frq_recent[0] = 299792458/self._wvm.get_wavelength()
-                    if zz >=29:
-                        print 'Laser frequency readout on wavemeter did not stabilize after 30 seconds!'
+                time.sleep(1)
+
 
 
                 temp_count_data = np.zeros(self.params['piezo_pts'] , dtype='uint32')
@@ -520,23 +537,13 @@ class SiC_Toptica_Piezo_Sweep(m2.Measurement):
                     if cur_frq > frq1 and cur_frq < frq2 and (np.sum(total_hits_data) < 10 or np.min(np.abs( offset_frq - frq_array[np.nonzero(total_hits_data[:,0])])) > self.params['bin_size']) and filter_inc:
                         cts_array_temp = np.zeros(np.size(self.params['freq']))
                         if self.params['stabilize_laser']:
-                            wm_disp = np.zeros(3)
-                            for i in range(3):
-                                wm_disp[i] = self._wvm.get_frequency()
-                                qt.msleep(0.45)
-                            # additionally, get the laser power measured in the wavemeter -- this could also be correlated to
-                            # instability in the laser cavity mode
-                            cur_power = self._wvm.get_power()
-                            cur_frq = np.mean(wm_disp) #self._wvm.get_frequency()
-                            cur_disp = np.std(wm_disp)*2.920 # t-distribution, one-sided, at the 95% level, 3-1 = 2 d.o.f.
-                            offset_frq = cur_frq - frq1
+                            fp_out = self._fp.check_stabilization()
                         else:
-                            cur_disp = -1.0
+                            fp_out = 1
+
+                        if (self.params['stabilize_laser'] and fp_out == 1) or not self.params['stabilize_laser']:
                             cur_frq = self._wvm.get_frequency()
                             offset_frq = cur_frq - frq1
-                            cur_power = -1.0
-
-                        if (self.params['stabilize_laser'] and cur_disp < 0.2) or not self.params['stabilize_laser']:
                             for idx in range(np.size(self.params['freq'])):
                                 self._pxi.set_frequency(self.params['freq'][idx]*1.0e9)
                                 time.sleep(0.05)
@@ -591,61 +598,8 @@ class SiC_Toptica_Piezo_Sweep(m2.Measurement):
                             print 'Measurement aborted.'
                             self._stop_measurement = True
                             break
-                # use a clustering scheme to adapt the measurement -- we don't want to sample the same frequency ranges
-                # multiple times within a run
-                #
-                #print 'Old filter set %s' % self.params['filter_set']
-                # first, check which frequencies in the frq_array have been seen
-                #frq_idx = total_hits_data > 0
-                # if np.any(frq_idx):
-                #     # select which ones we've seen, then scale them back to absolute frequency
-                #     frq_subset = frq_array[frq_idx] + frq1
-                #     # this array is already sorted from low to high by construction, so we can search for gaps easily
-                #     frq_diffs = np.diff(frq_subset)
-                #     # now lets segment the already swept frequency range into a list of boundaries
-                #     kk = 0
-                #     lb = 0
-                #     seen_freqs = []
-                #     while kk < np.size(frq_diffs):
-                #         if frq_diffs[kk] > 10*self.params['bin_size']:
-                #             # we have detected a gap
-                #             ub = kk
-                #             # if a single point is located between two gaps, we don't want to remove anything from
-                #             # the set of filter ranges; this condition means ub must be > lb
-                #             if ub > lb:
-                #                 seen_freqs.append((frq_subset[lb],frq_subset[ub]))
-                #             # the lower bound of the next gap (if it exists) is now one element after
-                #             # the upper bound of this gap
-                #             lb = kk+1
-                #         # if kk was at the upper end of the entire range, kk -> kk + 1 for the next
-                #         # iteration and the loop will not execute
-                #         kk = kk+1
-                #     # if we didn't find any gaps, we can just add the entire range to the "seen freqs" list
-                #     if len(seen_freqs) == 0 and np.size(frq_subset) > 1:
-                #         seen_freqs = [(frq_subset[0],frq_subset[-1])]
-                #     # we don't want to modify a list we're iterating over, so we'll construct a new filter set
-                #     # and append to it
-                #     new_filter_set = []
-                #     for l in range(len(self.params['filter_set'])):
-                #
-                # # finally, check for tuples whose total length is less than 3x the bin size and remove them
-                # print 'New filter set %s' % self.params['filter_set']
-                # rem_idx = []
-                # for k in self.params['filter_set']:
-                #     if (k[1]-k[0]) < 3.0*self.params['bin_size']:
-                #         rem_idx.append(k)
-                #
-                # for k in rem_idx:
-                #     del self.params['filter_set'][self.params['filter_set'].index(k)]
-                #
-                # print 'New filter set %s' % self.params['filter_set']
-                # if len(self.params['filter_set']) == 0 and self.params['filter']:
-                #     break
 
-            # Check for a break, and break out of this loop as well.
-            # It's important to check here, before we add the array to the total
-            # since doing it the other way risks adding incomplete data to the
-            # total array.
+
             tt = time.time() - t1
 
             print 'Cycle %d/%d total time is %.3f, efficiency of %.2f percent. Heater output is at %.1f. ' % (i+1, int(self.params['MeasCycles']), tt, (self.params['motor_pts'] *self.params['dwell_time']/1000.0)/tt*100.0, self._ls332.get_heater_output())
