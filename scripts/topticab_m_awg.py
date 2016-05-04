@@ -338,13 +338,18 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
         # this seek is based on a simpler idea of just using the set position only. it suffers from backlash of the
         # motor but should eventually get quite close to the correct setting and fairly quickly
 
+        threshold = 3.0
+
         initial_motor_position = self._motdl.get_position()
         current_frequency = self._wvm.get_frequency()
         initial_discrepancy = np.abs(current_frequency-frequency)
+        if np.abs(initial_discrepancy) < threshold:
+            return True
+
         # setup a progress bar based on the relative distance from the start
         with progressbar.ProgressBar(widgets=[' [', progressbar.Timer(), '] ', progressbar.Bar(), ' (', progressbar.ETA(), ') ', ],max_value=1.0) as bar:
             its = 0
-            threshold = 3.0
+
             while np.abs(current_frequency-frequency) > threshold and its < 100:
                 delta = current_frequency - frequency
 
@@ -389,7 +394,7 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
 
 
 
-        return
+        return True
     def laser_frequency_seek_new(self, frequency):
         # determine the low and high motor positions
         bracket_init = 120.0
@@ -656,19 +661,19 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
                 return False
 
         return True
-    def sentinel_target_frequency(self, freq_sentinel):
-        if freq_sentinel > self.params['working_set'][-1][0]:
-            return self.params['working_set'][0][0]
-        else:
-            # locate frequency strip that begins just above the frequency sentinel
-            min_frequency_distance = self.params['working_set'][-1][1] - freq_sentinel
-            target_frequency = self.params['working_set'][0][0]
-            for freq_strip in self.params['working_set']:
-                strip_distance = freq_strip[0] - freq_sentinel
-                if strip_distance > 0 and strip_distance < min_frequency_distance:
-                    target_frequency = freq_strip[0]
-                    min_frequency_distance = strip_distance
-            return target_frequency
+    # def sentinel_target_frequency(self, freq_sentinel):
+    #     if freq_sentinel > self.params['working_set'][-1][0]:
+    #         return self.params['working_set'][0][0]
+    #     else:
+    #         # locate frequency strip that begins just above the frequency sentinel
+    #         min_frequency_distance = self.params['working_set'][-1][1] - freq_sentinel
+    #         target_frequency = self.params['working_set'][0][0]
+    #         for freq_strip in self.params['working_set']:
+    #             strip_distance = freq_strip[0] - freq_sentinel
+    #             if strip_distance > 0 and strip_distance < min_frequency_distance:
+    #                 target_frequency = freq_strip[0]
+    #                 min_frequency_distance = strip_distance
+    #         return target_frequency
 
     def filter_laser_frequencies(self, filter_set, frq_array, total_hits_data, frq1):
         print 'Old filter set %s' % filter_set
@@ -822,39 +827,41 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
                 except(visa.visa.VI_ERROR_TMO):
                     print 'Still waiting for AWG after timeout...'
                 if state == 'Running':
-                        print 'AWG started OK...Clearing VISA interface.'
-                        self._awg.clear_visa()
+                        print 'AWG started OK.'
+
                         break
                 if state == 'Idle':
                     self._awg.start()
         elif self._awg.get_state() == 'Running':
-            print 'AWG already started -- testing if VISA interface is OK...'
-            init_status = self._awg.get_ch3_status()
-            awg_is_ok = True
-            # check a randomized sequence of 20 commands and see if the response agrees with what we set the channel
-            # status to.
-            for ij in range(20):
-                test_val = random.randint(0,1)
-                if test_val == 0:
-                    self._awg.set_ch3_status('off')
-                    time.sleep(0.05)
-                    output = self._awg.get_ch3_status()
-                    if output == 'on':
-                        awg_is_ok == False
-                if test_val == 1:
-                    self._awg.set_ch3_status('on')
-                    time.sleep(0.05)
-                    output = self._awg.get_ch3_status()
-                    if output == 'off':
-                        awg_is_ok == False
-            self._awg.set_ch3_status(init_status)
-            # all the randomized commands should match. If they don't, the VISA interface is clogged and we should
-            # clear it
-            if not awg_is_ok:
-                print 'AWG interface was clogged, clearing it.'
-                self._awg.clear_visa()
-            else:
-                print 'AWG interface is OK.'
+            print 'AWG already started'
+
+        print 'Checking AWG interface status...'
+        init_status = self._awg.get_ch3_status()
+        awg_is_ok = True
+        # check a randomized sequence of 20 commands and see if the response agrees with what we set the channel
+        # status to.
+        for ij in range(20):
+            test_val = random.randint(0,1)
+            if test_val == 0:
+                self._awg.set_ch3_status('off')
+                time.sleep(0.05)
+                output = self._awg.get_ch3_status()
+                if output == 'on':
+                    awg_is_ok == False
+            if test_val == 1:
+                self._awg.set_ch3_status('on')
+                time.sleep(0.05)
+                output = self._awg.get_ch3_status()
+                if output == 'off':
+                    awg_is_ok == False
+        self._awg.set_ch3_status(init_status)
+        # all the randomized commands should match. If they don't, the VISA interface is clogged and we should
+        # clear it
+        if not awg_is_ok:
+            print 'AWG interface was clogged, clearing it.'
+            self._awg.clear_visa()
+        else:
+            print 'AWG interface is OK.'
 
         self._awg.sq_forced_jump(1)
         time.sleep(1)
@@ -968,16 +975,11 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
 
         self._toptica.set_piezo_voltage(self.params['piezo_array'][0])
         # locate the second frequency to seek to
-        self.laser_frequency_seek(self.params['working_set'][-1][1]+8.0)
-        self.find_stable_frequency()
-        self.check_laser_stabilization()
-        frq2 = self._wvm.get_frequency() + 100.0 #Ghz
-        power_meas = self.measure_cw_power()
+        #self.laser_frequency_seek(self.params['working_set'][-1][1]+8.0)
+        frq2 = self.params['working_set'][-1][1]+8.0 + 100.0 #Ghz
 
         # locate the first frequency to seek to
-        self.laser_frequency_seek(self.params['working_set'][0][0]-8.0)
-        self.find_stable_frequency()
-        self.check_laser_stabilization()
+        self.laser_frequency_seek(self.params['working_set'][0][0]-3.0)
 
         frq1 = self._wvm.get_frequency() - 100.0 #Ghz
         power_meas = self.measure_cw_power()
@@ -992,7 +994,7 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
         total_hits_data = np.zeros((np.size(frq_array),np.size(self.params['freq'])), dtype='uint32')
 
         for i in range(self.params['MeasCycles']):
-            frequency_sentinel = 0.0
+            #frequency_sentinel = 0.0
             # Enter the loop for measurement
             t1 = time.time()
             seek_iterations = 0
@@ -1005,20 +1007,21 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
 
                 # get the desired target frequency
                 #
-                # do this by first using a sentinel to keep track of the largest frequency seen, and setting the target
-                # based on what strip of frequencies are both unobserved so far and whose beginning is greater than
-                # the frequency sentinel
-                #target_freq = self.params['working_set'][0][0]
-                target_freq = self.sentinel_target_frequency(frequency_sentinel)
-                # use the search based on root finding to adjust the cavity grating to get as close as possible
-                # use the search based on root finding to adjust the cavity grating to get as close as possible
-                self.laser_frequency_seek(target_freq-np.random.uniform())
+                target_freq = self.params['working_set'][0][0]
+                # add a uniform unit random variable to the frequency, for jitter purposes.
+                seek_freq = target_freq-3.0-np.random.uniform()
+                print 'Seeking to %.2f GHz.' % seek_freq
+                self.laser_frequency_seek(seek_freq)
+                # keep track of this position, in case we need to return to it after a reference search
+                seeked_position = self._motdl.get_position()
                 cur_frq = self._wvm.get_frequency()
 
                 # now check if we are strictly lower but not more than 20 GHz lower than the target frequency
                 ik = 0
                 df = cur_frq-target_freq
-                while (not (df > -20.0 and df < -3.0)) and (ik < 11):
+                print 'df is %.2f GHz.' % (df)
+
+                while (not (df > -20.0 and df < 0.0)) and (ik < 11):
                     # determine the discrepancy between the current and target frequencies
                     cur_frq = self._wvm.get_frequency()
                     df = cur_frq-target_freq
@@ -1031,21 +1034,22 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
                     if df > -3.0:
                         # decrement by ~1.5 GHz. don't go smaller than about 10-15 steps because the motor's control
                         # circuitry won't always respond to small moves (c.f. "deadband").
-                        print 'df > -3.0... moving motor to %d' % (current_motor_position+40)
-                        self._motdl.high_precision_move(current_motor_position+40)
+                        print 'df > -3.0... moving motor to %d' % (current_motor_position+50)
+                        self._motdl.set_position(current_motor_position+50)
                         time.sleep(1.0)
 
                     elif df < -20.0:
                         # increment by ~1.5 GHz
-                        print 'df < -20.0... moving motor to %d' % (current_motor_position-40)
-                        self._motdl.high_precision_move(current_motor_position-40)
+                        print 'df < -20.0... moving motor to %d' % (current_motor_position-50)
+                        self._motdl.set_position(current_motor_position-50)
                         time.sleep(1.0)
 
-                    if ik == 10 and not (cur_frq > target_freq-20.0 and cur_frq < target_freq-3.0):
+                    if ik == 10 and not (cur_frq > target_freq-20.0 and cur_frq < target_freq-0.0):
                         # if we've failed to home in by stepping the motor in one direction, just try to seek again after
                         # doing a motor reference search and then re-calibration (time intensive - ~4 minutes).
                         print 'Could not reduce frequency delta to within the desired range -- initial df %.2f GHz, final df %.2f GHz. Doing a reference search, calibration, and re-seek.' % (initial_df, df)
                         self._motdl.reference_search()
+                        self._motdl.set_position(seeked_position)
                         #self.calibrate_laser()
                         self.laser_frequency_seek(self.params['working_set'][0][0]-10.0)
 
@@ -1068,16 +1072,24 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
                     # The laser can become unstable, so we want to measure the dispersion of its readout; an increase
                     # in the dispersion will tell us when we're near a mode hop in the cavity and should skip measurement.
                     if self.params['stabilize_laser']:
-                        wm_disp = np.zeros(3)
-                        for i in range(3):
-                            wm_disp[i] = self._wvm.get_frequency()
-                            qt.msleep(0.45)
-                        # additionally, get the laser power measured in the wavemeter -- this could also be correlated to
-                        # instability in the laser cavity mode
-                        cur_power = self._wvm.get_power()
-                        cur_frq = np.mean(wm_disp) #self._wvm.get_frequency()
-                        cur_disp = np.std(wm_disp)*2.920 # t-distribution, one-sided, at the 95% level, 3-1 = 2 d.o.f.
-                        offset_frq = cur_frq - frq1
+                        fp_out = self._fp.check_stabilization()
+
+                        if fp_out == 1:
+                            #wm_disp = np.zeros(3)
+                            #for i in range(3):
+                            #    wm_disp[i] = self._wvm.get_frequency()
+                            #    qt.msleep(0.45)
+                            # additionally, get the laser power measured in the wavemeter -- this could also be correlated to
+                            # instability in the laser cavity mode
+                            cur_power = self._wvm.get_power()
+                            cur_frq = self._wvm.get_frequency()
+                            cur_disp = 0.1 # np.std(wm_disp)*2.920 # t-distribution, one-sided, at the 95% level, 3-1 = 2 d.o.f.
+                            offset_frq = cur_frq - frq1
+                        else:
+                            cur_power = -1.0
+                            offset_frq = cur_frq - frq1
+                            # the dispersion being reported as "10" will trigger the logic statement not to measure here
+                            cur_disp = 10.0
                     else:
                         cur_disp = -1.0
                         cur_frq = self._wvm.get_frequency()
@@ -1098,7 +1110,7 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
                     # find all nonzero frequencies
 
                     # Dispersion check of 300 MHz, added 2016-03-23. This ensures anything near a mode hop is rejected.
-                    if ((cur_frq > frequency_sentinel and frequency_sentinel < self.params['working_set'][-1][0]) or (frequency_sentinel > self.params['working_set'][-1][0])) and (cur_frq > self.params['working_set'][0][0] and cur_frq < self.params['working_set'][0][1] and cur_disp < 0.3 ) and not np.any(self.params['bin_size']*0.51 > np.abs(offset_frq - frq_array[np.nonzero(total_hits_data[:,0])])):
+                    if (cur_frq > self.params['working_set'][0][0] and cur_frq < self.params['working_set'][-1][1] and cur_disp < 0.3 ) and not np.any(self.params['bin_size']*0.51 > np.abs(offset_frq - frq_array[np.nonzero(total_hits_data[:,0])])):
                         cts_array_temp = np.zeros(np.size(self.params['freq']))
 
                         for idx in range(np.size(self.params['freq'])):
@@ -1118,9 +1130,6 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
                             # live plot -- unpack cts_list into args of add_data_point
                             data.add_data_point(cur_frq,self.params['freq'][idx],cts,cur_disp,cur_power)
                             if idx == 0:
-                                # update the frequency sentinel
-                                if cur_frq > frequency_sentinel:
-                                    frequency_sentinel = cur_frq
                                 data2d.add_data_point(cur_frq, cts)
                                 plot2d_0.update()
 
@@ -1286,7 +1295,7 @@ def main():
             'freq' : [1.28,], #GHz
             'dwell_time' : 700.0, # ms
             #'filter_set' : ( (270850, 270870), (270950, 270970)),(270810, 270940),
-            'filter_set' : [(264900,264970)],#, (270951,270974)],
+            'filter_set' : [(264895,264950)],#, (270951,270974)],
             'temperature_tolerance' : 2.0, # Kelvin
             'MeasCycles' : 1,
             'Imod' : 0.0,
@@ -1311,7 +1320,7 @@ def main():
 
     m.params.from_dict(xsettings)
 
-    do_awg_stuff = True
+    do_awg_stuff = False
 
 
     m.sequence(upload=do_awg_stuff, program=do_awg_stuff, clear=do_awg_stuff)

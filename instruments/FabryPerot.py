@@ -344,7 +344,7 @@ class FabryPerot(Instrument):
                 if times[i+1] - times[i] > 10:
                     peak_counter = peak_counter + 1
 
-        if peak_counter > 5:
+        if peak_counter > 6:
             #print('peaks are {:d}'.format(peak_counter))
             return 2
         else:
