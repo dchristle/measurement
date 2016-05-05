@@ -334,18 +334,132 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
         # it back to its original position
         self._motdl.high_precision_move(current_motor)
         return
+    def remove_motor_backlash(self, frequency):
+        initial_motor_position = self._motdl.get_position()
+        current_frequency = self._wvm.get_frequency()
+        initial_discrepancy = np.abs(current_frequency-frequency)
+
+
+        # high precision move is done here, which means that we move 10000 steps left or right and then back again
+        # in order to bring the backlash out of the motor
+
+
+        if (current_frequency-frequency) > 0.0:
+            # we are above the desired frequency, so we want to move positive steps. before doing that, we will move
+            # 10000 steps negative, and then 10000 steps positive.
+            self._motdl.high_precision_move(initial_motor_position,1) # the 1 specifies the final move is increasing
+            # re-measure the discrepancy
+            its = 0
+            fp_out = self._fp.check_stabilization()
+            current_frequency = self._wvm.get_frequency()
+            while fp_out != 1 and its < 9:
+                fp_out = self._fp.check_stabilization()
+                if fp_out == 1:
+                    current_frequency = self._wvm.get_frequency()
+                else:
+                    self._motdl.set_position(self._motdl.get_position() + 100)
+                if its == 8:
+                    logging.warning(__name__ + ': motor did not find a stable frequency after moving. proceeding anyway')
+                its = its + 1
+
+            current_frequency = self._wvm.get_frequency()
+            if (current_frequency-frequency) < 0.0:
+                # the sign of the needed movement has changed. now operate in reverse to try to get the backlash out
+                self._motdl.high_precision_move(initial_motor_position,0) # the 0 specifies the final move is decreasing
+                # re-measure the discrepancy
+                its = 0
+                fp_out = self._fp.check_stabilization()
+                current_frequency = self._wvm.get_frequency()
+                while fp_out != 1 and its < 9:
+                    fp_out = self._fp.check_stabilization()
+                    if fp_out == 1:
+                        current_frequency = self._wvm.get_frequency()
+                    else:
+                        self._motdl.set_position(self._motdl.get_position() - 100)
+                    if its == 8:
+                        logging.warning(__name__ + ': motor did not find a stable frequency after moving. proceeding anyway')
+                    its = its + 1
+                if its == 9:
+                    # didn't find a stable frequency, attempt a frequency measurement anyway
+                    current_frequency = self._wvm.get_frequency()
+                    return False
+                # at this point, we likely have an OK measure of frequency, and have tried our best to remove the
+                # backlash. if it failed, we just continue with the standard frequency seeking method.
+                return True
+            else:
+                # we still need to move in the positive step direction, and we've removed the backlash, so we're done
+                return True
+        else:
+            # we are below the desired frequency, so we want to move negative steps. before doing that, we will move
+            # 10000 steps positive, and then 10000 steps negative.
+            self._motdl.high_precision_move(initial_motor_position,0) # the 0 specifies the final move is decreasing
+            # re-measure the discrepancy
+            its = 0
+            fp_out = self._fp.check_stabilization()
+            current_frequency = self._wvm.get_frequency()
+            while fp_out != 1 and its < 9:
+                fp_out = self._fp.check_stabilization()
+                if fp_out == 1:
+                    current_frequency = self._wvm.get_frequency()
+                else:
+                    self._motdl.set_position(self._motdl.get_position() - 100)
+                if its == 8:
+                    logging.warning(__name__ + ': motor did not find a stable frequency after moving. proceeding anyway')
+                its = its + 1
+
+            current_frequency = self._wvm.get_frequency()
+            if (current_frequency-frequency) > 0.0:
+                # the sign of the needed movement has changed. now operate in reverse to try to get the backlash out
+                self._motdl.high_precision_move(initial_motor_position,1) # the 1 specifies the final move is increasing
+                # re-measure the discrepancy
+                its = 0
+                fp_out = self._fp.check_stabilization()
+                current_frequency = self._wvm.get_frequency()
+                while fp_out != 1 and its < 9:
+                    fp_out = self._fp.check_stabilization()
+                    if fp_out == 1:
+                        current_frequency = self._wvm.get_frequency()
+                    else:
+                        self._motdl.set_position(self._motdl.get_position() + 100)
+                    if its == 8:
+                        logging.warning(__name__ + ': motor did not find a stable frequency after moving. proceeding anyway')
+                    its = its + 1
+                if its == 9:
+                    # didn't find a stable frequency, attempt a frequency measurement anyway
+                    current_frequency = self._wvm.get_frequency()
+                    return False
+                # at this point, we likely have an OK measure of frequency, and have tried our best to remove the
+                # backlash. if it failed, we just continue with the standard frequency seeking method.
+                return True
+            else:
+                # we still need to move in the positive step direction, and we've removed the backlash, so we're done
+                return True
     def laser_frequency_seek(self, frequency):
         # this seek is based on a simpler idea of just using the set position only. it suffers from backlash of the
         # motor but should eventually get quite close to the correct setting and fairly quickly
 
         threshold = 3.0
+        self._toptica.set_current(self.params['current_range'][0])
+        time.sleep(0.2)
+        self.find_single_mode()
+        current_frequency = self._wvm.get_frequency()
+        if np.abs(current_frequency-frequency) < threshold:
+            print 'Frequency is already within threshold -- current %.2f GHz/target %.2f GHz' % (current_frequency,frequency)
+            return True
 
+
+
+        # try to remove the backlash
+        if not self.remove_motor_backlash(frequency):
+            # if the first backlash direction doesn't succeed, try again once more
+            self.remove_motor_backlash(frequency)
+
+        self.find_single_mode()
         initial_motor_position = self._motdl.get_position()
         current_frequency = self._wvm.get_frequency()
         initial_discrepancy = np.abs(current_frequency-frequency)
-        if np.abs(initial_discrepancy) < threshold:
-            return True
 
+        print 'Motor pos: %d, FP %d, GHz: %.2f, cur %.2f' % (self._motdl.get_position(), self._fp.check_stabilization(), self._wvm.get_frequency(), self._toptica.get_current())
         # setup a progress bar based on the relative distance from the start
         with progressbar.ProgressBar(widgets=[' [', progressbar.Timer(), '] ', progressbar.Bar(), ' (', progressbar.ETA(), ') ', ],max_value=1.0) as bar:
             its = 0
@@ -355,13 +469,13 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
 
                 # determine an appropriate motor step size based on the distance away
                 if np.abs(delta) > 100.0:
-                    step_size = 500 + random.randint(0,25)
+                    step_size = 1000 + random.randint(0,35)
                 elif 50 < np.abs(delta) <= 100:
-                    step_size = 200 + random.randint(0,20)
+                    step_size = 450 + random.randint(0,40)
                 elif 10 < np.abs(delta) <= 50:
-                    step_size = 100 + random.randint(0,10)
+                    step_size = 200 + random.randint(0,20)
                 else:
-                    step_size = 20 - 5 + random.randint(0,10) # adds an element of jitter to the tweaking process
+                    step_size = 50 - 5 + random.randint(0,10) # adds an element of jitter to the tweaking process
 
                 current_motor_position = self._motdl.get_position()
                 if delta >= 0:
@@ -376,6 +490,47 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
                     return False
 
                 self._motdl.set_position(current_motor_position+dm)
+                print 'Motor pos: %d, FP %d, GHz: %.2f' % (self._motdl.get_position(), self._fp.check_stabilization(), self._wvm.get_frequency())
+                # if we are close enough (within 10 GHz), we want to start sweeping the current to see if we can find
+                # a stable point
+                # if np.abs(delta) < 10.0:
+                #     cur_sweep_array = []
+                #     for i, cur in np.ndenumerate(np.arange(self.params['current_range'][0],self.params['current_range'][0],0.001)):
+                #         self._toptica.set_current(cur)
+                #         time.sleep(0.25)
+                #         print 'Motor pos: %d, FP %d, GHz: %.2f' % (self._motdl.get_position(), self._fp.check_stabilization(), self._wvm.get_frequency())
+                #         if self._fp.check_stabilization() == 1:
+                #             cur_sweep_array.append((current_motor_position+dm, cur, self._wvm.get_frequency()))
+                #     # once we've swept the current, let's iterate through and find the closest value
+                #     if len(cur_sweep_array) > 0:
+                #         # search the array for any combinations that produced a frequency within the threshold
+                #         min_dist = 100.0
+                #         min_dist_cur = (self.params['current_range'][0]+self.params['current_range'][1])/2.0
+                #         for elem in cur_sweep_array:
+                #             if np.abs(elem[2]-frequency) < min_dist:
+                #                 min_dist = np.abs(elem[2]-frequency)
+                #                 min_dist_cur = elem[1]
+                #         # if the min_dist satisfies the threshold, then set the current there, verify it, and break
+                #         # from the loop
+                #         if min_dist < threshold:
+                #             self._toptica.set_current(min_dist_cur)
+                #             print 'Motor pos: %d, FP %d, GHz: %.2f' % (self._motdl.get_position(), self._fp.check_stabilization(), self._wvm.get_frequency())
+                #             time.sleep(1.0)
+                #
+                #             if fp.check_stabilization() == 1 and np.abs(self._wvm.get_frequency()-frequency) < threshold:
+                #                 # yes, it's a good frequency and within the threshold, so break
+                #                 current_frequency = self._wvm.get_frequency()
+                #                 bar.update(np.clip(np.abs(1.0-np.abs((current_frequency-frequency)/(initial_discrepancy))),0,1))
+                #                 break
+                #         else:
+                #             # min_dist didn't satisfy the threshold, so go back to the center current
+                #             self._toptica.set_current((self.params['current_range'][0]+self.params['current_range'][1])/2.0)
+                #
+                #     else:
+                #         # failed to find any stable points -- set the current back to the middle and proceed with the
+                #         # standard routine.
+                #         self._toptica.set_current((self.params['current_range'][0]+self.params['current_range'][1])/2.0)
+
                 time.sleep(0.25)
                 fp_out = self._fp.check_stabilization()
                 if fp_out == 1:
@@ -383,6 +538,16 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
                     bar.update(np.clip(np.abs(1.0-np.abs((current_frequency-frequency)/(initial_discrepancy))),0,1))
                     #print 'Motor set to %d, frequency is now %.2f GHz' % (current_motor_position+dm, current_frequency)
                 elif fp_out == 2:
+                    # do a quick current sweep
+                    for cur_idx, cur in np.ndenumerate(np.arange(self.params['current_range'][0],self.params['current_range'][1],0.0005)):
+                        self._toptica.set_current(cur)
+                        time.sleep(0.25)
+                        fp_out = self._fp.check_stabilization()
+                        if fp_out == 1:
+                            current_frequency = self._wvm.get_frequency()
+                            bar.update(np.clip(np.abs(1.0-np.abs((current_frequency-frequency)/(initial_discrepancy))),0,1))
+                            print 'Motor pos: %d, FP %d, GHz: %.2f, cur %.2f' % (self._motdl.get_position(), self._fp.check_stabilization(), self._wvm.get_frequency(), self._toptica.get_current())
+                            break
                     pass
                     #print 'Motor set to %d, but FP was not single mode.' % (current_motor_position+dm)
                 elif fp_out == 3:
@@ -591,6 +756,20 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
             i = i+1
 
         return b, i
+
+    def find_single_mode(self):
+        fp_out = self._fp.check_stabilization()
+        if fp_out == 2:
+
+            for cur_idx, cur in np.ndenumerate(np.arange(self.params['current_range'][0],self.params['current_range'][1],0.0005)):
+                self._toptica.set_current(cur)
+                time.sleep(0.25)
+                fp_out = self._fp.check_stabilization()
+                if fp_out == 1:
+                    print 'Motor pos: %d, FP %d, GHz: %.2f, cur %.2f' % (self._motdl.get_position(), self._fp.check_stabilization(), self._wvm.get_frequency(), self._toptica.get_current())
+                    break
+        return
+
     def find_stable_frequency(self):
         # purpose of this algorithm is to locate a stable frequency nearest to the current motor and voltage settings
         #
@@ -658,19 +837,6 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
                 return False
 
         return True
-    # def sentinel_target_frequency(self, freq_sentinel):
-    #     if freq_sentinel > self.params['working_set'][-1][0]:
-    #         return self.params['working_set'][0][0]
-    #     else:
-    #         # locate frequency strip that begins just above the frequency sentinel
-    #         min_frequency_distance = self.params['working_set'][-1][1] - freq_sentinel
-    #         target_frequency = self.params['working_set'][0][0]
-    #         for freq_strip in self.params['working_set']:
-    #             strip_distance = freq_strip[0] - freq_sentinel
-    #             if strip_distance > 0 and strip_distance < min_frequency_distance:
-    #                 target_frequency = freq_strip[0]
-    #                 min_frequency_distance = strip_distance
-    #         return target_frequency
 
     def filter_laser_frequencies(self, filter_set, frq_array, total_hits_data, frq1):
         print 'Old filter set %s' % filter_set
@@ -976,7 +1142,7 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
         frq2 = self.params['working_set'][-1][1]+8.0 + 100.0 #Ghz
 
         # locate the first frequency to seek to
-        self.laser_frequency_seek(self.params['working_set'][0][0]-3.0)
+        self.laser_frequency_seek(self.params['working_set'][0][0]-1.0)
 
         frq1 = self._wvm.get_frequency() - 100.0 #Ghz
         power_meas = self.measure_cw_power()
@@ -1006,20 +1172,25 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
                 #
                 target_freq = self.params['working_set'][0][0]
                 # add a uniform unit random variable to the frequency, for jitter purposes.
-                seek_freq = target_freq-4.0*np.random.uniform()
+                seek_freq = target_freq-1.0*np.random.uniform()
                 print 'Seeking to %.2f GHz.' % seek_freq
                 self.laser_frequency_seek(seek_freq)
                 # keep track of this position, in case we need to return to it after a reference search
                 seeked_position = self._motdl.get_position()
+                self.find_single_mode()
                 cur_frq = self._wvm.get_frequency()
 
                 # now check if we are strictly lower but not more than 20 GHz lower than the target frequency
                 ik = 0
                 df = cur_frq-target_freq
                 print 'df is %.2f GHz.' % (df)
+                if not (df > -10 and df < -0.0):
+                    # try a seek once more?
+                    self.laser_frequency_seek(seek_freq)
 
-                while (not (df > -20.0 and df < 0.0)) and (ik < 11):
+                while (not (df > -10.0 and df < -0.25)) and (ik < 15):
                     # determine the discrepancy between the current and target frequencies
+                    self.find_single_mode()
                     cur_frq = self._wvm.get_frequency()
                     df = cur_frq-target_freq
                     print 'df is %.2f GHz...' % (df)
@@ -1028,27 +1199,28 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
                     # keep decrementing/incrementing the target frequency by 1 GHz until we get strictly below but not less than 20 GHz away
                     # dispersion is approximately -0.104 GHz/step, so move by about 10 steps upward to decrease by about 1 GHz.
                     current_motor_position = self._motdl.get_position()
-                    if df > -3.0:
+                    if df > -0.25:
                         # decrement by ~1.5 GHz. don't go smaller than about 10-15 steps because the motor's control
                         # circuitry won't always respond to small moves (c.f. "deadband").
                         print 'df > -3.0... moving motor to %d' % (current_motor_position+50)
                         self._motdl.set_position(current_motor_position+50)
+
                         time.sleep(1.0)
 
-                    elif df < -20.0:
+                    elif df < -10.0:
                         # increment by ~1.5 GHz
                         print 'df < -20.0... moving motor to %d' % (current_motor_position-50)
                         self._motdl.set_position(current_motor_position-50)
                         time.sleep(1.0)
 
-                    if ik == 10 and not (cur_frq > target_freq-20.0 and cur_frq < target_freq-0.0):
+                    if ik == 10 and not (cur_frq > target_freq-10.0 and cur_frq < target_freq-0.0):
                         # if we've failed to home in by stepping the motor in one direction, just try to seek again after
                         # doing a motor reference search and then re-calibration (time intensive - ~4 minutes).
                         print 'Could not reduce frequency delta to within the desired range -- initial df %.2f GHz, final df %.2f GHz. Doing a reference search, calibration, and re-seek.' % (initial_df, df)
                         self._motdl.reference_search()
                         self._motdl.set_position(seeked_position)
                         #self.calibrate_laser()
-                        self.laser_frequency_seek(self.params['working_set'][0][0]-10.0)
+                        self.laser_frequency_seek(self.params['working_set'][0][0]-3)
 
                     ik = ik + 1
 
@@ -1064,32 +1236,38 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
 
                     #Set the new piezo voltage
                     self._toptica.set_piezo_voltage(self.params['piezo_array'][k])
-                    qt.msleep(1.0)
+                    qt.msleep(0.5)
 
                     # The laser can become unstable, so we want to measure the dispersion of its readout; an increase
                     # in the dispersion will tell us when we're near a mode hop in the cavity and should skip measurement.
                     if self.params['stabilize_laser']:
                         fp_out = self._fp.check_stabilization()
-
+                        # check if Fabry Perot check passed. if not,
+                        # try to recover the single-mode behavior
+                        if not fp_out == 1:
+                            self.find_single_mode()
+                        # now re-check the FP, since we might be stable now
+                        fp_out = self._fp.check_stabilization()
                         if fp_out == 1:
                             # Fabry Perot check passed, but the wavelength might be wrong.
-                            cur_frq = self._wvm.get_frequency()
+                            wm_disp = np.zeros(3)
+                            for i in range(3):
+                                wm_disp[i] = self._wvm.get_frequency()
+                                if i != 2:
+                                    qt.msleep(0.45) # don't wait if this is the last measurement
+
+                            # now check if it's in bounds of where we actually want to measure
+                            cur_frq = wm_disp[-1]
                             if (cur_frq > self.params['working_set'][0][0] and cur_frq < self.params['working_set'][0][1]):
                                 # Fabry Perot check and frequency check passed, but the final check is whether the dispersion
                                 # is low enough. The final dispersion check occurs in a logic statement below.
                                 qt.msleep(0.45)
-                                wm_disp = np.zeros(3)
-                                wm_disp[0] = cur_frq # re-use the value we already measured
-                                for i in range(2):
-                                   wm_disp[i+1] = self._wvm.get_frequency()
-                                   if i != 1:
-                                       # don't wait if this is the last measurement
-                                       qt.msleep(0.45)
+
                                 # additionally, get the laser power measured in the wavemeter -- this could also be
                                 # correlated to instability in the laser cavity mode
                                 cur_power = self._wvm.get_power()
-                                cur_frq = np.mean(wm_disp) # self._wvm.get_frequency()
-                                cur_disp = np.std(wm_disp)*2.920
+                                cur_frq = wm_disp[-1] # self._wvm.get_frequency()
+                                cur_disp = np.std(wm_disp)
                                 offset_frq = cur_frq - frq1
                             else:
                                 # Frequency is not in bounds, so set the values to nonsense ones and the logical
@@ -1121,6 +1299,11 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
                         lo, hi = elem
                         if cur_frq < hi and cur_frq > lo:
                             filter_inc = True
+
+                    # every ~10% of the complete sweep, print the current frequency
+                    if np.mod(k,np.floor(np.size(self.params['piezo_array'])/100.0)) == 0:
+                        print 'Motor pos: %d, piezo %.2f V, FP %d, GHz: %.2f, cur %.2f, cur_disp %.2f' % (self._motdl.get_position(), self._toptica.get_piezo_voltage(), self._fp.check_stabilization(), self._wvm.get_frequency(), self._toptica.get_current(), cur_disp)
+
                     # Determine if we should measure in the logic statement here
                     # find all nonzero frequencies
 
@@ -1163,6 +1346,7 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
                                     break
 
                             qt.msleep(0.002) # keeps GUI responsive and checks if plot needs updating.
+                            plot2d_0.update()
 
 
                         plot3d_0.update()
@@ -1292,7 +1476,7 @@ def main():
             'Sacher_AOM_light_delay' : 960.0, # ns
             'Sacher_AOM_end_buffer' : 1155.0, # ns
             'RF_start_buffer' : 300.0, # ns
-            'readout_length' : 1000.0, # ns
+            'readout_length' : 200.0, # ns
             'readout_buffer' : 10.0, # ns
             'ctr_term' : 'PFI2',
             'piezo_start' : 0, #volts
@@ -1301,19 +1485,20 @@ def main():
             'bin_size' : 0.1, # GHz, should be same order of magnitude as (step_size * .1 GHz)
             'filter_threshold' : 2.5, # GHz
             'microwaves' : True, # modulate with microwaves on or off
-            'microwaves_CW' : True, # are the microwaves CW? i.e. ignore pi pulse length
-            'pi_length' : 180.0, # ns
-            'off_resonant_laser' : False, # cycle between resonant and off-resonant
+            'microwaves_CW' : False, # are the microwaves CW? i.e. ignore pi pulse length
+            'pi_length' : 30.0, # ns
+            'off_resonant_laser' : True, # cycle between resonant and off-resonant
             'power' : 5.0, # dBm
             'constant_attenuation' : 14.0, # dBm -- set by the fixed attenuators in setup
             'desired_power' : -19.0, # dBm
-            'freq' : [1.3357,], #GHz
-            'dwell_time' : 700.0, # ms
+            'freq' : [1.3776,], #GHz
+            'dwell_time' : 500.0, # ms
             #'filter_set' : ( (270850, 270870), (270950, 270970)),(270810, 270940),
             'filter_set' : [(264885,264950)],#, (270951,270974)],
+            'current_range' : [0.275, 0.302], # A
             'temperature_tolerance' : 2.0, # Kelvin
             'MeasCycles' : 1,
-            'Imod' : 0.2778,
+            'Imod' : 0.533396, #0.2778,
             'stabilize_laser' : True,
             }
 
