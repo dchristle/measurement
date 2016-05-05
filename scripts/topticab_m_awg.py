@@ -756,13 +756,20 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
             i = i+1
 
         return b, i
-
+    def find_nearest(array,value):
+        idx = (np.abs(array-value)).argmin()
+        return array[idx]
+    
     def find_single_mode(self):
         fp_out = self._fp.check_stabilization()
         if fp_out == 2:
-
-            for cur_idx, cur in np.ndenumerate(np.arange(self.params['current_range'][0],self.params['current_range'][1],0.0005)):
-                self._toptica.set_current(cur)
+            # try to wrap around the current list, so we aren't always starting at the bottom
+            current_sweep_list = np.arange(self.params['current_range'][0],self.params['current_range'][1],0.0005)
+            N_currents = np.size(current_sweep_list)
+            nearest_idx = self.find_nearest(current_sweep_list,self._toptica.get_current())
+            # now that we found the nearest, sweep through the list, starting at this index
+            for idx_offset in range(N_currents):
+                self._toptica.set_current(current_sweep_list[(nearest_idx + idx_offset) % N_currents])
                 time.sleep(0.25)
                 fp_out = self._fp.check_stabilization()
                 if fp_out == 1:
