@@ -274,44 +274,7 @@ class optimiz0r(Instrument):
                 sigma_guess = self.dimensions[dimension]['sigma']
 
             ababfunc = (a_guess + A_guess*np.exp(-(p-x0_guess)**2/(2.0*sigma_guess**2)))*rate
-            # Old method for Gaussian fit based on fit1d sub-routine; commented out 2015/08/27
-##            gaussian_fit = fit.fit1d(np.array(p,dtype=float), np.array(cr,dtype=float),common.fit_gauss, a_guess,
-##                    x0_guess,A_guess, sigma_guess, do_print=False,ret=True)
-##
-##
-##
-##            if type(gaussian_fit) != dict:
-##                pamax = np.argmax(cr)
-##                self._opt_pos[dimension] = p[pamax]
-##                ret = False
-##                print '(%s) fit failed! Set to maximum.' % dimension
-##
-##
-##            else:
-##
-##                if gaussian_fit['success'] != False:
-##                    self._fit_result = [gaussian_fit['params'][1],
-##                            gaussian_fit['params'][2],
-##                            gaussian_fit['params'][3],
-##                            gaussian_fit['params'][0] ]
-##                    self._fit_error = [gaussian_fit['error'][1],
-##                            gaussian_fit['error'][2],
-##                            gaussian_fit['error'][3],
-##                            gaussian_fit['error'][0] ]
-##                    self._opt_pos[dimension] = self._fit_result[0]
-##                    self._opt_sigma_prev[dimension] = self._fit_result[2]
-##                    ret = True
-##                    final_fit_func = gaussian_fit['params'][0] + gaussian_fit['params'][2]*np.exp(-(p-gaussian_fit['params'][1])**2/(2.0*gaussian_fit['params'][3]**2))
-##                    qt.plot(p,cr,p,ababfunc,p,final_fit_func,name='fbl_plot',needtempfile=False)
-##                    #print '(%s) optimize succeeded!' % self.get_name()
-##
-##
-##                else:
-##                    self.set_data('fit', zeros(len(p)))
-##                    ret = False
-##                    print '(%s) optimize failed! Set to maximum.' % dimension
-##                    self._opt_pos[dimension] = p[np.argmax(cr)]
-##                    qt.plot(p,cr,p,ababfunc,name='fbl_plot',clear=True,needtempfile=False)
+
             # New method for fitting
             # Purpose of this new method is to improve the robustness of both the numerical optimization and the 'mistracks'
             # that can occur because of nearby luminescence.

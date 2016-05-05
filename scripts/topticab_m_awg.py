@@ -759,7 +759,7 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
     def find_nearest(array,value):
         idx = (np.abs(array-value)).argmin()
         return array[idx]
-    
+
     def find_single_mode(self):
         fp_out = self._fp.check_stabilization()
         if fp_out == 2:
