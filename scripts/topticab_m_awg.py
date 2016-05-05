@@ -57,7 +57,7 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
         e.add(pulse.cp(sq_pulseAOM, amplitude=1, length=100e-6), name='lasercw')
         e.add(pulse.cp(sq_pulsePC, amplitude=1.0, length=100e-6),
         name='photoncountpulsecw')
-        e.add(pulse.cp(sq_pulseMW_Imod, amplitude=1.0, length=100e-6),
+        e.add(pulse.cp(sq_pulseMW_Imod, amplitude=self.params['Imod'], length=100e-6),
         name='MWimodpulsecw', start=0e-9)
         e.add(pulse.cp(sq_pulseMW_Qmod, amplitude=0.0, length=100e-6),
         name='MWqmodpulsecw', start=0e-9)
@@ -90,11 +90,9 @@ class SiC_Toptica_Search_Piezo_Sweep(m2.Measurement):
         trigger_period = resonant_readout_start_time + self.params['Sacher_AOM_length']
         #total_microwave_length = resonant_laser_start_time + self.params['Sacher_AOM_length']+ self.params['Sacher_AOM_end_buffer']
         #e.add(pulse.cp(sq_pulseMW, length = total_microwave_length*1.0e-9, amplitude = 1.0), name='microwave pulse', start=0.0*1.0e-9)
-        if self.params['microwaves']:
+        if self.params['microwaves'] and not self.params['microwaves_CW']:
             e.add(pulse.cp(sq_pulseMW, length=self.params['pi_length']*1e-9, amplitude = 1.0), name='microwave pulse', start=microwave_start_time*1.0e-9)
-        else:
-            e.add(pulse.cp(sq_pulseMW, length=self.params['pi_length']*1e-9, amplitude = 0.0), name='microwave pulse', start=microwave_start_time*1.0e-9)
-        if self.params['microwaves_CW']:
+        elif self.params['microwaves'] and self.params['microwaves_CW']:
             e.add(pulse.cp(sq_pulseMW, length=trigger_period*1.0e-9, amplitude = 1.0), name='microwave CW pulse', start=0*1.0e-9)
         # Add the I/Q modulator pulses
         e.add(pulse.cp(sq_pulseMW_Imod, amplitude=self.params['Imod'], length=trigger_period*1.0e-9,start=0.0e-9),
@@ -1488,24 +1486,24 @@ def main():
             'ctr_term' : 'PFI2',
             'piezo_start' : 0, #volts
             'piezo_end' : 90, #volts
-            'piezo_step_size' : 0.20, # volts (dispersion is roughly ~0.4 GHz/V)
-            'bin_size' : 0.1, # GHz, should be same order of magnitude as (step_size * .1 GHz)
+            'piezo_step_size' : 0.3, # volts (dispersion is roughly ~0.4 GHz/V)
+            'bin_size' : 0.2, # GHz, should be same order of magnitude as (step_size * .1 GHz)
             'filter_threshold' : 2.5, # GHz
             'microwaves' : True, # modulate with microwaves on or off
-            'microwaves_CW' : False, # are the microwaves CW? i.e. ignore pi pulse length
+            'microwaves_CW' : True, # are the microwaves CW? i.e. ignore pi pulse length
             'pi_length' : 30.0, # ns
-            'off_resonant_laser' : True, # cycle between resonant and off-resonant
+            'off_resonant_laser' : False, # cycle between resonant and off-resonant
             'power' : 5.0, # dBm
             'constant_attenuation' : 14.0, # dBm -- set by the fixed attenuators in setup
             'desired_power' : -19.0, # dBm
-            'freq' : [1.3776,], #GHz
+            'freq' : [1.3820,], #GHz
             'dwell_time' : 500.0, # ms
             #'filter_set' : ( (270850, 270870), (270950, 270970)),(270810, 270940),
-            'filter_set' : [(264885,264950)],#, (270951,270974)],
+            'filter_set' : [(264874,264955)],#, (270951,270974)],
             'current_range' : [0.275, 0.302], # A
             'temperature_tolerance' : 2.0, # Kelvin
             'MeasCycles' : 1,
-            'Imod' : 0.533396, #0.2778,
+            'Imod' : 0.2778,
             'stabilize_laser' : True,
             }
 
