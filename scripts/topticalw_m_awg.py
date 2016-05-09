@@ -53,7 +53,7 @@ class SiC_Toptica_FastPiezo_Sweep(m2.Measurement):
         e.add(pulse.cp(sq_pulseAOM, amplitude=1, length=100e-6), name='lasercw')
         e.add(pulse.cp(sq_pulsePC, amplitude=1.0, length=100e-6),
         name='photoncountpulsecw')
-        e.add(pulse.cp(sq_pulseMW_Imod, amplitude=1.0, length=100e-6),
+        e.add(pulse.cp(sq_pulseMW_Imod, amplitude=self.params['Imod'], length=100e-6),
         name='MWimodpulsecw', start=0e-9)
         e.add(pulse.cp(sq_pulseMW_Qmod, amplitude=0.0, length=100e-6),
         name='MWqmodpulsecw', start=0e-9)
@@ -95,11 +95,9 @@ class SiC_Toptica_FastPiezo_Sweep(m2.Measurement):
         trigger_period = resonant_readout_start_time + self.params['Sacher_AOM_length']
         #total_microwave_length = resonant_laser_start_time + self.params['Sacher_AOM_length']+ self.params['Sacher_AOM_end_buffer']
         #e.add(pulse.cp(sq_pulseMW, length = total_microwave_length*1.0e-9, amplitude = 1.0), name='microwave pulse', start=0.0*1.0e-9)
-        if self.params['microwaves']:
+        if self.params['microwaves'] and not self.params['microwaves_CW']:
             e.add(pulse.cp(sq_pulseMW, length=self.params['pi_length']*1e-9, amplitude = 1.0), name='microwave pulse', start=microwave_start_time*1.0e-9)
-        else:
-            e.add(pulse.cp(sq_pulseMW, length=self.params['pi_length']*1e-9, amplitude = 0.0), name='microwave pulse', start=microwave_start_time*1.0e-9)
-        if self.params['microwaves_CW']:
+        elif self.params['microwaves'] and self.params['microwaves_CW']:
             e.add(pulse.cp(sq_pulseMW, length=trigger_period*1.0e-9, amplitude = 1.0), name='microwave CW pulse', start=0*1.0e-9)
         # Add the I/Q modulator pulses
         e.add(pulse.cp(sq_pulseMW_Imod, amplitude=self.params['Imod'], length=trigger_period*1.0e-9,start=0.0e-9),
@@ -177,7 +175,7 @@ class SiC_Toptica_FastPiezo_Sweep(m2.Measurement):
         self._xps = qt.instruments['xps']
         self._awg = qt.instruments['awg']
         self._va = qt.instruments['va']
-        #self._motdl = qt.instruments['motdl']
+        self._motdl = qt.instruments['motdl']
         self._toptica = qt.instruments['topt']
         self._fp = qt.instruments['fp']
         self._wvm = qt.instruments['bristol']
@@ -194,20 +192,50 @@ class SiC_Toptica_FastPiezo_Sweep(m2.Measurement):
             print 'Waiting 30 s for AWG to start...'
             time.sleep(30.0)
 
-        for i in range(20):
-            time.sleep(5.0)
-            state = ''
-            print 'Waiting for AWG to start...'
-            try:
-                state = self._awg.get_state()
-            except(visa.visa.VI_ERROR_TMO):
-                print 'Still waiting for AWG after timeout...'
-            if state == 'Running':
-                    print 'AWG started OK...Clearing VISA interface.'
-                    self._awg.clear_visa()
-                    break
-            if state == 'Idle':
-                self._awg.start()
+            for i in range(20):
+                time.sleep(5.0)
+                state = ''
+                print 'Waiting for AWG to start...'
+                try:
+                    state = self._awg.get_state()
+                except(visa.visa.VI_ERROR_TMO):
+                    print 'Still waiting for AWG after timeout...'
+                if state == 'Running':
+                        print 'AWG started OK.'
+
+                        break
+                if state == 'Idle':
+                    self._awg.start()
+        elif self._awg.get_state() == 'Running':
+            print 'AWG already started'
+
+        print 'Checking AWG interface status...'
+        init_status = self._awg.get_ch3_status()
+        awg_is_ok = True
+        # check a randomized sequence of 20 commands and see if the response agrees with what we set the channel
+        # status to.
+        for ij in range(20):
+            test_val = random.randint(0,1)
+            if test_val == 0:
+                self._awg.set_ch3_status('off')
+                time.sleep(0.05)
+                output = self._awg.get_ch3_status()
+                if output == 'on':
+                    awg_is_ok == False
+            if test_val == 1:
+                self._awg.set_ch3_status('on')
+                time.sleep(0.05)
+                output = self._awg.get_ch3_status()
+                if output == 'off':
+                    awg_is_ok == False
+        self._awg.set_ch3_status(init_status)
+        # all the randomized commands should match. If they don't, the VISA interface is clogged and we should
+        # clear it
+        if not awg_is_ok:
+            print 'AWG interface was clogged, clearing it.'
+            self._awg.clear_visa()
+        else:
+            print 'AWG interface is OK.'
 
         self._awg.sq_forced_jump(1)
         time.sleep(1)
@@ -250,7 +278,7 @@ class SiC_Toptica_FastPiezo_Sweep(m2.Measurement):
         desired_atten = self.params['power'] - self.params['constant_attenuation'] - self.params['desired_power']
         self._va.set_attenuation(desired_atten)
         print 'Variable attenuator set to %.1f dB attenuation.' % desired_atten
-        full_attenuation = self.params['power'] - self.params['constant_attenuation'] - np.max((0,np.min((desired_atten,15.5)))) + np.log(self.params['Imod'])/np.log(10.0)*10
+        full_attenuation = self.params['power'] - self.params['constant_attenuation'] - np.max((0,np.min((desired_atten,15.5)))) + np.log(self.params['Imod'])/np.log(10.0)*20.0
         print 'Fully attenuated power is %.2f dBm' % full_attenuation
 
         # Check if wavemeter returns a valid wavelength
@@ -369,24 +397,12 @@ class SiC_Toptica_FastPiezo_Sweep(m2.Measurement):
         self._awg.sq_forced_jump(2)
         self.awg_confirm(2)
 
-
+        time.sleep(3.0)
         self._toptica.set_piezo_voltage(self.params['piezo_array'][0])
-        # Monitor laser frequency
-        frq_recent = np.zeros(5)
-        for zz in range(5):
-            time.sleep(1.0)
-            frq_recent[zz] = 299792458/self._wvm.get_wavelength()
-        # Check if laser is stable, if not, wait
-        for zz in range(30):
-            if np.std(frq_recent) < 0.3:
-                print 'Laser stabilized. Dispersion %.2f MHz, range %.2f MHz' % (np.std(frq_recent)*1000.0, 1000.0*(np.max(frq_recent)-np.min(frq_recent)))
-                break
-            time.sleep(1.0)
-            np.roll(frq_recent,1)
-            frq_recent[0] = 299792458/self._wvm.get_wavelength()
-            if zz >=29:
-                print 'Laser frequency readout on wavemeter did not stabilize after 30 seconds!'
-
+        print 'FSM: Motor pos: %d, FP %d, GHz: %.2f, cur %.3f' % (self._motdl.get_position(), self._fp.check_stabilization(), self._wvm.get_frequency(), self._toptica.get_current())
+        fp_out = self._fp.check_stabilization()
+        #if fp_out == 2:
+        #    self.find_single_mode()
 		#This is the reference frequency we will store in the data file, 100 GHz below the wavemeter reading at motor_position_end
 
 
@@ -441,6 +457,7 @@ class SiC_Toptica_FastPiezo_Sweep(m2.Measurement):
                     # Measure frequency and counts
                     cur_frq = 299792458.0/self._wvm.get_wavelength()
                     offset_frq = cur_frq - frq1
+                    qt.msleep(0.003)
                 else:
                     cur_frq = self.params['piezo_array'][k]
                     offset_frq = self.params['piezo_array'][k]
@@ -486,22 +503,7 @@ class SiC_Toptica_FastPiezo_Sweep(m2.Measurement):
                     # check snspd
                     self._snspd.check()
 
-                # Check if a track should occur. If so, track.
-                if time.time() > track_time:
 
-                    # set the AWG into CW mode for tracking
-                    self._awg.sq_forced_jump(1)
-                    self.awg_confirm(1)
-
-                    time.sleep(0.1)
-                    # Re-optimize
-                    fbl.optimize()
-
-                    # Set new track time
-                    track_time = time.time() + self.params['fbl_time'] + 5.0*np.random.uniform()
-                    self._awg.sq_forced_jump(2)
-                    self.awg_confirm(2)
-                    time.sleep(0.1)
                 self._keystroke_check('abort')
                 if self.keystroke('abort') in ['q','Q'] or scan_on == False:
                     print 'Measurement aborted.'
@@ -516,9 +518,33 @@ class SiC_Toptica_FastPiezo_Sweep(m2.Measurement):
                         print 'Measurement aborted.'
                         self._stop_measurement = True
                         break
-            self._toptica.set_piezo_voltage(self.params['piezo_array'][np.floor(np.size(self.params['piezo_array'])/2.0)])
-            qt.msleep(0.002) # keeps GUI responsive and checks if plot needs updating.
+            # Check if a track should occur. Moved this to occur only at the end of a sweep.
+            if time.time() > track_time:
 
+                # set the AWG into CW mode for tracking
+                self._awg.sq_forced_jump(1)
+                self.awg_confirm(1)
+
+                time.sleep(0.1)
+                # Re-optimize
+                fbl.optimize()
+
+                # Set new track time
+                track_time = time.time() + self.params['fbl_time'] + 5.0*np.random.uniform()
+                self._awg.sq_forced_jump(2)
+                self.awg_confirm(2)
+                time.sleep(0.1)
+            #self._toptica.set_piezo_voltage(self.params['piezo_array'][np.floor(np.size(self.params['piezo_array'])/2.0)])
+            self._toptica.set_piezo_voltage(self.params['piezo_array'][0])
+
+            qt.msleep(1.002) # keeps GUI responsive and checks if plot needs updating.
+            if msvcrt.kbhit() or scan_on == False or self._stop_measurement == True:
+                kb_char=msvcrt.getch()
+                self._stop_measurement = True
+                if kb_char == "q" or scan_on == False or self._stop_measurement == True:
+                    print 'Measurement aborted.'
+                    self._stop_measurement = True
+                    break
             # Check for a break, and break out of this loop as well.
             # It's important to check here, before we add the array to the total
             # since doing it the other way risks adding incomplete data to the
@@ -529,10 +555,7 @@ class SiC_Toptica_FastPiezo_Sweep(m2.Measurement):
 
             # Sum along all sweeps so far for the y values, and just use the last frequency displacement measurement
             # for the x-axis. This is an approximation assuming the repeatability is good.
-            #frq_array_non0 = frq_array[np.nonzero(total_hits_data[:,0])]
-            #cts_array_non0 = total_count_data[np.nonzero(total_hits_data[:,0]),:]
-            #hits_array_non0 = total_hits_data[np.nonzero(total_hits_data[:,0]),:]
-            #avg_cts_array_non0 = np.divide(cts_array_non0.astype(float64),hits_array_non0.astype(float64))
+
 
             #plot2d_1 = qt.Plot2D(frq_array_non0,avg_cts_array_non0, name='topticap_avg', clear=True)
             N_cmeas = N_cmeas + 1
@@ -589,38 +612,38 @@ class SiC_Toptica_FastPiezo_Sweep(m2.Measurement):
 
 xsettings = {
         'focus_limit_displacement' : 20, # microns inward
-        'fbl_time' : 270.0, # seconds
+        'fbl_time' : 10.0, # seconds
         'AOM_start_buffer' : 50.0, # ns
         'AOM_length' : 1600.0, # ns
         'AOM_light_delay' : 655.0, # ns
         'AOM_end_buffer' : 1155.0, # ns
         'Sacher_AOM_start_buffer' : 150.0, #ns
         'Sacher_AOM_length' : 5000.0, # ns
-        'Sacher_AOM_light_delay' : 960.0, # ns
+        'Sacher_AOM_light_delay' : 625.0, # ns
         'Sacher_AOM_end_buffer' : 1155.0, # ns
         'RF_start_buffer' : 300.0, # ns
         'readout_length' : 5000.0, # ns
         'readout_buffer' : 10.0, # ns
         'ctr_term' : 'PFI2',
-        'piezo_start' : 25, #volts
-        'piezo_end' : 45, #volts
-        'piezo_step_size' : 0.05, # volts (dispersion is roughly ~0.4 GHz/V)
-        'bin_size' : 0.1, # GHz, should be same order of magnitude as (step_size * .1 GHz)
-        'microwaves' : False, # modulate with microwaves on or off
+        'piezo_start' : 38, #volts
+        'piezo_end' : 58, #volts
+        'piezo_step_size' : 0.07, # volts (dispersion is roughly ~0.4 GHz/V)
+        'bin_size' : 0.05, # GHz, should be same order of magnitude as (step_size * .1 GHz)
+        'microwaves' : True, # modulate with microwaves on or off
         'microwaves_CW' : True, # are the microwaves CW? i.e. ignore pi pulse length
         'pi_length' : 180.0, # ns
         'off_resonant_laser' : False, # cycle between resonant and off-resonant
         'power' : 5.0, # dBm
         'constant_attenuation' : 14.0, # dBm -- set by the fixed attenuators in setup
         'desired_power' : -9.0, # dBm
-        'freq' : list([1.3160,]), #GHz
-        'dwell_time' : 500.0, # ms
+        'freq' : list([1.3820,]), #GHz
+        'dwell_time' : 50.0, # ms
         'filter' : False,
         #'filter_set' : ( (270850, 270870), (270950, 270970)),
         'filter_set' : [[264053,265985]],
         'temperature_tolerance' : 10.0, # Kelvin
-        'MeasCycles' : 5,
-        'Imod' : 0.0,
+        'MeasCycles' : 15,
+        'Imod' : 0.3*0.5,
         'wavemeter_first_sweep' : True,
         }
 def main():
@@ -645,7 +668,7 @@ def main():
     #xsettings['microwaves'] = False
 
     m.params.from_dict(xsettings)
-    do_awg_stuff = False
+    do_awg_stuff = True
     m.sequence(upload=do_awg_stuff, program=do_awg_stuff, clear=do_awg_stuff)
 
     m.prepare()
