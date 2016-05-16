@@ -183,27 +183,57 @@ class SiC_PESR_Master(m2.Measurement):
         # Check if the SNSPD is still superconducting
         if self._snspd.check() == False:
             print 'SNSPD went normal and could not restore!'
-        # Start the AWG
+        # set the AWG to CW mode
         if self._awg.get_state() == 'Idle':
             self._awg.start()
             # set the AWG to CW mode
             print 'Waiting 30 s for AWG to start...'
             time.sleep(30.0)
 
-        for i in range(20):
-            time.sleep(5.0)
-            state = ''
-            print 'Waiting for AWG to start...'
-            try:
-                state = self._awg.get_state()
-            except(visa.visa.VI_ERROR_TMO):
-                print 'Still waiting for AWG after timeout...'
-            if state == 'Running':
-                    print 'AWG started OK...Clearing VISA interface.'
-                    self._awg.clear_visa()
-                    break
-            if state == 'Idle':
-                self._awg.start()
+            for i in range(20):
+                time.sleep(5.0)
+                state = ''
+                print 'Waiting for AWG to start...'
+                try:
+                    state = self._awg.get_state()
+                except(visa.visa.VI_ERROR_TMO):
+                    print 'Still waiting for AWG after timeout...'
+                if state == 'Running':
+                        print 'AWG started OK.'
+
+                        break
+                if state == 'Idle':
+                    self._awg.start()
+        elif self._awg.get_state() == 'Running':
+            print 'AWG already started'
+
+        print 'Checking AWG interface status...'
+        init_status = self._awg.get_ch3_status()
+        awg_is_ok = True
+        # check a randomized sequence of 20 commands and see if the response agrees with what we set the channel
+        # status to.
+        for ij in range(20):
+            test_val = random.randint(0,1)
+            if test_val == 0:
+                self._awg.set_ch3_status('off')
+                time.sleep(0.05)
+                output = self._awg.get_ch3_status()
+                if output == 'on':
+                    awg_is_ok == False
+            if test_val == 1:
+                self._awg.set_ch3_status('on')
+                time.sleep(0.05)
+                output = self._awg.get_ch3_status()
+                if output == 'off':
+                    awg_is_ok == False
+        self._awg.set_ch3_status(init_status)
+        # all the randomized commands should match. If they don't, the VISA interface is clogged and we should
+        # clear it
+        if not awg_is_ok:
+            print 'AWG interface was clogged, clearing it.'
+            self._awg.clear_visa()
+        else:
+            print 'AWG interface is OK.'
 
         self._awg.sq_forced_jump(1)
         time.sleep(1)
@@ -507,21 +537,21 @@ xsettings = {
         'power' : 5.0, # dBm
         'constant_attenuation' : 14.0, # dB -- set by the fixed attenuators in setup
         'desired_power' : -7.0, # dBm
-        'f_low' : 1.271, # GHz
-        'f_high' : 1.405, # GHz
-        'f_step' : 1.0e-3, # GHz
+        'f_low' : 1.28, # GHz
+        'f_high' : 1.395, # GHz
+        'f_step' : 1e-3, # GHz
         'RF_delay' : 0.0, # ns
         'RF_buffer' : 200.0, # ns
-        'pi_length' : 140, # ns
+        'pi_length' : 200, # ns
         'dwell_time' : 1500.0, # ms
         'temperature_tolerance' : 3, # Kelvin
         'MeasCycles' : 1000,
         'trigger_period' : 100000.0, #ns
         'dropout' : True,
-        'dropout_low' : 1.298, # GHz
-        'dropout_high' : 1.37, # GHz
+        'dropout_low' : 1.32, # GHz
+        'dropout_high' : 1.360, # GHz
         'readout_length' : 130.0,
-        'Imod' : 1.0,
+        'Imod' : 0.3,
         }
 
 
@@ -529,8 +559,8 @@ xsettings = {
 
 # Generate array of powers -- in this case, just one power.
 
-p_low = -17
-p_high = -17
+p_low = -19
+p_high = -19
 p_nstep = 1
 
 p_array = np.linspace(p_low,p_high,p_nstep)
