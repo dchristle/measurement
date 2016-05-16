@@ -24,6 +24,7 @@ class SiC_Rabi_Master(m2.Measurement):
 
         # define the pulses we'll use
         sq_pulseAOM = pulse.SquarePulse(channel='AOM975', name='A square pulse on ThorLabsAOM')
+        sq_pulseRES = pulse.SquarePulse(channel='Sacher1160AOM', name='A square pulse on Sacher AOM')
         sq_pulseMW = pulse.SquarePulse(channel='MW_pulsemod', name='A square pulse on MW modulation')
         sq_pulsePC = pulse.SquarePulse(channel='photoncount', name='A square pulse on photon counting switch')
         sq_pulseMW_Imod = pulse.SquarePulse(channel='MW_Imod', name='A square pulse on MW I modulation')
@@ -33,18 +34,19 @@ class SiC_Rabi_Master(m2.Measurement):
         self.params['pts'] = np.uint32(1 + np.ceil(np.abs(self.params['RF_length_end'] - self.params['RF_length_start'])/self.params['RF_length_step']))
         self.params['MW_pulse_durations'] = 1.0e-9*np.linspace(self.params['RF_length_start'], self.params['RF_length_end'], self.params['pts'])
         self._awg = qt.instruments['awg']
-        self._awg.stop()
-        time.sleep(5.0)
-        for i in range(10):
-            time.sleep(1.0)
-            state = ''
-            try:
-                state = self._awg.get_state()
-            except(visa.visa.VI_ERROR_TMO):
-                print 'Waiting for AWG to stop...'
-            if state == 'Idle':
-                print 'AWG stopped OK.'
-                break
+        if upload or program or clear:
+            self._awg.stop()
+            time.sleep(5.0)
+            for i in range(10):
+                time.sleep(1.0)
+                state = ''
+                try:
+                    state = self._awg.get_state()
+                except(visa.visa.VI_ERROR_TMO):
+                    print 'Waiting for AWG to stop...'
+                if state == 'Idle':
+                    print 'AWG stopped OK.'
+                    break
         if clear:
             self._awg.clear_waveforms()
             print 'AWG waveforms cleared.'
@@ -75,20 +77,36 @@ class SiC_Rabi_Master(m2.Measurement):
             e = element.Element('ElectronRabi_pt-%d' % i, pulsar=qt.pulsar)
 
 
+            if self.params['resonant_readout']:
+                resonant_laser_start_time = self.params['Sacher_AOM_start_buffer']
+                e.add(pulse.cp(sq_pulseRES, amplitude=1, length=self.params['Sacher_AOM_length']*1.0e-9), name='resonant laser', start=resonant_laser_start_time*1.0e-9)
+                resonant_readout_start_time = resonant_laser_start_time + self.params['Sacher_AOM_light_delay']
+                e.add(pulse.cp(sq_pulsePC, amplitude=1.0, length=self.params['readout_length']*1.0e-9), name='photoncountpulse', start=resonant_readout_start_time*1.0e-9)
+                # add the 975 nm AOM pulse after the resonant readout to reset the spin
+                AOM_start_time = resonant_laser_start_time + self.params['Sacher_AOM_length'] + self.params['Sacher_AOM_light_delay'] - self.params['AOM_light_delay'] + self.params['Sacher_AOM_end_buffer']
+                e.add(pulse.cp(sq_pulseAOM, amplitude=1, length=self.params['AOM_length']*1.0e-9), name='laser init', start=AOM_start_time*1.0e-9)
+                # add the microwave pulses after a ~600 ns relaxation for the singlet
+                microwave_start_time = AOM_start_time + self.params['AOM_length'] + self.params['AOM_light_delay'] + self.params['RF_delay']
+                e.add(pulse.cp(sq_pulseMW, length = self.params['MW_pulse_durations'][i], amplitude = 1), name='microwave pulse', start=microwave_start_time*1.0e-9)
+                trigger_period = microwave_start_time + self.params['RF_length_end'] + 50.0
+                e.add(pulse.cp(sq_pulseMW_Imod, amplitude=self.params['Imod'], length=trigger_period*1.0e-9),
+                name='MWimodpulse', start=0e-9)
 
+                e.add(pulse.cp(sq_pulseMW_Qmod, amplitude=0.0, length=trigger_period*1.0e-9),
+                name='MWqmodpulse', start=0e-9)
+            else:
+                e.add(pulse.cp(sq_pulseAOM, amplitude=1, length=self.params['AOM_length']*1.0e-9), name='laser init', start=AOM_start_time*1.0e-9)
 
-            e.add(pulse.cp(sq_pulseAOM, amplitude=1, length=self.params['AOM_length']*1.0e-9), name='laser init', start=AOM_start_time*1.0e-9)
+                e.add(pulse.cp(sq_pulseMW, length = self.params['MW_pulse_durations'][i], amplitude = 1), name='microwave pulse', start=self.params['RF_delay']*1.0e-9)
 
-            e.add(pulse.cp(sq_pulseMW, length = self.params['MW_pulse_durations'][i], amplitude = 1), name='microwave pulse', start=self.params['RF_delay']*1.0e-9)
+                e.add(pulse.cp(sq_pulsePC, amplitude=1.0, length=self.params['readout_length']*1.0e-9),
+                name='photoncountpulse', start=readout_start_time*1.0e-9)
 
-            e.add(pulse.cp(sq_pulsePC, amplitude=1.0, length=self.params['readout_length']*1.0e-9),
-            name='photoncountpulse', start=readout_start_time*1.0e-9)
+                e.add(pulse.cp(sq_pulseMW_Imod, amplitude=self.params['Imod'], length=trigger_period*1.0e-9),
+                name='MWimodpulse', start=0e-9)
 
-            e.add(pulse.cp(sq_pulseMW_Imod, amplitude=self.params['Imod'], length=trigger_period*1.0e-9),
-            name='MWimodpulse', start=0e-9)
-
-            e.add(pulse.cp(sq_pulseMW_Qmod, amplitude=0.0, length=trigger_period*1.0e-9),
-            name='MWqmodpulse', start=0e-9)
+                e.add(pulse.cp(sq_pulseMW_Qmod, amplitude=0.0, length=trigger_period*1.0e-9),
+                name='MWqmodpulse', start=0e-9)
             elements.append(e)
 
 
@@ -143,34 +161,72 @@ class SiC_Rabi_Master(m2.Measurement):
 
         # Prepare instruments for measurement and verify FBL output
         # Set the trigger source to internal
-
-        # set the AWG to CW mode
-        for i in range(20):
-            try:
-                if self._awg.get_state() == 'Idle':
-                    self._awg.start()
-                break
-            except(visa.visa.VI_ERROR_TMO):
-                print 'AWG still busy -- trying again...'
-
-        # set the AWG to CW mode
-        print 'Waiting 15 s for AWG to start...'
-        time.sleep(10.0)
-
+        # try to get AWG state
         for i in range(20):
             time.sleep(5.0)
             state = ''
-            print 'Waiting for AWG to start...'
+            print 'Waiting to get AWG state...'
             try:
                 state = self._awg.get_state()
-            except(visa.visa.VI_ERROR_TMO):
+            except:
                 print 'Still waiting for AWG after timeout...'
-            if state == 'Running':
-                    print 'AWG started OK...Clearing VISA interface.'
-                    self._awg.clear_visa()
-                    break
-            if state == 'Idle':
-                self._awg.start()
+            if state == 'Running' or state == 'Idle':
+                print 'Got AWG state: %s' % state
+                break
+        # set the AWG to CW mode
+        current_state = self._awg.get_state()
+        if current_state == 'Idle':
+            self._awg.start()
+            # set the AWG to CW mode
+            print 'Waiting 30 s for AWG to start...'
+            time.sleep(30.0)
+
+            for i in range(20):
+                time.sleep(5.0)
+                state = ''
+                print 'Waiting for AWG to start...'
+                try:
+                    state = self._awg.get_state()
+                except(visa.visa.VI_ERROR_TMO):
+                    print 'Still waiting for AWG after timeout...'
+                if state == 'Running':
+                        print 'AWG started OK.'
+
+                        break
+                if state == 'Idle':
+                    self._awg.start()
+                    time.sleep(5.0)
+        elif current_state == 'Running':
+            print 'AWG already started'
+
+        # print 'Checking AWG interface status...'
+        # init_status = self._awg.get_ch3_status()
+        # awg_is_ok = True
+        # # check a randomized sequence of 20 commands and see if the response agrees with what we set the channel
+        # # status to.
+        # for ij in range(20):
+        #     test_val = random.randint(0,1)
+        #     if test_val == 0:
+        #         self._awg.set_ch3_status('off')
+        #         time.sleep(0.25)
+        #         output = self._awg.get_ch3_status()
+        #         if output == 'on':
+        #             awg_is_ok == False
+        #     if test_val == 1:
+        #         self._awg.set_ch3_status('on')
+        #         time.sleep(0.25)
+        #         output = self._awg.get_ch3_status()
+        #         if output == 'off':
+        #             awg_is_ok == False
+        # self._awg.set_ch3_status(init_status)
+        awg_is_ok = False
+        # all the randomized commands should match. If they don't, the VISA interface is clogged and we should
+        # clear it
+        if not awg_is_ok:
+            print 'AWG interface clearing.'
+            self._awg.clear_visa()
+        else:
+            print 'AWG interface is OK.'
 
         self._awg.sq_forced_jump(1)
         time.sleep(1)
@@ -267,14 +323,14 @@ class SiC_Rabi_Master(m2.Measurement):
 
             # Enter the loop for measurement
             t1 = time.time()
+
             for j in range(int(self.params['pts'])):
 
-                self._keystroke_check('abort')
-                if self.keystroke('abort') in ['q','Q']:
+                if self.keystroke('abort') in ['q','Q'] or scan_on == False:
                     print 'Measurement aborted.'
                     self.stop_keystroke_monitor('abort')
-                    scan_on = False
                     self._stop_measurement = True
+                    scan_on = False
                     break
                 if msvcrt.kbhit() or scan_on == False or self._stop_measurement == True:
                     kb_char=msvcrt.getch()
@@ -306,6 +362,13 @@ class SiC_Rabi_Master(m2.Measurement):
 
                 temp_count_data[j] = self._ni63.get('ctr1')
                 qt.msleep(0.002) # keeps GUI responsive and checks if plot needs updating.
+            self._keystroke_check('abort')
+            if self.keystroke('abort') in ['q','Q'] or scan_on == False:
+                print 'Measurement aborted.'
+                self.stop_keystroke_monitor('abort')
+                self._stop_measurement = True
+                scan_on = False
+                break
             if msvcrt.kbhit() or scan_on == False or self._stop_measurement == True:
                 kb_char=msvcrt.getch()
                 self._stop_measurement = True
@@ -394,29 +457,34 @@ class SiC_Rabi_Master(m2.Measurement):
 xsettings = {
         'focus_limit_displacement' : 20, # microns inward
         'fbl_time' : 150.0, # seconds
-        'AOM_length' : 1400.0, # ns
+        'AOM_length' : 1500.0, # ns
         'AOM_light_delay' : 655.0, # ns
         'AOM_end_buffer' : 1055.0, # ns
-        'RF_delay' : 50.0, # ns
+        'Sacher_AOM_start_buffer' : 150.0, #ns
+        'Sacher_AOM_length' : 1050.0, # ns
+        'Sacher_AOM_light_delay' : 625.0, # ns
+        'Sacher_AOM_end_buffer' : 1155.0, # ns
+        'RF_delay' : 900.0, # ns -- make this longer, like 500-600 ns for resonant readout!
         'RF_buffer' : 350.0, # ns
-        'readout_length' : 130.0, # ns
+        'readout_length' : 1000.0, # ns, 130 ns for off resonant
         'ctr_term' : 'PFI2',
         'power' : 5.0, # dBm
         'constant_attenuation' : 14.0, # dBm -- set by the fixed attenuators in setup
-        'desired_power' : -9.0, # dBm
+        'desired_power' : -19.0, # dBm
         'RF_length_start' : 0.0, # ns
-        'RF_length_end' : 700.0, # ns
+        'RF_length_end' : 1200.0, # ns
         'RF_length_step' : 20.0, # ns
-        'freq' : 1.283, #GHz
+        'freq' : 1.3776, #GHz
         'dwell_time' : 1000.0, # ms
         'temperature_tolerance' : 2.0, # Kelvin
-        'MeasCycles' : 1200,
+        'MeasCycles' : 100,
         'random' : 1,
-        'Imod' : 1.0,
+        'Imod' : 0.3,
+        'resonant_readout' : True
         }
 
-p_low = -17
-p_high = -17
+p_low = -19
+p_high = -19
 p_nstep = 1
 
 p_array = np.linspace(p_low,p_high,p_nstep)
@@ -427,11 +495,12 @@ for rr in range(np.size(p_array)):
     print 'About to proceed -- waiting 5 s for quit (press q to quit)'
     time.sleep(5.0)
     if msvcrt.kbhit():
-                kb_char=msvcrt.getch()
-                if kb_char == "q": break
+        kb_char=msvcrt.getch()
+        if kb_char == "q": break
+
     name_string = 'power %.2f dBm' % (p_array[rr])
     m = SiC_Rabi_Master(name_string)
-    xsettings['readout_length'] = 130.0
+
     xsettings['desired_power'] = p_array[rr]
 
     # since params is not just a dictionary, it's easy to incrementally load
@@ -444,13 +513,19 @@ for rr in range(np.size(p_array)):
 
 
     if True:
+        m.prepare()
+        print('Press q to quit...')
+        time.sleep(2.0)
+        if msvcrt.kbhit():
+            kb_char=msvcrt.getch()
+            if kb_char == "q":
+                break
         print 'Proceeding with measurement ...'
         try:
             msg_string = [__name__ + ': Rabi measurement %s started. Cryostat temperature %.2f K, heater power %.1f percent.' % (name_string, qt.instruments['ls332'].get_kelvinA(), qt.instruments['ls332'].get_heater_output() ) ]
             slack.chat.post_message('#singledefectlab', msg_string, as_user=True)
         except:
             pass
-        m.prepare()
         m.measure()
         m.save_params()
         m.save_stack()
