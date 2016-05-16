@@ -7,6 +7,7 @@ import time
 import msvcrt
 from measurement.lib.pulsar import pulse, pulselib, element, pulsar
 from random import shuffle
+import random
 import gc
 reload(pulse)
 reload(element)
@@ -25,17 +26,18 @@ class SiC_ESR_Master(m2.Measurement):
     # a measurement by doing things like defining references to the instruments
     # it will use, checking
     def sequence(self, upload=True, program=True, clear=False):
+        self._awg = qt.instruments['awg']
         # define the pulses we'll use
         sq_pulseAOM = pulse.SquarePulse(channel='AOM975', name='A square pulse on ThorLabsAOM')
         sq_pulseMW = pulse.SquarePulse(channel='MW_pulsemod', name='A square pulse on MW modulation')
         sq_pulsePC = pulse.SquarePulse(channel='photoncount', name='A square pulse on photon counting switch')
         sq_pulseMW_Imod = pulse.SquarePulse(channel='MW_Imod', name='A square pulse on MW I modulation')
         sq_pulseMW_Qmod = pulse.SquarePulse(channel='MW_Qmod', name='A square pulse on MW I modulation')
-        awg.stop()
+        self._awg.stop()
         gc.collect()
         time.sleep(1.0)
         if clear:
-            awg.clear_waveforms()
+            self._awg.clear_waveforms()
         elements = []
         # Create waveform that has laser, microwaves, photon counting, and 1/0 I/Q modulation on
         # all the time for a long period of time (~100 us).
@@ -124,33 +126,58 @@ class SiC_ESR_Master(m2.Measurement):
         # Check if the SNSPD is still superconducting
         if self._snspd.check() == False:
             print 'SNSPD went normal and could not restore!'
-        # Start the AWG
-        for i in range(20):
-            try:
-                if self._awg.get_state() == 'Idle':
-                    self._awg.start()
-                break
-            except(visa.visa.VI_ERROR_TMO):
-                print 'AWG still busy -- trying again...'
+
 
         # set the AWG to CW mode
-        print 'Waiting 15 s for AWG to start...'
-        time.sleep(10.0)
+        if self._awg.get_state() == 'Idle':
+            self._awg.start()
+            print 'Waiting 30 s for AWG to start...'
+            time.sleep(30.0)
 
-        for i in range(20):
-            time.sleep(5.0)
-            state = ''
-            print 'Waiting for AWG to start...'
-            try:
-                state = self._awg.get_state()
-            except(visa.visa.VI_ERROR_TMO):
-                print 'Still waiting for AWG after timeout...'
-            if state == 'Running':
-                    print 'AWG started OK...Clearing VISA interface.'
-                    self._awg.clear_visa()
-                    break
-            if state == 'Idle':
-                self._awg.start()
+            for i in range(20):
+                time.sleep(5.0)
+                state = ''
+                print 'Waiting for AWG to start...'
+                try:
+                    state = self._awg.get_state()
+                except(visa.visa.VI_ERROR_TMO):
+                    print 'Still waiting for AWG after timeout...'
+                if state == 'Running':
+                        print 'AWG started OK.'
+
+                        break
+                if state == 'Idle':
+                    self._awg.start()
+        elif self._awg.get_state() == 'Running':
+            print 'AWG already started'
+
+        print 'Checking AWG interface status...'
+        init_status = self._awg.get_ch3_status()
+        awg_is_ok = True
+        # check a randomized sequence of 20 commands and see if the response agrees with what we set the channel
+        # status to.
+        for ij in range(20):
+            test_val = random.randint(0,1)
+            if test_val == 0:
+                self._awg.set_ch3_status('off')
+                time.sleep(0.05)
+                output = self._awg.get_ch3_status()
+                if output == 'on':
+                    awg_is_ok == False
+            if test_val == 1:
+                self._awg.set_ch3_status('on')
+                time.sleep(0.05)
+                output = self._awg.get_ch3_status()
+                if output == 'off':
+                    awg_is_ok == False
+        self._awg.set_ch3_status(init_status)
+        # all the randomized commands should match. If they don't, the VISA interface is clogged and we should
+        # clear it
+        if not awg_is_ok:
+            print 'AWG interface was clogged, clearing it.'
+            self._awg.clear_visa()
+        else:
+            print 'AWG interface is OK.'
 
         self._awg.sq_forced_jump(1)
         time.sleep(1)
@@ -429,7 +456,9 @@ class SiC_ESR_Master(m2.Measurement):
             qt.msleep(0.002) # keeps GUI responsive and checks if plot needs updating.
 
 
-
+        # put data into variables of the measurement object, for extraction in automated measurements
+        self.total_count_data = total_count_data
+        self.freq = freq
         # Once all sweeps are complete, turn off the microwaves.
         self._pxi.set_status('off')
         # Measurement has ended, so start saving data in an HDF5 object.
@@ -458,17 +487,17 @@ xsettings = {
         'power' : 5.0, # dBm
         'constant_attenuation' : 14.0, # dBm -- set by the fixed attenuators in setup
         'desired_power' : -7.0, # dBm
-        'f_low' : 1.31, #GHz
-        'f_high' : 1.37, #Ghz
-        'f_step' : 2e-3, #Ghz
+        'f_low' : 1.35, #GHz
+        'f_high' : 1.40, #Ghz
+        'f_step' : 1.0e-3, #Ghz
         'dwell_time' : 1550.0, # ms
         'temperature_tolerance' : 5.0, # Kelvin
-        'MeasCycles' : 800,
+        'MeasCycles' : 18,
         'trigger_period' : 100000.0, #ns
         'dropout' : False,
-        'dropout_low' : 1.305, # GHz
-        'dropout_high' : 1.36, # GHz
-        'Imod' : 0.39811
+        'dropout_low' : 1.20, # GHz
+        'dropout_high' : 1.35, # GHz
+        'Imod' : 0.4
 }
 
 
@@ -514,7 +543,7 @@ def main():
                 slack.chat.post_message('#singledefectlab', msg_string, as_user=True)
             except:
                 pass
-            do_awg_stuff =True
+            do_awg_stuff = False
             m.sequence(upload=do_awg_stuff, program=do_awg_stuff, clear=do_awg_stuff)
             m.prepare()
             m.measure()
