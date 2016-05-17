@@ -400,6 +400,7 @@ class SiC_Toptica_FastPiezo_Sweep(m2.Measurement):
         time.sleep(3.0)
         self._toptica.set_piezo_voltage(self.params['piezo_array'][0])
         print 'FSM: Motor pos: %d, FP %d, GHz: %.2f, cur %.3f' % (self._motdl.get_position(), self._fp.check_stabilization(), self._wvm.get_frequency(), self._toptica.get_current())
+        time.sleep(10.0)
         fp_out = self._fp.check_stabilization()
         #if fp_out == 2:
         #    self.find_single_mode()
@@ -450,14 +451,38 @@ class SiC_Toptica_FastPiezo_Sweep(m2.Measurement):
             self._snspd.check()
             #sweep through the piezo_array voltages, which should go from low to high and then back to low
             for k in range(np.size(self.params['piezo_array'])):
+                # Check if a track should occur. If so, track.
+                if time.time() > track_time and self.params['track']:
 
+                    # set the AWG into CW mode for tracking
+                    self._awg.sq_forced_jump(1)
+                    self.awg_confirm(1)
+
+                    qt.msleep(0.1)
+                    # Re-optimize
+                    self._fbl.optimize()
+
+                    # Set new track time
+                    track_time = time.time() + self.params['fbl_time'] + 5.0*np.random.uniform()
+                    self._awg.sq_forced_jump(2)
+                    self.awg_confirm(2)
+                    qt.msleep(0.1)
                 #Set the new piezo voltage
                 self._toptica.set_piezo_voltage(self.params['piezo_array'][k])
+                if self.params['stabilization_time'] > 0.0:
+                    time.sleep(self.params['stabilization_time']*0.001)
                 if self.params['wavemeter_first_sweep'] and i == 0:
                     # Measure frequency and counts
                     cur_frq = 299792458.0/self._wvm.get_wavelength()
                     offset_frq = cur_frq - frq1
                     qt.msleep(0.003)
+                    if self.params['measure_dispersion']:
+                        frq_recent = np.zeros(5)
+                        for zz in range(5):
+                            time.sleep(0.5)
+                            frq_recent[zz] = 299792458/self._wvm.get_wavelength()
+                        print 'Dispersion: %.2f MHZ' % (np.std(frq_recent)*1000.0)
+
                 else:
                     cur_frq = self.params['piezo_array'][k]
                     offset_frq = self.params['piezo_array'][k]
@@ -612,9 +637,9 @@ class SiC_Toptica_FastPiezo_Sweep(m2.Measurement):
 
 xsettings = {
         'focus_limit_displacement' : 20, # microns inward
-        'fbl_time' : 10.0, # seconds
+        'fbl_time' : 50.0, # seconds
         'AOM_start_buffer' : 50.0, # ns
-        'AOM_length' : 1600.0, # ns
+        'AOM_length' : 800.0, # ns
         'AOM_light_delay' : 655.0, # ns
         'AOM_end_buffer' : 1155.0, # ns
         'Sacher_AOM_start_buffer' : 150.0, #ns
@@ -625,26 +650,29 @@ xsettings = {
         'readout_length' : 5000.0, # ns
         'readout_buffer' : 10.0, # ns
         'ctr_term' : 'PFI2',
-        'piezo_start' : 38, #volts
-        'piezo_end' : 58, #volts
-        'piezo_step_size' : 0.07, # volts (dispersion is roughly ~0.4 GHz/V)
-        'bin_size' : 0.05, # GHz, should be same order of magnitude as (step_size * .1 GHz)
-        'microwaves' : True, # modulate with microwaves on or off
+        'piezo_start' : 20, #volts
+        'piezo_end' : 90, #volts
+        'piezo_step_size' : 0.04, # volts (dispersion is roughly ~0.4 GHz/V)
+        'bin_size' : 0.020, # GHz, should be same order of magnitude as (step_size * .1 GHz)
+        'microwaves' : False, # modulate with microwaves on or off
         'microwaves_CW' : True, # are the microwaves CW? i.e. ignore pi pulse length
-        'pi_length' : 180.0, # ns
-        'off_resonant_laser' : False, # cycle between resonant and off-resonant
+        'pi_length' : 249, # ns
+        'off_resonant_laser' : True, # cycle between resonant and off-resonant
         'power' : 5.0, # dBm
         'constant_attenuation' : 14.0, # dBm -- set by the fixed attenuators in setup
-        'desired_power' : -9.0, # dBm
-        'freq' : list([1.3820,]), #GHz
-        'dwell_time' : 50.0, # ms
+        'desired_power' : -19.0, # dBm
+        'freq' : list([1.3777,]), #GHz
+        'stabilization_time' : 0.0, # ms
+        'dwell_time' : 100.0, # ms
         'filter' : False,
         #'filter_set' : ( (270850, 270870), (270950, 270970)),
         'filter_set' : [[264053,265985]],
         'temperature_tolerance' : 10.0, # Kelvin
         'MeasCycles' : 15,
-        'Imod' : 0.3*0.5,
+        'Imod' : 0.15,
         'wavemeter_first_sweep' : True,
+        'measure_dispersion' : False,
+        'track' : True,
         }
 def main():
     p_low = -19
@@ -661,7 +689,8 @@ def main():
         if kb_char == "q":
             do_track = False
 
-    name_string = 'PL1_nomw'
+    name_string = 'Defect4A_WB_noMW_offres'
+    xsettings['desired_power'] = -19
     m = SiC_Toptica_FastPiezo_Sweep(name_string)
     #xsettings['desired_power'] = -19.0
     #xsettings['frequency'] = 1.45
@@ -686,7 +715,7 @@ def main():
     #
     # name_string = 'abovetriodefect_1.42GHz_cw'
     # m = SiC_Toptica_Piezo_Sweep(name_string)
-    xsettings['desired_power'] = -16
+
     # xsettings['frequency'] = 1.42
     # xsettings['microwaves'] = True
     #
