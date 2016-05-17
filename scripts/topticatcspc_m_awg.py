@@ -152,6 +152,7 @@ class SiC_Toptica_TCSPC(m2.Measurement):
         self._fp = qt.instruments['fp']
         self._wvm = qt.instruments['bristol']
         self._ph = qt.instruments['ph']
+        self._ls = qt.instruments['ls']
 
         # Prepare instruments for measurement and verify FBL output
         # Set the trigger source to internal
@@ -160,23 +161,56 @@ class SiC_Toptica_TCSPC(m2.Measurement):
         if self._awg.get_state() == 'Idle':
             self._awg.start()
             # set the AWG to CW mode
-            print 'Waiting 30 s for AWG to start...'
-            time.sleep(30.0)
+            for i in range(20):
+                time.sleep(10.0)
+                state = ''
+                print 'Waiting for AWG to start...'
+                try:
+                    state = self._awg.get_state()
+                except(visa.visa.VI_ERROR_TMO):
+                    print 'Still waiting for AWG after timeout...'
+                    
+                if state == 'Running':
+                        print 'AWG started OK.'
+                        break
 
-        for i in range(20):
-            time.sleep(5.0)
-            state = ''
-            print 'Waiting for AWG to start...'
-            try:
-                state = self._awg.get_state()
-            except(visa.visa.VI_ERROR_TMO):
-                print 'Still waiting for AWG after timeout...'
-            if state == 'Running':
-                    print 'AWG started OK...Clearing VISA interface.'
-                    self._awg.clear_visa()
-                    break
-            if state == 'Idle':
-                self._awg.start()
+                if state == 'Idle':
+                    self._awg.start()
+        elif self._awg.get_state() == 'Running':
+            print 'AWG already started'
+
+        print 'Checking AWG interface status...'
+        init_status = self._awg.get_ch3_status()
+        awg_is_ok = True
+        # check a randomized sequence of 20 commands and see if the response agrees with what we set the channel
+        # status to.
+        for ij in range(20):
+            test_val = random.randint(0,1)
+            if test_val == 0:
+                self._awg.set_ch3_status('off')
+                time.sleep(0.05)
+                output = self._awg.get_ch3_status()
+                if output == 'on':
+                    awg_is_ok == False
+            if test_val == 1:
+                self._awg.set_ch3_status('on')
+                time.sleep(0.05)
+                output = self._awg.get_ch3_status()
+                if output == 'off':
+                    awg_is_ok == False
+        self._awg.set_ch3_status(init_status)
+        # all the randomized commands should match. If they don't, the VISA interface is clogged and we should
+        # clear it
+        if not awg_is_ok:
+            print 'AWG interface was clogged, clearing it.'
+            self._awg.clear_visa()
+        else:
+            print 'AWG interface is OK.'
+
+        # feedback on laser resonance
+        self._awg.sq_forced_jump(2)
+        time.sleep(0.5)
+        self._ls.optimize()
 
         self._awg.sq_forced_jump(1)
         time.sleep(1)
@@ -184,6 +218,7 @@ class SiC_Toptica_TCSPC(m2.Measurement):
 
 
         self._fbl.optimize()
+
         # Set focus axis limit
         cur_Z = self._xps.get_abs_positionZ()
         self._xps.set_parameter_bounds('abs_positionZ',cur_Z-(self.params['focus_limit_displacement']*0.001),12.1)
@@ -292,6 +327,7 @@ class SiC_Toptica_TCSPC(m2.Measurement):
         # Start measurement cycle, so go to proper waveform.
         self._awg.sq_forced_jump(2)
         self.awg_confirm(2)
+
         for jj in range(self.params['MeasCycles']):
             t1 = time.time()
             if msvcrt.kbhit():
@@ -314,6 +350,8 @@ class SiC_Toptica_TCSPC(m2.Measurement):
                 track_time = time.time() + self.params['fbl_time'] + 5.0*np.random.uniform()
                 self._awg.sq_forced_jump(2)
                 self.awg_confirm(2)
+                # feedback on laser
+                self._ls.optimize()
                 time.sleep(0.1)
 
             self._keystroke_check('abort')
@@ -450,7 +488,7 @@ xsettings = {
         'ctr_term' : 'PFI2',
         'CFDLevel0' : 320,
         'CFDZeroCross0' : 10,
-        'CFDLevel1' : 70,
+        'CFDLevel1' : 110,
         'CFDZeroCross1' : 10,
         'Binning' : 7,
         'Offset' : 0,
