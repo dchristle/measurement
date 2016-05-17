@@ -56,10 +56,10 @@ def classify_spectrum(data):
 
     if classifier_globals['forest_classifier'] == None:
         # train the RF classifier
-        print 'Training RF classifier...'
+        print 'Training Forest classifier...'
         X_array, Y_array = import_training_data()
         X_norm = train_scaler(X_array)
-        train_svm_classifier(X_norm, Y_array)
+        train_forest_classifier(X_norm, Y_array)
 
     if classifier_globals['svm_classifier'] == None:
         # train the RF classifier
@@ -139,7 +139,7 @@ def scale_sample(X_sample):
 
 
 def train_svm_classifier(X_normalized, Y_array):
-    clf = svm.SVC(kernel='linear', C=0.5).fit(X_normalized, Y_array)
+    clf = svm.SVC(kernel='rbf', C=1.0, gamma=0.1).fit(X_normalized, Y_array)
     classifier_globals['svm_classifier'] = clf
     return clf
 
@@ -151,34 +151,34 @@ def train_nb_classifier(X_normalized, Y_array):
 
 
 def train_forest_classifier(X_normalized, Y_array):
-    print(X_normalized.shape)
-    print('Length of XN is {}, length of yarray is {}'.format(np.size(X_normalized[:,0]), np.size(Y_array)))
-    n_est_list = [ 3, 8, 9, 10, 20, 30]
-    for n_est in n_est_list:
-        # Create the random forest object which will include all the parameters
-        # for the fit
-        forest = sklearn.ensemble.RandomForestClassifier(n_estimators = n_est)
-
-
-        kf = KFold(np.size(X_normalized[:,0]), n_folds=5)
-        total_incorrect = 0
-        total_tests = 0
-        for train, test in kf:
-            #print(train)
-            #print('Starting next fold...')
-            # Fit the training data to the Survived labels and create the decision trees
-            forest = forest.fit(X_normalized[train,:],Y_array[train])
-
-            # Take the same decision trees and run it on the test data
-            output = forest.predict(X_normalized[test,:])
-            total_incorrect = total_incorrect + (Y_array[test] != output).sum()
-            inc_idx = Y_array[test] != output
-            #print('Predicted {}, actual was {}'.format(output[inc_idx], y_array[test][inc_idx]))
-            total_tests = total_tests + np.size(Y_array[test])
-        print('For n_est {}, total incorrect was {}/{}'.format(n_est, total_incorrect,total_tests))
+    # print(X_normalized.shape)
+    # print('Length of XN is {}, length of yarray is {}'.format(np.size(X_normalized[:,0]), np.size(Y_array)))
+    # n_est_list = [ 3, 8, 9, 10, 20, 30]
+    # for n_est in n_est_list:
+    #     # Create the random forest object which will include all the parameters
+    #     # for the fit
+    #     forest = sklearn.ensemble.RandomForestClassifier(n_estimators = n_est)
+    #
+    #
+    #     kf = KFold(np.size(X_normalized[:,0]), n_folds=5)
+    #     total_incorrect = 0
+    #     total_tests = 0
+    #     for train, test in kf:
+    #         #print(train)
+    #         #print('Starting next fold...')
+    #         # Fit the training data to the Survived labels and create the decision trees
+    #         forest = forest.fit(X_normalized[train,:],Y_array[train])
+    #
+    #         # Take the same decision trees and run it on the test data
+    #         output = forest.predict(X_normalized[test,:])
+    #         total_incorrect = total_incorrect + (Y_array[test] != output).sum()
+    #         inc_idx = Y_array[test] != output
+    #         #print('Predicted {}, actual was {}'.format(output[inc_idx], y_array[test][inc_idx]))
+    #         total_tests = total_tests + np.size(Y_array[test])
+    #     print('For n_est {}, total incorrect was {}/{}'.format(n_est, total_incorrect,total_tests))
 
     # create a final forest estimator with n_est = 9:
-    final_forest = sklearn.ensemble.RandomForestClassifier(n_estimators = 7)
+    final_forest = sklearn.ensemble.RandomForestClassifier(n_estimators = 9)
     final_forest.fit(X_normalized,Y_array)
     classifier_globals['forest_classifier'] = final_forest
     return final_forest
@@ -208,7 +208,7 @@ def classify_data(X_element):
         X_norm = train_scaler(X_array)
         svmo = train_svm_classifier(X_norm, Y_array)
         classifier_globals['svm_classifier'] = svmo
-    # random forest classifier
+    # naive bayes
     classifier = classifier_globals['svm_classifier']
     class_out = int(classifier.predict(X_element)[0])
     return class_out
