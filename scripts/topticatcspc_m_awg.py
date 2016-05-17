@@ -100,6 +100,22 @@ class SiC_Toptica_TCSPC(m2.Measurement):
             name='MWqmodpulse', start=0e-9)
 
         elements.append(e)
+
+        e = element.Element('ResonantCW_mode', pulsar=qt.pulsar)
+        e.add(pulse.cp(sq_pulseRES, amplitude=1, length=100e-6), name='lasercw')
+        e.add(pulse.cp(sq_pulsePC, amplitude=1.0, length=100e-6),
+        name='photoncountpulsecw')
+        e.add(pulse.cp(sq_pulseMW_Imod, amplitude=1.0, length=100e-6),
+        name='MWimodpulsecw', start=0e-9)
+        e.add(pulse.cp(sq_pulseMW_Qmod, amplitude=0.0, length=100e-6),
+        name='MWqmodpulsecw', start=0e-9)
+        # Add a microwave pulse to allow microwave energy to reach the sample even while tracking (if microwaves are enabled)
+        # This will give a much more stable measurement for higher powers.
+        if self.params['microwaves']:
+            e.add(pulse.cp(sq_pulseMW, length=self.params['pi_length']*1e-9, amplitude = 1.0), name='microwave pulse', start=0e-9)
+        elements.append(e)
+
+
         seq = pulsar.Sequence('TopticaTCSPC sequence')
         for e in elements:
             seq.append(name=e.name, wfname=e.name, trigger_wait=False, repetitions=-1)
@@ -169,7 +185,7 @@ class SiC_Toptica_TCSPC(m2.Measurement):
                     state = self._awg.get_state()
                 except(visa.visa.VI_ERROR_TMO):
                     print 'Still waiting for AWG after timeout...'
-                    
+
                 if state == 'Running':
                         print 'AWG started OK.'
                         break
@@ -208,8 +224,8 @@ class SiC_Toptica_TCSPC(m2.Measurement):
             print 'AWG interface is OK.'
 
         # feedback on laser resonance
-        self._awg.sq_forced_jump(2)
-        time.sleep(0.5)
+        self._awg.sq_forced_jump(3)
+        time.sleep(1.0)
         self._ls.optimize()
 
         self._awg.sq_forced_jump(1)
@@ -348,10 +364,12 @@ class SiC_Toptica_TCSPC(m2.Measurement):
 
                 # Set new track time
                 track_time = time.time() + self.params['fbl_time'] + 5.0*np.random.uniform()
-                self._awg.sq_forced_jump(2)
-                self.awg_confirm(2)
+                self._awg.sq_forced_jump(3)
+                self.awg_confirm(3)
                 # feedback on laser
                 self._ls.optimize()
+                self._awg.sq_forced_jump(2)
+                self.awg_confirm(2)
                 time.sleep(0.1)
 
             self._keystroke_check('abort')
