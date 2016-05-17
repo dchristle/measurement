@@ -109,10 +109,7 @@ class SiC_Toptica_TCSPC(m2.Measurement):
         name='MWimodpulsecw', start=0e-9)
         e.add(pulse.cp(sq_pulseMW_Qmod, amplitude=0.0, length=100e-6),
         name='MWqmodpulsecw', start=0e-9)
-        # Add a microwave pulse to allow microwave energy to reach the sample even while tracking (if microwaves are enabled)
-        # This will give a much more stable measurement for higher powers.
-        if self.params['microwaves']:
-            e.add(pulse.cp(sq_pulseMW, length=self.params['pi_length']*1e-9, amplitude = 1.0), name='microwave pulse', start=0e-9)
+
         elements.append(e)
 
 
