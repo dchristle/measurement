@@ -61,7 +61,7 @@ class SiC_Toptica_TCSPC(m2.Measurement):
         # Add a microwave pulse to allow microwave energy to reach the sample even while tracking (if microwaves are enabled)
         # This will give a much more stable measurement for higher powers.
         if self.params['microwaves']:
-            e.add(pulse.cp(sq_pulseMW, length=100e-6, amplitude = 1.0), name='microwave pulse', start=0e-9)
+            e.add(pulse.cp(sq_pulseMW, length=100e-6, amplitude = self.params['Imod']), name='microwave pulse', start=0e-9)
         elements.append(e)
 
 
@@ -90,8 +90,10 @@ class SiC_Toptica_TCSPC(m2.Measurement):
         e.add(pulse.cp(sq_pulsePC, amplitude=1.0, length=self.params['readout_length']*1.0e-9), name='photoncountpulse', start=resonant_readout_start_time*1.0e-9)
         # Now add a microwave pulse, if microwaves are enabled
         if self.params['microwaves']:
-            total_microwave_length = resonant_laser_start_time + self.params['Sacher_AOM_length']+ self.params['Sacher_AOM_end_buffer']
-            e.add(pulse.cp(sq_pulseMW, length = total_microwave_length*1.0e-9, amplitude = 1.0), name='microwave pulse', start=0.0*1.0e-9)
+            #total_microwave_length = resonant_laser_start_time + self.params['Sacher_AOM_length']+ self.params['Sacher_AOM_end_buffer']
+            total_microwave_length = self.params['pi_pulse']
+            microwave_start_time = self.params['AOM_start_buffer'] + self.params['AOM_length'] + self.params['AOM_light_delay']
+            e.add(pulse.cp(sq_pulseMW, length = total_microwave_length*1.0e-9, amplitude = 1.0), name='microwave pulse', start=microwave_start_time*1.0e-9)
             # Add the I/Q modulator pulses
             e.add(pulse.cp(sq_pulseMW_Imod, amplitude=self.params['Imod'], length=total_microwave_length*1.0e-9),
             name='MWimodpulse', start=0e-9)
@@ -109,6 +111,8 @@ class SiC_Toptica_TCSPC(m2.Measurement):
         name='MWimodpulsecw', start=0e-9)
         e.add(pulse.cp(sq_pulseMW_Qmod, amplitude=0.0, length=100e-6),
         name='MWqmodpulsecw', start=0e-9)
+        if self.params['microwaves']:
+            e.add(pulse.cp(sq_pulseMW, length=100e-6, amplitude = self.params['Imod']), name='microwave pulse', start=0e-9)
 
         elements.append(e)
 
@@ -220,10 +224,11 @@ class SiC_Toptica_TCSPC(m2.Measurement):
         else:
             print 'AWG interface is OK.'
 
-        # feedback on laser resonance
-        self._awg.sq_forced_jump(3)
-        time.sleep(1.0)
-        self._ls.optimize()
+        # feedback on laser
+        if self.params['laser_feedback']:
+            self._awg.sq_forced_jump(3)
+            self.awg_confirm(3)
+            self._ls.optimize()
 
         self._awg.sq_forced_jump(1)
         time.sleep(1)
@@ -361,10 +366,12 @@ class SiC_Toptica_TCSPC(m2.Measurement):
 
                 # Set new track time
                 track_time = time.time() + self.params['fbl_time'] + 5.0*np.random.uniform()
-                self._awg.sq_forced_jump(3)
-                self.awg_confirm(3)
+
                 # feedback on laser
-                self._ls.optimize()
+                if self.params['laser_feedback']:
+                    self._awg.sq_forced_jump(3)
+                    self.awg_confirm(3)
+                    self._ls.optimize()
                 self._awg.sq_forced_jump(2)
                 self.awg_confirm(2)
                 time.sleep(0.1)
@@ -495,9 +502,9 @@ xsettings = {
         'AOM_start_buffer' : 50.0, # ns
         'AOM_length' : 1600.0, # ns
         'AOM_light_delay' : 655.0, # ns
-        'AOM_end_buffer' : 1155.0, # ns
-        'Sacher_AOM_length' : 65000.0, # ns
-        'Sacher_AOM_light_delay' : 950.0, # ns
+        'AOM_end_buffer' : 1255.0, # ns
+        'Sacher_AOM_length' : 5000.0, # ns
+        'Sacher_AOM_light_delay' : 655.0, # ns
         'Sacher_AOM_end_buffer' : 1155.0, # ns
         'readout_length' : 1000.0, # ns
         'ctr_term' : 'PFI2',
@@ -505,7 +512,7 @@ xsettings = {
         'CFDZeroCross0' : 10,
         'CFDLevel1' : 110,
         'CFDZeroCross1' : 10,
-        'Binning' : 7,
+        'Binning' : 4,
         'Offset' : 0,
         'SyncDiv' : 1,
         'SyncOffset' : -10000,
@@ -513,23 +520,25 @@ xsettings = {
         'piezo_start' : 0, #volts
         'piezo_end' : 90, #volts
         'piezo_step_size' : 0.08, # volts (dispersion is roughly ~0.4 GHz/V)
-        'PH_trigger_time' : 50.0,
+        'PH_trigger_time' : 3200+50.0,
         'PH_trigger_length' : 50.0,
         'bin_size' : 0.05, # GHz, should be same order of magnitude as (step_size * .1 GHz)
         'microwaves' : True, # modulate with microwaves on or off
+        'pi_pulse' : 175.0, # ns
         'off_resonant_laser' : True, # cycle between resonant and off-resonant
         'power' : 5.0, # dBm
         'constant_attenuation' : 14.0, # dBm -- set by the fixed attenuators in setup
-        'desired_power' : -9.0, # dBm
-        'freq' : 1.3569, #GHz
+        'desired_power' : -19.0, # dBm
+        'freq' : 1.3783, #GHz
         'dwell_time' : 500.0, # ms
         'temperature_tolerance' : 4.0, # Kelvin
-        'MeasCycles' : 30,
-        'Imod' : 1.0
+        'MeasCycles' : 130,
+        'Imod' : 0.35,
+        'laser_feedback' : False,
         }
 
-p_low = -9
-p_high = -9
+p_low = -19
+p_high = -19
 p_nstep = 1
 
 p_array = np.linspace(p_low,p_high,p_nstep)
@@ -542,9 +551,8 @@ for rr in range(np.size(p_array)):
     if msvcrt.kbhit():
                 kb_char=msvcrt.getch()
                 if kb_char == "q": break
-    name_string = '3cdefect'
+    name_string = '4H_PL1defect_mw'
     m = SiC_Toptica_TCSPC(name_string)
-    xsettings['desired_power'] = p_array[rr]
     # since params is not just a dictionary, it's easy to incrementally load
     # parameters from multiple dictionaries
     # this could be very helpful to load various sets of settings from a global
