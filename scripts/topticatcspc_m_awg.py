@@ -72,37 +72,6 @@ class SiC_Toptica_TCSPC(m2.Measurement):
 ##        trigger_period = AOM_start_time + self.params['AOM_length'] + self.params['AOM_light_delay'] + self.params['AOM_end_buffer']
 ##        print 'Total trigger period is %d ns.' % trigger_period
 
-
-        # Now create the resonant sequence
-        e = element.Element('Resonant_mode', pulsar=qt.pulsar)
-        e.add(pulse.cp(sq_pulsePH, amplitude=-0.7, length=self.params['PH_trigger_length']*1.0e-9), name='picoharp trigger', start=self.params['PH_trigger_time']*1.0e-9)
-        if self.params['off_resonant_laser']:
-            # Add off-resonant pulse
-            e.add(pulse.cp(sq_pulseAOM, amplitude=1, length=self.params['AOM_length']*1.0e-9), name='offresonant laser init', start=self.params['AOM_start_buffer']*1.0e-9)
-            # Determine the resonant laser start time
-            resonant_laser_start_time = (self.params['AOM_start_buffer'] + self.params['AOM_length'] + self.params['AOM_end_buffer'])
-        else:
-            resonant_laser_start_time = self.params['AOM_start_buffer']
-        # Now actually add the resonant laser pulse, which depends on the previous if/then statement
-        e.add(pulse.cp(sq_pulseRES, amplitude=1, length=self.params['Sacher_AOM_length']*1.0e-9), name='resonant laser', start=resonant_laser_start_time*1.0e-9)
-        # Now add its readout pulse
-        resonant_readout_start_time = resonant_laser_start_time + self.params['Sacher_AOM_light_delay']
-        e.add(pulse.cp(sq_pulsePC, amplitude=1.0, length=self.params['readout_length']*1.0e-9), name='photoncountpulse', start=resonant_readout_start_time*1.0e-9)
-        # Now add a microwave pulse, if microwaves are enabled
-        if self.params['microwaves']:
-            #total_microwave_length = resonant_laser_start_time + self.params['Sacher_AOM_length']+ self.params['Sacher_AOM_end_buffer']
-            total_microwave_length = self.params['pi_pulse']
-            microwave_start_time = self.params['AOM_start_buffer'] + self.params['AOM_length'] + self.params['AOM_light_delay']
-            e.add(pulse.cp(sq_pulseMW, length = total_microwave_length*1.0e-9, amplitude = 1.0), name='microwave pulse', start=microwave_start_time*1.0e-9)
-            # Add the I/Q modulator pulses
-            e.add(pulse.cp(sq_pulseMW_Imod, amplitude=self.params['Imod'], length=total_microwave_length*1.0e-9),
-            name='MWimodpulse', start=0e-9)
-
-            e.add(pulse.cp(sq_pulseMW_Qmod, amplitude=0.0, length=total_microwave_length*1.0e-9),
-            name='MWqmodpulse', start=0e-9)
-
-        elements.append(e)
-
         e = element.Element('ResonantCW_mode', pulsar=qt.pulsar)
         e.add(pulse.cp(sq_pulseRES, amplitude=1, length=100e-6), name='lasercw')
         e.add(pulse.cp(sq_pulsePC, amplitude=1.0, length=100e-6),
@@ -115,6 +84,40 @@ class SiC_Toptica_TCSPC(m2.Measurement):
             e.add(pulse.cp(sq_pulseMW, length=100e-6, amplitude = self.params['Imod']), name='microwave pulse', start=0e-9)
 
         elements.append(e)
+        # Now create the resonant sequences, with picoharp delay
+        ph_trigger_delays = np.arange(self.params['PH_trigger_start'],self.params['PH_trigger_stop'],self.params['PH_trigger_step'])
+        print 'PH trigger delays are: %s' % ph_trigger_delays
+        for idx in range(np.size(ph_trigger_delays)):
+            e = element.Element('Resonant_mode %d' % (int(ph_trigger_delays[idx])), pulsar=qt.pulsar)
+            e.add(pulse.cp(sq_pulsePH, amplitude=-0.7, length=self.params['PH_trigger_length']*1.0e-9), name='picoharp trigger', start=ph_trigger_delays[idx]*1.0e-9)
+            if self.params['off_resonant_laser']:
+                # Add off-resonant pulse
+                e.add(pulse.cp(sq_pulseAOM, amplitude=1, length=self.params['AOM_length']*1.0e-9), name='offresonant laser init', start=self.params['AOM_start_buffer']*1.0e-9)
+                # Determine the resonant laser start time
+                resonant_laser_start_time = (self.params['AOM_start_buffer'] + self.params['AOM_length'] + self.params['AOM_end_buffer'])
+            else:
+                resonant_laser_start_time = self.params['AOM_start_buffer']
+            # Now actually add the resonant laser pulse, which depends on the previous if/then statement
+            e.add(pulse.cp(sq_pulseRES, amplitude=1, length=self.params['Sacher_AOM_length']*1.0e-9), name='resonant laser', start=resonant_laser_start_time*1.0e-9)
+            # Now add its readout pulse
+            resonant_readout_start_time = resonant_laser_start_time + self.params['Sacher_AOM_light_delay']
+            e.add(pulse.cp(sq_pulsePC, amplitude=1.0, length=self.params['readout_length']*1.0e-9), name='photoncountpulse', start=resonant_readout_start_time*1.0e-9)
+            # Now add a microwave pulse, if microwaves are enabled
+            if self.params['microwaves']:
+                #total_microwave_length = resonant_laser_start_time + self.params['Sacher_AOM_length']+ self.params['Sacher_AOM_end_buffer']
+                total_microwave_length = self.params['pi_pulse']
+                microwave_start_time = self.params['AOM_start_buffer'] + self.params['AOM_length'] + self.params['AOM_light_delay']
+                e.add(pulse.cp(sq_pulseMW, length = total_microwave_length*1.0e-9, amplitude = 1.0), name='microwave pulse', start=microwave_start_time*1.0e-9)
+                # Add the I/Q modulator pulses
+                e.add(pulse.cp(sq_pulseMW_Imod, amplitude=self.params['Imod'], length=total_microwave_length*1.0e-9),
+                name='MWimodpulse', start=0e-9)
+
+                e.add(pulse.cp(sq_pulseMW_Qmod, amplitude=0.0, length=total_microwave_length*1.0e-9),
+                name='MWqmodpulse', start=0e-9)
+
+            elements.append(e)
+
+
 
 
         seq = pulsar.Sequence('TopticaTCSPC sequence')
@@ -226,8 +229,8 @@ class SiC_Toptica_TCSPC(m2.Measurement):
 
         # feedback on laser
         if self.params['laser_feedback']:
-            self._awg.sq_forced_jump(3)
-            self.awg_confirm(3)
+            self._awg.sq_forced_jump(2)
+            self.awg_confirm(2)
             self._ls.optimize()
 
         self._awg.sq_forced_jump(1)
@@ -343,111 +346,125 @@ class SiC_Toptica_TCSPC(m2.Measurement):
         track_time = time.time() + self.params['fbl_time'] + 5.0*np.random.uniform()
         scan_on = True
         # Start measurement cycle, so go to proper waveform.
-        self._awg.sq_forced_jump(2)
-        self.awg_confirm(2)
+        self._awg.sq_forced_jump(3)
+        self.awg_confirm(3)
 
+        # recreate PicoHarp delays
+        ph_trigger_delays = np.arange(self.params['PH_trigger_start'],self.params['PH_trigger_stop'],self.params['PH_trigger_step'])
+
+        data_array = np.zeros((65536,2*np.size(ph_trigger_delays)))
+        single_sweep_data_array = np.zeros((65536,2*np.size(ph_trigger_delays)))
         for jj in range(self.params['MeasCycles']):
             t1 = time.time()
-            if msvcrt.kbhit():
+            if msvcrt.kbhit() or scan_on == False:
                 kb_char=msvcrt.getch()
-                if kb_char == "q" :
+                if kb_char == "q" or scan_on == False:
                     scan_on = False
                     break
-            # Check if a track should occur. If so, track.
-            if time.time() > track_time:
+            for k in range(np.size(ph_trigger_delays)):
+                # Check if a track should occur. If so, track.
+                if time.time() > track_time:
 
-                # set the AWG into CW mode for tracking
-                self._awg.sq_forced_jump(1)
-                self.awg_confirm(1)
+                    # set the AWG into CW mode for tracking
+                    self._awg.sq_forced_jump(1)
+                    self.awg_confirm(1)
 
-                time.sleep(0.1)
-                # Re-optimize
-                fbl.optimize()
+                    time.sleep(0.1)
+                    # Re-optimize
+                    fbl.optimize()
 
-                # Set new track time
-                track_time = time.time() + self.params['fbl_time'] + 5.0*np.random.uniform()
+                    # Set new track time
+                    track_time = time.time() + self.params['fbl_time'] + 5.0*np.random.uniform()
 
-                # feedback on laser
-                if self.params['laser_feedback']:
-                    self._awg.sq_forced_jump(3)
-                    self.awg_confirm(3)
-                    self._ls.optimize()
-                self._awg.sq_forced_jump(2)
-                self.awg_confirm(2)
-                time.sleep(0.1)
+                    # feedback on laser
+                    if self.params['laser_feedback']:
+                        self._awg.sq_forced_jump(2)
+                        self.awg_confirm(2)
+                        self._ls.optimize()
+                    self._awg.sq_forced_jump(3+k)
+                    self.awg_confirm(3+k)
+                    time.sleep(0.1)
 
-            self._keystroke_check('abort')
-            if self.keystroke('abort') in ['q','Q'] or scan_on == False:
-                print 'Measurement aborted.'
-                self.stop_keystroke_monitor('abort')
-                self._stop_measurement = True
-                scan_on = False
-                break
-            if msvcrt.kbhit() or scan_on == False or self._stop_measurement == True:
-                kb_char=msvcrt.getch()
-                self._stop_measurement = True
-                if kb_char == "q" or scan_on == False or self._stop_measurement == True:
+                self._keystroke_check('abort')
+                if self.keystroke('abort') in ['q','Q'] or scan_on == False:
                     print 'Measurement aborted.'
+                    self.stop_keystroke_monitor('abort')
                     self._stop_measurement = True
+                    scan_on = False
                     break
+                if msvcrt.kbhit() or scan_on == False or self._stop_measurement == True:
+                    kb_char=msvcrt.getch()
+                    self._stop_measurement = True
+                    if kb_char == "q" or scan_on == False or self._stop_measurement == True:
+                        print 'Measurement aborted.'
+                        self._stop_measurement = True
+                        break
 
-            signal_begin = self._ni63.get_ctr0()
+                signal_begin = self._ni63.get_ctr0()
 
-            self._ph.ClearHistMem()
-            self._ph.StartMeas(int(self.params['acquisition_time']*1000))
-            print 'Acquiring signal for %s seconds. ' % (self.params['acquisition_time'])
-            time.sleep(self.params['acquisition_time']+0.25)
+                self._ph.ClearHistMem()
+                self._ph.StartMeas(int(self.params['acquisition_time']*1000))
+                print 'Acquiring signal for %s seconds -- trigger %d, sweep %d ' % (self.params['acquisition_time'], k, jj)
+                time.sleep(self.params['acquisition_time']+0.25)
 
-            n = 0
-            while self._ph.get_MeasRunning() and n < 10:
-                time.sleep(0.5)
-                n = n + 1
-            if self._ph.get_MeasRunning():
-                print 'Measurement did not finish!'
-                break
-            # Retrieve measurement
-            current_data = self._ph.get_Histogram()
+                n = 0
+                while self._ph.get_MeasRunning() and n < 10:
+                    time.sleep(0.5)
+                    n = n + 1
+                if self._ph.get_MeasRunning():
+                    print 'Measurement did not finish!'
+                    break
+                # Retrieve measurement
+                current_data = self._ph.get_Histogram()
 
-            print 'Got data for sweep %d -- total sum is %d/%d' % (jj, np.sum(current_data),np.sum(histogram_array))
-            histogram_array = np.copy(histogram_array) + current_data
-            signal_end = self._ni63.get_ctr0()
-            # First clear the plot
+                print 'Got data for sweep %d / %d -- total sum is %d/%d' % (k, jj, int(np.sum(current_data)),int(np.sum(histogram_array)))
+                #histogram_array = np.copy(histogram_array) + current_data
+                histogram_array = np.copy(data_array[:,2*k+1]) + current_data
+                signal_end = self._ni63.get_ctr0()
+                # First clear the plot
 
-            # Now just add those arrays to the now-cleared plot
+                # Now just add those arrays to the now-cleared plot
 
-            # Make sure to update it
+                # Make sure to update it
 
-            # qt.msleep() is also good to do for making sure everything is up to date
-            qt.msleep(0.002)
-            #plot2d.add(qt.Data(np.array((np.linspace(0,65535*np.power(2,self.params['Binning'])*0.004,65536),histogram_array))))
-            data_array = np.zeros((65536,2))
-            data_array[:,0] = np.linspace(0,65535*np.power(2,self.params['Binning'])*0.004,65536)
-            data_array[:,1] = np.copy(histogram_array)
+                # qt.msleep() is also good to do for making sure everything is up to date
+                qt.msleep(0.002)
+                #plot2d.add(qt.Data(np.array((np.linspace(0,65535*np.power(2,self.params['Binning'])*0.004,65536),histogram_array))))
 
-            plot2d = qt.Plot2D(data_array,name='toptica_tcspc',maxpoints=70000)
+                single_sweep_data_array[:,2*k] = np.linspace(0,65535*np.power(2,self.params['Binning'])*0.004,65536)
+                single_sweep_data_array[:,2*k+1] = np.copy(histogram_array)
+
+
+                # Check for a break, and break out of this loop as well.
+                # It's important to check here, before we add the array to the total
+                # since doing it the other way risks adding incomplete data to the
+                # total array.
+                if k == np.size(ph_trigger_delays)-1:
+                    # copy the updated single sweep data, since we've successfully ran all entries in the loop
+                    data_array = np.copy(single_sweep_data_array)
+
+
+                self._keystroke_check('abort')
+                if self.keystroke('abort') in ['q','Q'] or scan_on == False:
+                    print 'Measurement aborted.'
+                    self.stop_keystroke_monitor('abort')
+                    self._stop_measurement = True
+                    scan_on = False
+                    break
+                if msvcrt.kbhit() or scan_on == False or self._stop_measurement == True:
+                    kb_char=msvcrt.getch()
+                    self._stop_measurement = True
+                    if kb_char == "q" or scan_on == False or self._stop_measurement == True:
+                        print 'Measurement aborted.'
+                        self._stop_measurement = True
+                        break
+
+            plot2d = qt.Plot2D(data_array[:,0:2],name='toptica_tcspc',maxpoints=70000)
             plot2d.update()
-            qt.msleep(0.005)
-            # Check for a break, and break out of this loop as well.
-            # It's important to check here, before we add the array to the total
-            # since doing it the other way risks adding incomplete data to the
-            # total array.
-            tt = time.time() - t1
-            self._keystroke_check('abort')
-            if self.keystroke('abort') in ['q','Q'] or scan_on == False:
-                print 'Measurement aborted.'
-                self.stop_keystroke_monitor('abort')
-                self._stop_measurement = True
-                scan_on = False
-                break
-            if msvcrt.kbhit() or scan_on == False or self._stop_measurement == True:
-                kb_char=msvcrt.getch()
-                self._stop_measurement = True
-                if kb_char == "q" or scan_on == False or self._stop_measurement == True:
-                    print 'Measurement aborted.'
-                    self._stop_measurement = True
-                    break
 
-            print 'Cycle %d/%d total time is %.3f, efficiency of %.2f percent. Heater output is at %.1f. ' % (jj+1, int(self.params['MeasCycles']), tt, (self.params['acquisition_time'])/tt*100.0, self._ls332.get_heater_output())
+            qt.msleep(0.005)
+            tt = time.time() - t1
+            print 'Cycle %d/%d total time is %.3f, efficiency of %.2f percent. Heater output is at %.1f. ' % (jj+1, int(self.params['MeasCycles']), tt, (self.params['acquisition_time']*np.size(ph_trigger_delays))/tt*100.0, self._ls332.get_heater_output())
 
 
 
@@ -486,7 +503,7 @@ class SiC_Toptica_TCSPC(m2.Measurement):
         # Measurement has ended, so start saving data
         grp = h5.DataGroup('SiC_TCSPC', self.h5data, base=self.h5base)
         #grp.add('frequency', data=frq_array_non0, unit='GHz', note='frequency')
-        grp.add('counts', data=histogram_array, unit='counts', note='total counts')
+        grp.add('counts', data=data_array, unit='counts', note='total counts')
 
 
 
@@ -512,7 +529,7 @@ xsettings = {
         'CFDZeroCross0' : 10,
         'CFDLevel1' : 110,
         'CFDZeroCross1' : 10,
-        'Binning' : 4,
+        'Binning' : 7,
         'Offset' : 0,
         'SyncDiv' : 1,
         'SyncOffset' : -10000,
@@ -520,21 +537,24 @@ xsettings = {
         'piezo_start' : 0, #volts
         'piezo_end' : 90, #volts
         'piezo_step_size' : 0.08, # volts (dispersion is roughly ~0.4 GHz/V)
+        'PH_trigger_start' : 3200+50.0,
+        'PH_trigger_step' : 30000,
+        'PH_trigger_stop' : 3200+50 + 1*30000.0,
         'PH_trigger_time' : 3200+50.0,
         'PH_trigger_length' : 50.0,
         'bin_size' : 0.05, # GHz, should be same order of magnitude as (step_size * .1 GHz)
-        'microwaves' : True, # modulate with microwaves on or off
-        'pi_pulse' : 175.0, # ns
+        'microwaves' : False, # modulate with microwaves on or off
+        'pi_pulse' : 300.0, # ns
         'off_resonant_laser' : True, # cycle between resonant and off-resonant
         'power' : 5.0, # dBm
         'constant_attenuation' : 14.0, # dBm -- set by the fixed attenuators in setup
         'desired_power' : -19.0, # dBm
-        'freq' : 1.3783, #GHz
+        'freq' : 1.3780, #GHz
         'dwell_time' : 500.0, # ms
         'temperature_tolerance' : 4.0, # Kelvin
         'MeasCycles' : 130,
         'Imod' : 0.35,
-        'laser_feedback' : False,
+        'laser_feedback' : True,
         }
 
 p_low = -19
