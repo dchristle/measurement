@@ -24,8 +24,9 @@ import pandas as pd
 
 class FabryPerot(Instrument):
 
-    def __init__(self, name, channels=2):
-        Instrument.__init__(self, name, tags=['positioner'])
+    def __init__(self, name, ai_in = 'ai1', trig_chan = 'PFI8'):
+        #Instrument.__init__(self, name, tags=['positioner'])
+        Instrument.__init__(self, name)
         # Import the DAQ as an instrument object to write to.
         self._ni63 = qt.instruments['NIDAQ6363']
 
@@ -41,6 +42,8 @@ class FabryPerot(Instrument):
                 'thresholdsep' : 0.006
 
                 }
+        self.FP_params['aiport'] = ai_in
+        self.FP_params['trigger'] = trig_chan
         # Instrument parameters
 ##        self.add_parameter('abs_position',
 ##            type=types.FloatType,
@@ -69,9 +72,9 @@ class FabryPerot(Instrument):
         qt.plot(time_axis,rsamples,name='fpplot1',traceofs=0.2, maxtraces=20)
         return
     def focus_plot(self):
-        samples = 500
-        rate = 10000
-        channel = 'ai1'
+        samples = 12000
+        rate = 240000
+        channel = self.FP_params['aiport']
         while True:
             rsamples = self.read_sweep(samples, rate, channel)
             time_axis = np.linspace(0.0,float(np.size(rsamples))/rate,np.size(rsamples))
@@ -85,7 +88,7 @@ class FabryPerot(Instrument):
     def max_intensity_plot(self):
         samples = 500
         rate = 10000
-        channel = 'ai1'
+        channel = self.FP_params['aiport']
         data = qt.Data(name='max_int_data')
         data.add_coordinate('time')
         data.add_value('intensity')
@@ -105,7 +108,7 @@ class FabryPerot(Instrument):
     def avg_max_intensity_plot(self):
         samples = 500
         rate = 10000
-        channel = 'ai1'
+        channel = self.FP_params['aiport']
         data = qt.Data(name='avg_max_int_data')
         data.add_coordinate('time')
         data.add_value('intensity')
@@ -279,7 +282,9 @@ class FabryPerot(Instrument):
         simple_est = (curr[0]-prev[0])/0.00156 # set by 10 ghz and time separation
         print 'simple estimate %.3f' % simple_est
 
-        return deltaF[lmas[0]]
+        #return deltaF[lmas[0]]
+        return simple_est
+
     def peak_mse(self, prev, curr, deltaF):
         N_prev = np.size(prev)
         N_curr = np.size(curr)
@@ -306,6 +311,18 @@ class FabryPerot(Instrument):
 
         # Return this sum of squared errors
         return mse
+    def get_peaks(self):
+        raw_sweep = self.read_sweep(490,10000,'ai1')
+        t_axis = np.linspace(1,490,490)
+
+        # use a threshold to filter out only points where the photodiode records signal
+        v_pd_thresh = 0.005
+        filt_idx = raw_sweep > v_pd_thresh
+
+        # create a pandas dataframe
+        sweep_frame = pd.DataFrame({'time':t_axis[filt_idx], 'voltage':raw_sweep[filt_idx]})
+        # now return the classification
+        return self.count_fabry_perot(sweep_frame)
 
     def check_stabilization(self):
         raw_sweep = self.read_sweep(490,10000,'ai1')
@@ -352,7 +369,32 @@ class FabryPerot(Instrument):
             return 1
 
 
+    def count_fabry_perot(self, dat):
+        # classify the no signal condition
 
+        if np.max(dat['voltage'])-np.min(dat['voltage']) < 0.02:
+            # no signal case is triggered, return 3
+            return 3
+
+        threshold_pct = 0.06
+
+        peakidxs = dat['voltage'].values > (threshold_pct*(np.max(dat['voltage'])-np.min(dat['voltage'])) + np.min(dat['voltage']))
+        if np.size(peakidxs) == 0:
+            peak_counter = 0
+            return 0
+        else:
+            peak_counter = 1
+            times = dat['time'].values
+            times = times[peakidxs]
+            #print(times)
+            for i in range(np.size(times)-1):
+                # count the number of gaps
+
+                if times[i+1] - times[i] > 10:
+                    peak_counter = peak_counter + 1
+        samples = dat['time'].values[peakidxs]/10000.0
+        centroids, labels = scipy.cluster.vq.kmeans2(samples, peak_counter, 500)
+        return centroids
 
 
 
