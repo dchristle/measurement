@@ -37,6 +37,7 @@ class SiC_RamseyZ_Master(m2.Measurement):
 
         # define the pulses we'll use
         sq_pulseAOM = pulse.SquarePulse(channel='AOM975', name='A square pulse on ThorLabsAOM')
+        sq_pulseRES = pulse.SquarePulse(channel='Sacher1160AOM', name='A square pulse on Sacher AOM')
         sq_pulseMW = pulse.SquarePulse(channel='MW_pulsemod', name='A square pulse on MW modulation')
         sq_pulsePC = pulse.SquarePulse(channel='photoncount', name='A square pulse on photon counting switch')
         sq_pulseMW_Imod = pulse.SquarePulse(channel='MW_Imod', name='A square pulse on MW I modulation')
@@ -59,51 +60,62 @@ class SiC_RamseyZ_Master(m2.Measurement):
         e.add(pulse.cp(sq_pulseAOM, amplitude=1, length=100e-6), name='lasercw')
         e.add(pulse.cp(sq_pulsePC, amplitude=1.0, length=100e-6),
         name='photoncountpulsecw')
-        e.add(pulse.cp(sq_pulseMW_Imod, amplitude=1.0, length=100e-6),
+        e.add(pulse.cp(sq_pulseMW_Imod, amplitude=self.params['Imod'], length=100e-6),
         name='MWimodpulsecw', start=0e-9)
         e.add(pulse.cp(sq_pulseMW_Qmod, amplitude=0.0, length=100e-6),
         name='MWqmodpulsecw', start=0e-9)
         elements.append(e)
 
         total_rf_pulses = self.params['RF_delay'] + self.params['pi2_length'] + self.params['tau_length_end'] + self.params['pi2_length'] + self.params['RF_buffer']
-        AOM_start_time = total_rf_pulses - self.params['AOM_light_delay']
-        readout_start_time = AOM_start_time + self.params['AOM_light_delay']
-        trigger_period = AOM_start_time + self.params['AOM_length'] + self.params['AOM_light_delay'] + self.params['AOM_end_buffer']
+
+
+
         # Now create the Ramsey pulses
         for i in range(self.params['pts']):
 
             e = element.Element('ElectronRamseyZ_pos_pt-%d' % i, pulsar=qt.pulsar)
 
+            if self.params['resonant_readout']:
+                resonant_laser_start_time = self.params['Sacher_AOM_start_buffer']
+                e.add(pulse.cp(sq_pulseRES, amplitude=1, length=self.params['Sacher_AOM_length']*1.0e-9), name='resonant laser', start=resonant_laser_start_time*1.0e-9)
+                resonant_readout_start_time = resonant_laser_start_time + self.params['Sacher_AOM_light_delay']
+                e.add(pulse.cp(sq_pulsePC, amplitude=1.0, length=self.params['readout_length']*1.0e-9), name='photoncountpulse', start=resonant_readout_start_time*1.0e-9)
+                # add the 975 nm AOM pulse after the resonant readout to reset the spin
+                AOM_start_time = resonant_laser_start_time + self.params['Sacher_AOM_length'] + self.params['Sacher_AOM_light_delay'] - self.params['AOM_light_delay'] + self.params['Sacher_AOM_end_buffer']
+                trigger_period = AOM_start_time + self.params['AOM_length'] + self.params['AOM_light_delay'] + self.params['AOM_end_buffer']
+                e.add(pulse.cp(sq_pulseAOM, amplitude=1, length=self.params['AOM_length']*1.0e-9), name='laser init', start=AOM_start_time*1.0e-9)
+            else:
+                AOM_start_time = total_rf_pulses - self.params['AOM_light_delay']
+                trigger_period = AOM_start_time + self.params['AOM_length'] + self.params['AOM_light_delay'] + self.params['AOM_end_buffer']
+                readout_start_time = AOM_start_time + self.params['AOM_light_delay']
+                e.add(pulse.cp(sq_pulseAOM, amplitude=1, length=self.params['AOM_length']*1.0e-9), name='laser init', start=AOM_start_time*1.0e-9)
+                e.add(pulse.cp(sq_pulsePC, amplitude=1.0, length=self.params['readout_length']*1.0e-9), name='photoncountpulse', start=readout_start_time*1.0e-9)
 
-
-
-            e.add(pulse.cp(sq_pulseAOM, amplitude=1, length=self.params['AOM_length']*1.0e-9), name='laser init', start=AOM_start_time*1.0e-9)
-
+            microwave_start_time = AOM_start_time + self.params['AOM_length'] + self.params['AOM_light_delay'] + self.params['RF_delay']
             # Calculate the position of the center, and then displace
             center_time = self.params['tau_length_end']/2.0 + self.params['RF_delay']
 
-            e.add(pulse.cp(sq_pulseMW, length = self.params['pi2_length']*1.0e-9, amplitude = 1.0), name='first pi2 microwave pulse', start=self.params['RF_delay']*1.0e-9)
+            e.add(pulse.cp(sq_pulseMW, length = self.params['pi2_length']*1.0e-9, amplitude = 1.0), name='first pi2 microwave pulse', start=microwave_start_time*1.0e-9)
 
-            e.add(pulse.cp(sq_pulseMW, length = self.params['pi2_length']*1.0e-9, amplitude = 1.0), name='second pi2 microwave pulse', start=(self.params['RF_delay'] + self.params['pi2_length'] + self.params['tau_delay'][i])*1.0e-9)
+            e.add(pulse.cp(sq_pulseMW, length = self.params['pi2_length']*1.0e-9, amplitude = 1.0), name='second pi2 microwave pulse', start=(microwave_start_time + self.params['pi2_length'] + self.params['tau_delay'][i])*1.0e-9)
 
-            e.add(pulse.cp(sq_pulsePC, amplitude=1.0, length=self.params['readout_length']*1.0e-9),
-            name='photoncountpulse', start=readout_start_time*1.0e-9)
+
             # Here is where we determine the readout axis.
-            I_amplitude = np.cos(2*np.pi*self.params['fringe_frequency']*self.params['tau_delay'][i])
-            Q_amplitude = np.sin(2*np.pi*self.params['fringe_frequency']*self.params['tau_delay'][i])
+            I_amplitude = self.params['Imod']*np.cos(2*np.pi*self.params['fringe_frequency']*self.params['tau_delay'][i])
+            Q_amplitude = self.params['Imod']*np.sin(2*np.pi*self.params['fringe_frequency']*self.params['tau_delay'][i])
             # For the first pulse, we just write I = 1, Q = 0, which is some phase in the lab frame.
-            e.add(pulse.cp(sq_pulseMW_Imod, amplitude=1.0, length=(self.params['RF_delay'] + self.params['pi2_length'] + self.params['tau_delay'][i]/2.0)*1.0e-9),
+            e.add(pulse.cp(sq_pulseMW_Imod, amplitude=self.params['Imod'], length=(microwave_start_time + self.params['pi2_length'] + self.params['tau_delay'][i]/2.0)*1.0e-9),
             name='MWimodpulse', start=0e-9)
 
-            e.add(pulse.cp(sq_pulseMW_Qmod, amplitude=0.0, length=(self.params['RF_delay'] + self.params['pi2_length'] + self.params['tau_delay'][i]/2.0)*1.0e-9),
+            e.add(pulse.cp(sq_pulseMW_Qmod, amplitude=0.0, length=(microwave_start_time + self.params['pi2_length'] + self.params['tau_delay'][i]/2.0)*1.0e-9),
             name='MWqmodpulse', start=0e-9)
             # Now we set the second pulse phase mid way through the tau delay (short delays might be a problem depending on how fast the cable delays are)
             # which is now set by the I and Q amplitudes we calculated above.
-            e.add(pulse.cp(sq_pulseMW_Imod, amplitude=I_amplitude, length=(trigger_period-(self.params['RF_delay'] + self.params['pi2_length'] + self.params['tau_delay'][i]/2.0))*1.0e-9),
-            name='MWimodpulse2', start=(self.params['RF_delay'] + self.params['pi2_length'] + self.params['tau_delay'][i]/2.0)*1.0e-9)
+            e.add(pulse.cp(sq_pulseMW_Imod, amplitude=I_amplitude, length=(trigger_period-(microwave_start_time + self.params['pi2_length'] + self.params['tau_delay'][i]/2.0))*1.0e-9),
+            name='MWimodpulse2', start=(microwave_start_time + self.params['pi2_length'] + self.params['tau_delay'][i]/2.0)*1.0e-9)
 
-            e.add(pulse.cp(sq_pulseMW_Qmod, amplitude=Q_amplitude, length=(trigger_period-(self.params['RF_delay'] + self.params['pi2_length'] + self.params['tau_delay'][i]/2.0))*1.0e-9),
-            name='MWqmodpulse2', start=(self.params['RF_delay'] + self.params['pi2_length'] + self.params['tau_delay'][i]/2.0)*1.0e-9)
+            e.add(pulse.cp(sq_pulseMW_Qmod, amplitude=Q_amplitude, length=(trigger_period-(microwave_start_time + self.params['pi2_length'] + self.params['tau_delay'][i]/2.0))*1.0e-9),
+            name='MWqmodpulse2', start=(microwave_start_time + self.params['pi2_length'] + self.params['tau_delay'][i]/2.0)*1.0e-9)
 
             elements.append(e)
 
@@ -157,26 +169,62 @@ class SiC_RamseyZ_Master(m2.Measurement):
         self._xps = qt.instruments['xps']
         self._awg = qt.instruments['awg']
         self._va = qt.instruments['va']
+        self._ls = qt.instruments['ls']
 
         # Prepare instruments for measurement and verify FBL output
         # Set the trigger source to internal
 
         # set the AWG to CW mode
-        self._awg.start()
-        print 'Waiting 30 s for AWG to start...'
-        time.sleep(30.0)
-        for i in range(10):
-            time.sleep(5.0)
-            state = ''
-            print 'Waiting for AWG to start...'
-            try:
-                state = self._awg.get_state()
-            except(visa.visa.VI_ERROR_TMO):
-                print 'Still waiting for AWG after timeout...'
-            if state == 'Running':
-                    print 'AWG started OK...Clearing VISA interface.'
-                    self._awg.clear_visa()
-                    break
+        if self._awg.get_state() == 'Idle':
+            self._awg.start()
+            # set the AWG to CW mode
+            print 'Waiting 30 s for AWG to start...'
+            time.sleep(30.0)
+
+            for i in range(20):
+                time.sleep(5.0)
+                state = ''
+                print 'Waiting for AWG to start...'
+                try:
+                    state = self._awg.get_state()
+                except(visa.visa.VI_ERROR_TMO):
+                    print 'Still waiting for AWG after timeout...'
+                if state == 'Running':
+                        print 'AWG started OK.'
+
+                        break
+                if state == 'Idle':
+                    self._awg.start()
+        elif self._awg.get_state() == 'Running':
+            print 'AWG already started'
+
+        print 'Checking AWG interface status...'
+        init_status = self._awg.get_ch3_status()
+        awg_is_ok = True
+        # check a randomized sequence of 20 commands and see if the response agrees with what we set the channel
+        # status to.
+        for ij in range(20):
+            test_val = random.randint(0,1)
+            if test_val == 0:
+                self._awg.set_ch3_status('off')
+                time.sleep(0.05)
+                output = self._awg.get_ch3_status()
+                if output == 'on':
+                    awg_is_ok == False
+            if test_val == 1:
+                self._awg.set_ch3_status('on')
+                time.sleep(0.05)
+                output = self._awg.get_ch3_status()
+                if output == 'off':
+                    awg_is_ok == False
+        self._awg.set_ch3_status(init_status)
+        # all the randomized commands should match. If they don't, the VISA interface is clogged and we should
+        # clear it
+        if not awg_is_ok:
+            print 'AWG interface was clogged, clearing it.'
+            self._awg.clear_visa()
+        else:
+            print 'AWG interface is OK.'
 
         self._awg.sq_forced_jump(1)
         time.sleep(1)
@@ -253,18 +301,15 @@ class SiC_RamseyZ_Master(m2.Measurement):
         if self._fbl.optimize() == False:
             if self._fbl.optimize() == False:
                 print 'FBL failed twice, breaking.'
+        if self.params['laser_feedback'] and self.params['resonant_readout']:
+            self._awg.sq_forced_jump(3)
+            self._ls.optimize()
         # Set the AWG back to the previous sequence position index
         self._awg.sq_forced_jump(prev_awg_sq_position)
         self.awg_confirm(prev_awg_sq_position)
         track_time = time.time() + self.params['fbl_time'] + 5.0*np.random.uniform()
         scan_on = True
         for i in range(self.params['MeasCycles']):
-
-
-
-
-
-
             # Create an index of the waveforms so that we can modify it
             seq_index = range(self.params['pts'])
             if self.params['random'] == 1:
@@ -296,6 +341,9 @@ class SiC_RamseyZ_Master(m2.Measurement):
                     time.sleep(0.1)
                     # Re-optimize
                     fbl.optimize()
+                    if self.params['laser_feedback'] and self.params['resonant_readout']:
+                        self._awg.sq_forced_jump(3)
+                        self._ls.optimize()
 
                     # Set the AWG back to the previous sequence position index
                     self._awg.sq_forced_jump(prev_awg_sq_position)
@@ -384,29 +432,36 @@ class SiC_RamseyZ_Master(m2.Measurement):
 xsettings = {
         'focus_limit_displacement' : 20, # microns inward
         'fbl_time' : 180.0, # seconds
+        'Sacher_AOM_start_buffer' : 150.0, #ns
+        'Sacher_AOM_length' : 1050.0, # ns
+        'Sacher_AOM_light_delay' : 625.0, # ns
+        'Sacher_AOM_end_buffer' : 1155.0, # ns
         'AOM_length' : 1400.0, # ns
         'AOM_light_delay' : 655.0, # ns
         'AOM_end_buffer' : 1200.0, # ns
         'RF_delay' : 50.0, # ns
         'RF_buffer' : 150.0, # ns
-        'readout_length' : 130.0, # ns
+        'readout_length' : 600, #130.0, # ns
         'ctr_term' : 'PFI2',
         'power' : 5.0, # dBm
         'constant_attenuation' : 28.0, # dB -- set by the fixed attenuators in setup
-        'desired_power' : -9.0, # dBm
+        'desired_power' : -19.0, # dBm
         'tau_length_start' : 0.0, # ns
         'tau_length_end' : 2212.0, # ns
         'tau_length_step' : 28, # ns
-        'freq' : (1.30202), #GHz
+        'freq' : 1.2953, #GHz
         'fringe_frequency' : 0.003, # GHz
-        'pi2_length' : 175.25, # ns
+        'pi2_length' : 70, # ns
         'dwell_time' : 1500.0, # ms
         'temperature_tolerance' : 2.0, # Kelvin
         'MeasCycles' : 1400,
-        'random' : 1
+        'random' : 1,
+        'Imod' : 0.35,
+        'resonant_readout' : True,
+        'laser_feedback' : True,
         }
 
-p_array = np.array([-32.0])
+p_array = np.array([-19.0])
 
 for rr in range(np.size(p_array)):
     # Create a measurement object m
@@ -417,7 +472,7 @@ for rr in range(np.size(p_array)):
                 if kb_char == "q": break
     name_string = 'power %.2f dBm' % (p_array[rr])
     m = SiC_RamseyZ_Master(name_string)
-    xsettings['readout_length'] = 130.0
+    #xsettings['readout_length'] = 130.0
     xsettings['desired_power'] = p_array[rr]
     # since params is not just a dictionary, it's easy to incrementally load
     # parameters from multiple dictionaries
