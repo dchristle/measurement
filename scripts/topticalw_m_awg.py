@@ -29,20 +29,20 @@ class SiC_Toptica_FastPiezo_Sweep(m2.Measurement):
         sq_pulsePC = pulse.SquarePulse(channel='photoncount', name='A square pulse on photon counting switch')
         sq_pulseMW_Imod = pulse.SquarePulse(channel='MW_Imod', name='A square pulse on MW I modulation')
         sq_pulseMW_Qmod = pulse.SquarePulse(channel='MW_Qmod', name='A square pulse on MW I modulation')
-
         self._awg = qt.instruments['awg']
-        self._awg.stop()
-        time.sleep(5.0)
-        for i in range(10):
-            time.sleep(1.0)
-            state = ''
-            try:
-                state = self._awg.get_state()
-            except(visa.visa.VI_ERROR_TMO):
-                print 'Waiting for AWG to stop...'
-            if state == 'Idle':
-                print 'AWG stopped OK.'
-                break
+        if upload or program or clear:
+            self._awg.stop()
+            time.sleep(5.0)
+            for i in range(10):
+                time.sleep(1.0)
+                state = ''
+                try:
+                    state = self._awg.get_state()
+                except(visa.visa.VI_ERROR_TMO):
+                    print 'Waiting for AWG to stop...'
+                if state == 'Idle':
+                    print 'AWG stopped OK.'
+                    break
         if clear:
             self._awg.clear_waveforms()
             print 'AWG waveforms cleared.'
@@ -502,7 +502,7 @@ class SiC_Toptica_FastPiezo_Sweep(m2.Measurement):
                     filter_inc = True
                 # Determine if we should measure in the logic statement here
                 # find all nonzero frequencies
-                if filter_inc:
+                if filter_inc and (self._fp.check_stabilization() == 1 or not self.params['check_stabilization']):
                     cts_array_temp = np.zeros(np.size(self.params['freq']))
 
                     for idx in range(np.size(self.params['freq'])):
@@ -637,7 +637,7 @@ class SiC_Toptica_FastPiezo_Sweep(m2.Measurement):
 
 xsettings = {
         'focus_limit_displacement' : 20, # microns inward
-        'fbl_time' : 50.0, # seconds
+        'fbl_time' : 90.0, # seconds
         'AOM_start_buffer' : 50.0, # ns
         'AOM_length' : 800.0, # ns
         'AOM_light_delay' : 655.0, # ns
@@ -650,29 +650,30 @@ xsettings = {
         'readout_length' : 5000.0, # ns
         'readout_buffer' : 10.0, # ns
         'ctr_term' : 'PFI2',
-        'piezo_start' : 20, #volts
-        'piezo_end' : 90, #volts
+        'piezo_start' : 15, #volts
+        'piezo_end' : 70, #volts
         'piezo_step_size' : 0.04, # volts (dispersion is roughly ~0.4 GHz/V)
-        'bin_size' : 0.020, # GHz, should be same order of magnitude as (step_size * .1 GHz)
-        'microwaves' : False, # modulate with microwaves on or off
+        'bin_size' : 0.015, # GHz, should be same order of magnitude as (step_size * .1 GHz)
+        'microwaves' : True, # modulate with microwaves on or off
         'microwaves_CW' : True, # are the microwaves CW? i.e. ignore pi pulse length
         'pi_length' : 249, # ns
         'off_resonant_laser' : True, # cycle between resonant and off-resonant
         'power' : 5.0, # dBm
         'constant_attenuation' : 14.0, # dBm -- set by the fixed attenuators in setup
         'desired_power' : -19.0, # dBm
-        'freq' : list([1.3777,]), #GHz
+        'freq' : list([1.3451,]), #GHz
         'stabilization_time' : 0.0, # ms
         'dwell_time' : 100.0, # ms
         'filter' : False,
         #'filter_set' : ( (270850, 270870), (270950, 270970)),
-        'filter_set' : [[264053,265985]],
-        'temperature_tolerance' : 10.0, # Kelvin
-        'MeasCycles' : 15,
+        'filter_set' : [[265240,265290]],
+        'temperature_tolerance' : 3.0, # Kelvin
+        'MeasCycles' : 65,
         'Imod' : 0.15,
         'wavemeter_first_sweep' : True,
         'measure_dispersion' : False,
         'track' : True,
+        'check_stabilization' : False,
         }
 def main():
     p_low = -19
@@ -689,7 +690,7 @@ def main():
         if kb_char == "q":
             do_track = False
 
-    name_string = 'Defect4A_WB_noMW_offres'
+    name_string = 'Defect1H_LB_MW_offres'
     xsettings['desired_power'] = -19
     m = SiC_Toptica_FastPiezo_Sweep(name_string)
     #xsettings['desired_power'] = -19.0
