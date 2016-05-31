@@ -144,7 +144,6 @@ class SiC_Rabi_Master(m2.Measurement):
                 print 'AWG did not jump to proper waveform!'
         return
     def prepare(self):
-        self.start_keystroke_monitor('abort')
         self._stop_measurement = False
         # Set up some instruments
         self._fbl = qt.instruments['fbl']
@@ -158,6 +157,7 @@ class SiC_Rabi_Master(m2.Measurement):
         self._xps = qt.instruments['xps']
         self._awg = qt.instruments['awg']
         self._va = qt.instruments['va']
+        self._ls = qt.instruments['ls']
 
         # Prepare instruments for measurement and verify FBL output
         # Set the trigger source to internal
@@ -308,6 +308,9 @@ class SiC_Rabi_Master(m2.Measurement):
         if self._fbl.optimize() == False:
             if self._fbl.optimize() == False:
                 print 'FBL failed twice, breaking.'
+        if self.params['laser_feedback'] and self.params['resonant_readout']:
+            self._awg.sq_forced_jump(3)
+            self._ls.optimize()
         track_time = time.time() + self.params['fbl_time'] + 5.0*np.random.uniform()
         scan_on = True
         for i in range(self.params['MeasCycles']):
@@ -328,7 +331,6 @@ class SiC_Rabi_Master(m2.Measurement):
 
                 if self.keystroke('abort') in ['q','Q'] or scan_on == False:
                     print 'Measurement aborted.'
-                    self.stop_keystroke_monitor('abort')
                     self._stop_measurement = True
                     scan_on = False
                     break
@@ -349,6 +351,9 @@ class SiC_Rabi_Master(m2.Measurement):
                     time.sleep(0.1)
                     # Re-optimize
                     fbl.optimize()
+                    if self.params['laser_feedback'] and self.params['resonant_readout']:
+                        self._awg.sq_forced_jump(3)
+                        self._ls.optimize()
 
                     # Set new track time
                     track_time = time.time() + self.params['fbl_time'] + 5.0*np.random.uniform()
@@ -464,23 +469,24 @@ xsettings = {
         'Sacher_AOM_length' : 1050.0, # ns
         'Sacher_AOM_light_delay' : 625.0, # ns
         'Sacher_AOM_end_buffer' : 1155.0, # ns
-        'RF_delay' : 900.0, # ns -- make this longer, like 500-600 ns for resonant readout!
+        'RF_delay' : 50.0, # ns -- make this longer, like 500-600 ns for resonant readout!
         'RF_buffer' : 350.0, # ns
-        'readout_length' : 1000.0, # ns, 130 ns for off resonant
+        'readout_length' : 130.0, # ns, 130 ns for off resonant
         'ctr_term' : 'PFI2',
         'power' : 5.0, # dBm
         'constant_attenuation' : 14.0, # dBm -- set by the fixed attenuators in setup
         'desired_power' : -19.0, # dBm
         'RF_length_start' : 0.0, # ns
-        'RF_length_end' : 1200.0, # ns
+        'RF_length_end' : 1000.0, # ns
         'RF_length_step' : 20.0, # ns
-        'freq' : 1.3776, #GHz
+        'freq' : 1.3776, #1.378, #GHz
         'dwell_time' : 1000.0, # ms
         'temperature_tolerance' : 2.0, # Kelvin
         'MeasCycles' : 100,
         'random' : 1,
-        'Imod' : 0.3,
-        'resonant_readout' : True
+        'Imod' : 0.10,
+        'resonant_readout' : False,
+        'laser_feedback' : False,
         }
 
 p_low = -19
