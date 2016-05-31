@@ -118,7 +118,7 @@ def fit_esr_return_features(data):
     std_dev = np.std(data[0:10,1])
     snrL = np.abs(A/std_dev)
     snrR = np.abs(B/std_dev)
-    X_sample = np.array((left_amp/std_dev,right_amp/std_dev,np.log(gamma1),left_loc,right_loc))
+    X_sample = np.array((left_amp/C,right_amp/C,left_amp/std_dev,right_amp/std_dev,np.log(gamma1),left_loc,right_loc))
     return X_sample
 
 def import_training_data():
